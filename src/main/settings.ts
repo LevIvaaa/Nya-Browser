@@ -100,6 +100,8 @@ export const DEFAULT_SETTINGS: Settings = {
   saveHistory: true,
   clearOnExit: false,
   webrtcPolicy: 'public_only',
+  spellcheck: true,
+  spellcheckLanguages: ['ru', 'en-US'],
 
   hardwareAcceleration: true,
   preconnect: true,
@@ -129,6 +131,14 @@ const str = (v: unknown, max: number, fallback: string) =>
 
 const POLICY = ['ask', 'allow', 'block'] as const
 const HOST_RE = /^[a-z0-9.-]+\.[a-z]{2,}$/i
+
+const LOCALE_RE = /^[a-z]{2,3}(-[A-Za-z]{2,8})?$/
+
+/** BCP-47-ish codes only; unknown ones are dropped again by the session. */
+const localeList = (v: unknown, fallback: string[]) =>
+  Array.isArray(v)
+    ? [...new Set(v.filter((c): c is string => typeof c === 'string' && LOCALE_RE.test(c.trim())).map((c) => c.trim()))].slice(0, 8)
+    : fallback
 
 const domainList = (v: unknown, fallback: string[]) =>
   Array.isArray(v)
@@ -247,6 +257,8 @@ export function sanitize(input: Partial<Settings>): Settings {
     saveHistory: bool(input.saveHistory, d.saveHistory),
     clearOnExit: bool(input.clearOnExit, d.clearOnExit),
     webrtcPolicy: oneOf(input.webrtcPolicy, ['default', 'public_only', 'proxy_only'] as const, d.webrtcPolicy),
+    spellcheck: bool(input.spellcheck, d.spellcheck),
+    spellcheckLanguages: localeList(input.spellcheckLanguages, d.spellcheckLanguages),
 
     hardwareAcceleration: bool(input.hardwareAcceleration, d.hardwareAcceleration),
     preconnect: bool(input.preconnect, d.preconnect),

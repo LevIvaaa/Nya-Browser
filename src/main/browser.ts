@@ -101,7 +101,12 @@ class Tab {
         webSecurity: true,
         allowRunningInsecureContent: false,
         experimentalFeatures: false,
-        spellcheck: false,
+        // The session decides whether the checker actually runs; this only lets
+        // Blink report misspellings so the context menu can offer fixes.
+        spellcheck: true,
+        // Chromium's built-in PDF viewer. Without it every PDF link downloads
+        // instead of opening, which is unusable day to day.
+        plugins: true,
         safeDialogs: true,
         safeDialogsMessage: 'Страница показывает диалоги слишком часто',
         backgroundThrottling: true,

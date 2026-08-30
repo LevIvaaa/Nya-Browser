@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   AppInfo,
   ContentLayout,
+  DefaultBrowserState,
   DownloadItem,
   HistoryEntry,
   PermissionRequest,
@@ -179,6 +180,9 @@ const api = {
   resetStats: () => ipcRenderer.invoke('privacy:reset-stats'),
   clearBrowsingData: () => ipcRenderer.invoke('privacy:clear'),
   clearAllProfiles: () => ipcRenderer.invoke('privacy:clear-all-profiles'),
+  defaultBrowser: (): Promise<DefaultBrowserState> => ipcRenderer.invoke('app:default-browser'),
+  makeDefaultBrowser: (): Promise<DefaultBrowserState> => ipcRenderer.invoke('app:make-default'),
+  dropDefaultBrowser: (): Promise<DefaultBrowserState> => ipcRenderer.invoke('app:drop-default'),
   openDevTools: () => ipcRenderer.invoke('dev:tools'),
   openExternal: (url: string) => ipcRenderer.invoke('shell:open', url),
   appInfo: (): Promise<AppInfo> => ipcRenderer.invoke('app:info'),

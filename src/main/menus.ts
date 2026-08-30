@@ -38,6 +38,23 @@ export function pageContextMenu(
   }
 
   if (params.isEditable) {
+    if (params.misspelledWord) {
+      const suggestions = params.dictionarySuggestions.slice(0, 5)
+      if (suggestions.length === 0) {
+        items.push({ label: 'Вариантов нет', enabled: false })
+      } else {
+        for (const word of suggestions) {
+          items.push({ label: word, click: () => wc.replaceMisspelling(word) })
+        }
+      }
+      items.push(
+        {
+          label: 'Добавить в словарь',
+          click: () => wc.session.addWordToSpellCheckerDictionary(params.misspelledWord)
+        },
+        { type: 'separator' }
+      )
+    }
     items.push(
       { role: 'undo', label: 'Отменить', enabled: params.editFlags.canUndo },
       { role: 'redo', label: 'Повторить', enabled: params.editFlags.canRedo },

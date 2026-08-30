@@ -11,6 +11,13 @@ import { initLog, log } from './log'
 import { flushAll, installExitHooks } from './store'
 import { registerProtocols, registerSchemes } from './protocol'
 import { BLOCKLIST_SIZE, clearBrowsingData, hardenApp, hardenSession, resetStats, stats } from './security'
+import {
+  defaultBrowserState,
+  registerAsBrowser,
+  requestDefaultBrowser,
+  unregisterAsBrowser,
+  urlFromArgv
+} from './windows-integration'
 import { SEARCH_ENGINES } from '../shared/search'
 import type { AppInfo, Settings } from '../shared/types'
 
@@ -95,7 +102,7 @@ if (!app.requestSingleInstanceLock()) {
     if (!browser) return
     if (browser.win.isMinimized()) browser.win.restore()
     browser.win.focus()
-    const url = argv.find((arg) => /^https?:\/\//i.test(arg))
+    const url = urlFromArgv(argv)
     if (url) browser.newTab(url)
   })
 
@@ -118,8 +125,17 @@ if (!app.requestSingleInstanceLock()) {
       b.sendWindowState()
       b.sendProfiles()
       b.applySettings()
-      if (!b.restoreSession()) b.newTab()
+      // A cold start from "open link in Nya Browser" must land on that link
+      // rather than on whatever the restored session had open.
+      const launchUrl = urlFromArgv(process.argv)
+      const restored = b.restoreSession()
+      if (launchUrl) b.newTab(launchUrl)
+      else if (!restored) b.newTab()
     })
+
+    // Re-assert the shell registration on every launch: a portable build the
+    // user moved would otherwise leave a dead association behind.
+    void registerAsBrowser()
 
     app.on('activate', () => {
       if (!browser || browser.win.isDestroyed()) {
@@ -350,6 +366,12 @@ function registerIpc(initial: BrowserWindow) {
     for (const profile of profiles.state.profiles) {
       await clearBrowsingData(session.fromPartition(profiles.partition(profile.id)))
     }
+  })
+  ipcMain.handle('app:default-browser', () => defaultBrowserState())
+  ipcMain.handle('app:make-default', () => requestDefaultBrowser())
+  ipcMain.handle('app:drop-default', async () => {
+    await unregisterAsBrowser()
+    return defaultBrowserState()
   })
   ipcMain.handle('dev:tools', () => current().openDevTools())
   ipcMain.handle('shell:open', (_e, url: unknown) => current().openExternal(str(url)))

@@ -91,6 +91,21 @@ export function refreshCustomLists() {
   customAllow = new DomainMatcher(s.customAllowed)
 }
 
+/**
+ * Spell checking is opt-out but not free: Chromium fetches the `.bdic`
+ * dictionary from Google the first time a language is used, which is the only
+ * request the browser makes on its own behalf. Hence a setting rather than a
+ * hard default.
+ */
+export function applySpellChecker(ses: Session) {
+  const s = settings.get()
+  ses.setSpellCheckerEnabled(s.spellcheck)
+  if (!s.spellcheck) return
+  const available = new Set(ses.availableSpellCheckerLanguages)
+  const wanted = s.spellcheckLanguages.filter((code) => available.has(code))
+  if (wanted.length > 0) ses.setSpellCheckerLanguages(wanted)
+}
+
 function classify(hostname: string, pathname: string): BlockKind | null {
   const s = settings.get()
   if (customAllow.matches(hostname)) return null
@@ -151,7 +166,7 @@ export function hardenSession(ses: Session, onBlocked?: (webContentsId: number) 
     `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) ` +
       `Chrome/${chromeVersion}.0.0.0 Safari/537.36`
   )
-  ses.setSpellCheckerEnabled(false)
+  applySpellChecker(ses)
   // Refuse anything below TLS 1.2 outright.
   ses.setSSLConfig({ minVersion: 'tls1.2' })
 

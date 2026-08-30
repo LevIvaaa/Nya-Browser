@@ -120,6 +120,9 @@ export interface Settings {
   saveHistory: boolean
   clearOnExit: boolean
   webrtcPolicy: WebRtcPolicy
+  /** off by default costs nothing; on, Chromium downloads dictionaries from Google */
+  spellcheck: boolean
+  spellcheckLanguages: string[]
 
   // ---- performance
   hardwareAcceleration: boolean
@@ -262,4 +265,14 @@ export interface SecurityCheck {
   detail: string
   status: 'pass' | 'warn' | 'fail'
   evidence: string
+}
+
+/** How Windows currently sees us as a browser. */
+export interface DefaultBrowserState {
+  /** Windows opens https links with us right now */
+  isDefault: boolean
+  /** we are listed in Settings → Default apps */
+  registered: boolean
+  /** false in development, where registering the electron.exe stub is pointless */
+  canRegister: boolean
 }
