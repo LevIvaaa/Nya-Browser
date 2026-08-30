@@ -1,0 +1,329 @@
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useBrowser } from './state/useBrowser'
+import Wallpaper from './components/Wallpaper'
+import Toolbar from './components/Toolbar'
+import BookmarksBar from './components/BookmarksBar'
+import Toasts from './components/Toasts'
+import { AutofillBar, FindBar, PermissionBar, SavePasswordBar } from './components/Bars'
+import { TabRail, TabStrip } from './components/Tabs'
+import StartPage from './pages/StartPage'
+import SettingsPage from './pages/SettingsPage'
+import HistoryPage from './pages/HistoryPage'
+import DownloadsPage from './pages/DownloadsPage'
+import BookmarksPage from './pages/BookmarksPage'
+import PasswordsPage from './pages/PasswordsPage'
+import ErrorPage from './pages/ErrorPage'
+
+type View = 'page' | 'settings' | 'history' | 'downloads' | 'bookmarks' | 'passwords'
+type Overlay = 'menu' | 'profiles' | null
+
+export default function App() {
+  const state = useBrowser()
+  const {
+    tabs, active, settings, engines, engine, profiles, profile, bookmarks, bookmarked,
+    downloads, activeDownloads, closed, stats, win, permission, autofill, savePassword,
+    edge, toasts, patch, refreshBookmarks, setPermission, setAutofill, setSavePassword
+  } = state
+
+  const [view, setView] = useState<View>('page')
+  const [overlay, setOverlay] = useState<Overlay>(null)
+  const [findOpen, setFindOpen] = useState(false)
+  const [revealed, setRevealed] = useState(false)
+
+  const contentRef = useRef<HTMLDivElement>(null)
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  /* ------------------------------------------------------------ appearance */
+  useEffect(() => {
+    if (!settings) return
+    const root = document.documentElement
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+
+    const apply = () => {
+      const dark = settings.theme === 'dark' || (settings.theme === 'system' && media.matches)
+      root.dataset.theme = dark ? 'dark' : 'light'
+    }
+    apply()
+    media.addEventListener('change', apply)
+
+    root.style.setProperty('--accent', settings.accent)
+    root.style.setProperty('--radius', `${settings.radius}px`)
+    root.style.setProperty('--speed', String(settings.reduceMotion ? 0.001 : settings.animationSpeed))
+    root.dataset.motion = settings.reduceMotion ? 'reduced' : 'full'
+    root.dataset.glass = settings.glass ? 'on' : 'off'
+
+    return () => media.removeEventListener('change', apply)
+  }, [settings])
+
+  /* ------------------------------------------------------------- UI state */
+  const hasError = Boolean(active?.error)
+  const showStart = view === 'page' && !hasError && (active ? !active.hasContent : true)
+  const showPage = view === 'page' && !showStart && !hasError
+  // Menus and the palette are drawn by the separate overlay view stacked above
+  // the page, so they no longer force the page to be hidden.
+  const overlayVisible = !showPage
+  const chromeHidden = Boolean(
+    settings?.tabAutoHide && !revealed && !findOpen && showPage && !overlay
+  )
+
+  /* ------------------------------------------------ report content bounds */
+  const report = useCallback(() => {
+    const element = contentRef.current
+    if (!element) return
+    const rect = element.getBoundingClientRect()
+    void window.browser.setLayout({
+      x: Math.round(rect.left),
+      y: Math.round(rect.top),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+      visible: !overlayVisible
+    })
+  }, [overlayVisible])
+
+  useLayoutEffect(() => {
+    report()
+    const element = contentRef.current
+    const observer = new ResizeObserver(report)
+    if (element) observer.observe(element)
+    window.addEventListener('resize', report)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', report)
+    }
+  }, [report])
+
+  useLayoutEffect(report, [
+    chromeHidden,
+    view,
+    findOpen,
+    Boolean(permission),
+    Boolean(savePassword),
+    Boolean(autofill),
+    settings?.tabPosition,
+    settings?.railWidth,
+    settings?.compact,
+    bookmarks.length,
+    report
+  ])
+
+  /* --------------------------------------------- reset chrome pages on tab */
+  // Settings, history and downloads are chrome-level views. Opening or
+  // switching a tab must show that tab, not keep the old panel on screen.
+  const activeId = active?.id
+  useEffect(() => {
+    setView('page')
+    void window.browser.setOverlay(null)
+    setFindOpen(false)
+  }, [activeId])
+
+  /* ------------------------------------------------------------ shortcuts */
+  const openPalette = useCallback(() => {
+    void window.browser.setOverlay('palette')
+  }, [])
+
+  const toggleView = useCallback((next: View) => {
+    void window.browser.setOverlay(null)
+    setView((current) => (current === next ? 'page' : next))
+  }, [])
+
+  // The overlay owns menu state; mirror it so toolbar buttons stay highlighted.
+  useEffect(() => window.browser.onOverlay((mode) => setOverlay(mode === 'menu' || mode === 'profiles' ? mode : null)), [])
+
+  // The overlay can ask the chrome UI to open one of its pages.
+  useEffect(() => window.browser.onPage((page) => setView(page as View)), [])
+
+  useEffect(() => {
+    return window.browser.onShortcut((action) => {
+      switch (action) {
+        case 'focus-address':
+          openPalette()
+          break
+        case 'settings':
+          toggleView('settings')
+          break
+        case 'history':
+          toggleView('history')
+          break
+        case 'downloads':
+          toggleView('downloads')
+          break
+        case 'bookmarks':
+          toggleView('bookmarks')
+          break
+        case 'profiles':
+          void window.browser.setOverlay(overlay === 'profiles' ? null : 'profiles')
+          break
+        case 'clear-data':
+          void window.browser.clearBrowsingData()
+          break
+        case 'toggle-tabs':
+          if (settings) patch({ tabAutoHide: !settings.tabAutoHide })
+          break
+        case 'find':
+          if (active?.hasContent) setFindOpen(true)
+          break
+      }
+    })
+  }, [openPalette, toggleView, settings, patch, active?.hasContent])
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      if (overlay) void window.browser.setOverlay(null)
+      else if (findOpen) setFindOpen(false)
+      else if (view !== 'page') setView('page')
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [overlay, findOpen, view])
+
+  /* ------------------------------------------------------------ auto-hide */
+  const reveal = useCallback(() => {
+    if (hideTimer.current) clearTimeout(hideTimer.current)
+    setRevealed(true)
+  }, [])
+  const scheduleHide = useCallback(() => {
+    if (hideTimer.current) clearTimeout(hideTimer.current)
+    hideTimer.current = setTimeout(() => setRevealed(false), 420)
+  }, [])
+
+  useEffect(() => {
+    if (edge) reveal()
+    else scheduleHide()
+  }, [edge, reveal, scheduleHide])
+
+  useEffect(() => {
+    if (!settings?.tabAutoHide) setRevealed(false)
+  }, [settings?.tabAutoHide])
+
+  if (!settings) {
+    return <div className="h-full w-full" style={{ background: 'var(--bg)' }} />
+  }
+
+  const vertical = settings.tabPosition !== 'top'
+  const pinnedBookmarks = bookmarks.filter((item) => item.pinned)
+
+  return (
+    <div className="relative flex h-full w-full flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
+      {overlayVisible && (
+        <Wallpaper
+          background={settings.background}
+          accent={settings.accent}
+          reduceMotion={settings.reduceMotion}
+          browsing={showPage}
+        />
+      )}
+
+      <div
+        className="relative z-20 flex min-h-0 flex-1 flex-col"
+        onMouseLeave={settings.tabAutoHide ? scheduleHide : undefined}
+        onMouseEnter={settings.tabAutoHide ? reveal : undefined}
+      >
+        {!chromeHidden && (
+          <header className="glass animate-slide-down relative z-30 shrink-0 overflow-visible" style={{ borderBottom: '1px solid var(--line)' }}>
+            <div className="relative">
+              <Toolbar
+                tab={active}
+                settings={settings}
+                profile={profile}
+                maximized={win.maximized}
+                bookmarked={bookmarked}
+                downloadCount={activeDownloads}
+                view={overlay ?? view}
+                onOpenAddress={openPalette}
+                onToggleView={(target) => {
+                  if (target === 'menu' || target === 'profiles') {
+                    void window.browser.setOverlay(overlay === target ? null : target)
+                  } else {
+                    toggleView(target as View)
+                  }
+                }}
+              />
+            </div>
+
+            {!vertical && <TabStrip tabs={tabs} settings={settings} />}
+            {pinnedBookmarks.length > 0 && (
+              <BookmarksBar items={pinnedBookmarks} onManage={() => toggleView('bookmarks')} />
+            )}
+            {permission && (
+              <PermissionBar
+                request={permission}
+                onAnswer={(allow) => {
+                  void window.browser.answerPermission(permission.id, allow)
+                  setPermission(null)
+                }}
+              />
+            )}
+            {savePassword && (
+              <SavePasswordBar
+                offer={savePassword}
+                onAnswer={(save) => {
+                  void window.browser.vaultConfirmSave(save)
+                  setSavePassword(null)
+                }}
+              />
+            )}
+            {autofill && (
+              <AutofillBar
+                offer={autofill}
+                onClose={() => setAutofill(null)}
+                onUnlock={() => {
+                  setAutofill(null)
+                  setView('passwords')
+                }}
+              />
+            )}
+            {findOpen && <FindBar onClose={() => setFindOpen(false)} />}
+          </header>
+        )}
+
+        <div className="flex min-h-0 flex-1">
+          {vertical && settings.tabPosition === 'left' && !chromeHidden && (
+            <div className="animate-slide-right">
+              <TabRail tabs={tabs} settings={settings} side="left" />
+            </div>
+          )}
+
+          <div ref={contentRef} className="relative min-w-0 flex-1 overflow-hidden">
+            {showStart && (
+              <StartPage
+                settings={settings}
+                engine={engine}
+                stats={stats}
+                closed={closed}
+                profileName={profile?.name ?? ''}
+                onOpenAddress={openPalette}
+                onPatch={patch}
+              />
+            )}
+            {hasError && active?.error && view === 'page' && <ErrorPage error={active.error} />}
+            {view === 'settings' && (
+              <SettingsPage
+                settings={settings}
+                engines={engines}
+                stats={stats}
+                profiles={profiles}
+                onPatch={patch}
+                onReset={() => void window.browser.resetSettings()}
+                onClose={() => setView('page')}
+                onOpenPasswords={() => setView('passwords')}
+              />
+            )}
+            {view === 'history' && <HistoryPage />}
+            {view === 'downloads' && <DownloadsPage items={downloads} />}
+            {view === 'bookmarks' && <BookmarksPage items={bookmarks} onRefresh={refreshBookmarks} />}
+            {view === 'passwords' && <PasswordsPage />}
+          </div>
+
+          {vertical && settings.tabPosition === 'right' && !chromeHidden && (
+            <div className="animate-slide-left">
+              <TabRail tabs={tabs} settings={settings} side="right" />
+            </div>
+          )}
+        </div>
+      </div>
+
+      <Toasts items={toasts} />
+    </div>
+  )
+}

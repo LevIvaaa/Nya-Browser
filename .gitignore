@@ -1,0 +1,23 @@
+# --- secrets: never commit, never push -------------------------------------
+не комить и не пуш/
+*.token
+*.token.txt
+.env
+.env.*
+.git-credentials
+
+# --- dependencies & build output -------------------------------------------
+node_modules/
+out/
+dist/
+release/
+
+# --- caches & logs ---------------------------------------------------------
+*.tsbuildinfo
+*.log
+
+# --- editor / OS -----------------------------------------------------------
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
