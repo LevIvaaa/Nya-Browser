@@ -10,7 +10,8 @@
       "DOM.Iterable"
     ],
     "types": [
-      "node"
+      "node",
+      "vite/client"
     ],
     "jsx": "react-jsx",
     "strict": true,

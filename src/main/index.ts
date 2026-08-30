@@ -11,6 +11,7 @@ import { initLog, log } from './log'
 import { flushAll, installExitHooks } from './store'
 import { registerProtocols, registerSchemes } from './protocol'
 import { BLOCKLIST_SIZE, clearBrowsingData, hardenApp, hardenSession, resetStats, stats } from './security'
+import { detectSources, importBookmarks, importPasswordsCsv } from './import'
 import {
   defaultBrowserState,
   registerAsBrowser,
@@ -367,6 +368,15 @@ function registerIpc(initial: BrowserWindow) {
       await clearBrowsingData(session.fromPartition(profiles.partition(profile.id)))
     }
   })
+  /* ---- import from another browser ---- */
+  ipcMain.handle('import:sources', () => detectSources())
+  ipcMain.handle('import:bookmarks', (_e, id: unknown) => {
+    const result = importBookmarks(str(id, 512))
+    if (result.added > 0) current().sendBookmarks()
+    return result
+  })
+  ipcMain.handle('import:passwords', () => importPasswordsCsv())
+
   ipcMain.handle('app:default-browser', () => defaultBrowserState())
   ipcMain.handle('app:make-default', () => requestDefaultBrowser())
   ipcMain.handle('app:drop-default', async () => {

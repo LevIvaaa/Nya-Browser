@@ -1,4 +1,4 @@
-import { net, protocol, session, type Session } from 'electron'
+import { protocol, session, type Session } from 'electron'
 import { createReadStream, statSync } from 'fs'
 import { basename, extname, join } from 'path'
 import { Readable } from 'stream'
@@ -109,6 +109,3 @@ export function registerProtocols(ses: Session = session.defaultSession) {
     return new Response(stream, { headers })
   })
 }
-
-/** Used by the self-test page to prove requests really do go out. */
-export const fetchThroughNet = net.fetch

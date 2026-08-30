@@ -1045,6 +1045,11 @@ export class BrowserWindow {
     this.send('toast', 'Добавлено в закладки')
   }
 
+  /** Pushes the current list to the UI after a bulk change such as an import. */
+  sendBookmarks() {
+    this.send('state:bookmarks', bookmarks.all())
+  }
+
   /* ----------------------------------------------------------- suggestions */
   suggestions(query: string): Suggestion[] {
     const q = query.trim()

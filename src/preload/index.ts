@@ -53,6 +53,19 @@ export interface SavePasswordOffer {
   known: boolean
 }
 
+export interface ImportSource {
+  id: string
+  browser: string
+  profile: string
+  bookmarks: number
+}
+
+export interface ImportResult {
+  added: number
+  skipped: number
+  error?: string
+}
+
 export interface ClosedTab {
   url: string
   title: string
@@ -180,6 +193,9 @@ const api = {
   resetStats: () => ipcRenderer.invoke('privacy:reset-stats'),
   clearBrowsingData: () => ipcRenderer.invoke('privacy:clear'),
   clearAllProfiles: () => ipcRenderer.invoke('privacy:clear-all-profiles'),
+  importSources: (): Promise<ImportSource[]> => ipcRenderer.invoke('import:sources'),
+  importBookmarksFrom: (id: string): Promise<ImportResult> => ipcRenderer.invoke('import:bookmarks', id),
+  importPasswordsCsv: (): Promise<ImportResult> => ipcRenderer.invoke('import:passwords'),
   defaultBrowser: (): Promise<DefaultBrowserState> => ipcRenderer.invoke('app:default-browser'),
   makeDefaultBrowser: (): Promise<DefaultBrowserState> => ipcRenderer.invoke('app:make-default'),
   dropDefaultBrowser: (): Promise<DefaultBrowserState> => ipcRenderer.invoke('app:drop-default'),

@@ -9,7 +9,9 @@ import type {
   SecurityStats,
   Settings
 } from '../../../shared/types'
-import type { VaultState } from '../../../preload/index'
+import type { DefaultBrowserState } from '../../../shared/types'
+import type { ImportSource, VaultState } from '../../../preload/index'
+import logoUrl from '../assets/logo.png'
 import {
   Alert,
   Cross,
@@ -75,6 +77,7 @@ const TABS = [
   { id: 'passwords', label: 'Пароли', icon: <Key width={15} height={15} /> },
   { id: 'speed', label: 'Скорость', icon: <Zap width={15} height={15} /> },
   { id: 'downloads', label: 'Загрузки', icon: <Download width={15} height={15} /> },
+  { id: 'system', label: 'Система', icon: <Monitor width={15} height={15} /> },
   { id: 'data', label: 'Данные', icon: <Eraser width={15} height={15} /> },
   { id: 'about', label: 'О браузере', icon: <Gear width={15} height={15} /> }
 ] as const
@@ -117,11 +120,20 @@ export default function SettingsPage({
   const [newAllowed, setNewAllowed] = useState('')
   const [editProfile, setEditProfile] = useState<Profile | null>(null)
   const [importOpen, setImportOpen] = useState(false)
+  const [defaults, setDefaults] = useState<DefaultBrowserState | null>(null)
+  const [sources, setSources] = useState<ImportSource[] | null>(null)
 
   useEffect(() => {
     void window.browser.appInfo().then(setInfo)
     void window.browser.vaultState().then(setVault)
   }, [])
+
+  // Both are shell lookups, so they are only paid for when the tab is opened.
+  useEffect(() => {
+    if (tab !== 'system') return
+    void window.browser.defaultBrowser().then(setDefaults)
+    void window.browser.importSources().then(setSources)
+  }, [tab])
 
   const engine = engines.find((item) => item.id === settings.searchEngine) ?? engines[0]
   const bg = settings.background
@@ -764,9 +776,136 @@ export default function SettingsPage({
             </>
           )}
 
+          {/* -------------------------------------------------------- system */}
+          {tab === 'system' && (
+            <>
+              <Section
+                title="Браузер по умолчанию"
+                icon={<Monitor width={15} height={15} />}
+                description="Чтобы ссылки из Telegram, почты и редактора открывались здесь"
+              >
+                <Row
+                  title="Сейчас"
+                  hint={
+                    defaults?.isDefault
+                      ? 'Windows открывает ссылки в Nya Browser'
+                      : defaults?.registered
+                        ? 'Nya есть в списке приложений, но основным выбран другой браузер'
+                        : 'Nya пока не зарегистрирован в системе'
+                  }
+                >
+                  <Pill tone={defaults?.isDefault ? 'good' : 'warn'}>
+                    {defaults?.isDefault ? 'Основной' : 'Не основной'}
+                  </Pill>
+                </Row>
+                <Row
+                  title="Назначить основным"
+                  hint={
+                    defaults && !defaults.canRegister
+                      ? 'Недоступно в режиме разработки — нужна собранная версия'
+                      : 'Откроется окно Windows: выберите Nya Browser для http и https'
+                  }
+                >
+                  <button
+                    className="btn btn-primary"
+                    disabled={defaults ? !defaults.canRegister : true}
+                    onClick={async () => {
+                      setDefaults(await window.browser.makeDefaultBrowser())
+                      flash('Выберите Nya Browser в открывшемся окне Windows')
+                    }}
+                  >
+                    Настроить
+                  </button>
+                </Row>
+              </Section>
+
+              <Section
+                title="Перенос из другого браузера"
+                icon={<Download width={15} height={15} />}
+                description="Закладки читаются напрямую, пароли — из экспортированного CSV"
+              >
+                {sources === null ? (
+                  <Row title="Ищем установленные браузеры…" />
+                ) : sources.length === 0 ? (
+                  <Row title="Ничего не найдено" hint="Chrome, Edge, Brave, Vivaldi, Yandex и Opera на этом компьютере не найдены" />
+                ) : (
+                  sources.map((source) => (
+                    <Row
+                      key={source.id}
+                      title={`${source.browser} · ${source.profile}`}
+                      hint={`${source.bookmarks} закладок`}
+                    >
+                      <button
+                        className="btn"
+                        onClick={async () => {
+                          const result = await window.browser.importBookmarksFrom(source.id)
+                          flash(
+                            result.error
+                              ? result.error
+                              : `Добавлено ${result.added}, пропущено ${result.skipped}`
+                          )
+                        }}
+                      >
+                        Импортировать
+                      </button>
+                    </Row>
+                  ))
+                )}
+                <Row
+                  title="Пароли из CSV"
+                  hint="В Chrome: Пароли → ⋮ → Экспорт паролей. Файл после импорта лучше удалить"
+                >
+                  <button
+                    className="btn"
+                    onClick={async () => {
+                      const result = await window.browser.importPasswordsCsv()
+                      if (result.error) flash(result.error)
+                      else if (result.added || result.skipped)
+                        flash(`Добавлено ${result.added}, пропущено ${result.skipped}`)
+                    }}
+                  >
+                    Выбрать файл
+                  </button>
+                </Row>
+              </Section>
+
+              <Section
+                title="Проверка орфографии"
+                icon={<Keyboard width={15} height={15} />}
+                description="Подчёркивает ошибки в текстовых полях на страницах"
+              >
+                <Row
+                  title="Проверять правописание"
+                  hint="Русский и английский. Словари скачиваются с серверов Google при первом включении — это единственный запрос, который браузер делает сам"
+                >
+                  <Toggle
+                    checked={settings.spellcheck}
+                    onChange={(value) => onPatch({ spellcheck: value })}
+                  />
+                </Row>
+              </Section>
+            </>
+          )}
+
           {/* --------------------------------------------------------- about */}
           {tab === 'about' && (
             <>
+              <div className="animate-fade-up flex flex-col items-center gap-3 py-4 text-center">
+                <img
+                  src={logoUrl}
+                  alt=""
+                  width={104}
+                  height={104}
+                  className="select-none"
+                  draggable={false}
+                  style={{ filter: 'drop-shadow(0 10px 24px color-mix(in srgb, var(--accent) 35%, transparent))' }}
+                />
+                <div>
+                  <div className="text-[22px] font-semibold tracking-[-0.03em]">Nya Browser</div>
+                  <div className="text-sm text-dim">версия {info?.version ?? '—'}</div>
+                </div>
+              </div>
+
               <Section title="О браузере" icon={<Gear width={15} height={15} />}>
                 <Row title="Nya Browser"><span className="text-sm text-dim">версия {info?.version ?? '—'}</span></Row>
                 <Row title="Движок"><span className="text-sm text-dim">Chromium {info?.chrome ?? '—'}</span></Row>
