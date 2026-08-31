@@ -62,7 +62,7 @@ function writeStore(file: ExtensionsFile) {
  * not checked: it only proves the file came from the Web Store, and a file the
  * user picked themselves has already been trusted by picking it.
  */
-function zipBodyOf(buffer: Buffer): Buffer {
+export function zipBodyOf(buffer: Buffer): Buffer {
   if (buffer.length < 16 || buffer.toString('latin1', 0, 4) !== 'Cr24') return buffer
   const version = buffer.readUInt32LE(4)
   if (version === 2) {
@@ -81,7 +81,7 @@ const CENTRAL_SIGNATURE = 0x02014b50
  * Just enough of the zip format to unpack an extension: stored and deflated
  * entries, no zip64 (no extension comes close to 4 GB).
  */
-function unzip(buffer: Buffer, target: string) {
+export function unzip(buffer: Buffer, target: string) {
   let eocd = -1
   for (let i = buffer.length - 22; i >= 0 && i > buffer.length - 66_000; i--) {
     if (buffer.readUInt32LE(i) === EOCD_SIGNATURE) {
@@ -125,8 +125,18 @@ function unzip(buffer: Buffer, target: string) {
   }
 }
 
+/**
+ * Unpacks a .crx or .zip into `target` and returns the folder holding the
+ * manifest, or null when the archive turns out not to be an extension.
+ */
+export function unpackArchive(file: string, target: string): string | null {
+  mkdirSync(target, { recursive: true })
+  unzip(zipBodyOf(readFileSync(file)), target)
+  return manifestRoot(target)
+}
+
 /** Where an extension's own manifest.json lives, allowing for a wrapper folder. */
-function manifestRoot(dir: string): string | null {
+export function manifestRoot(dir: string): string | null {
   if (existsSync(join(dir, 'manifest.json'))) return dir
   try {
     const nested = readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory())
@@ -225,8 +235,7 @@ export async function addExtension(): Promise<AddExtensionResult> {
     const name = basename(source).replace(/\.(crx|zip)$/i, '').replace(/[^\w.-]+/g, '-')
     folder = join(unpackedDir(), `${name}-${Date.now().toString(36)}`)
     try {
-      mkdirSync(folder, { recursive: true })
-      unzip(zipBodyOf(readFileSync(source)), folder)
+      unpackArchive(source, folder)
     } catch (error) {
       rmSync(folder, { recursive: true, force: true })
       return { error: `Не удалось распаковать: ${(error as Error).message}` }
