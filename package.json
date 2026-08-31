@@ -10,6 +10,7 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "node tests/filters.mjs",
     "dist:win": "electron-vite build && electron-builder --win --dir",
     "dist:portable": "electron-vite build && electron-builder --win portable",
     "dist:installer": "electron-vite build && electron-builder --win nsis"

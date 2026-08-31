@@ -100,6 +100,7 @@ Defender запрещает `node.exe` и `tsc` писать в эти папк�
 npm install
 npm run dev              # запуск с горячей перезагрузкой
 npm run typecheck        # проверка типов
+npm test                 # тесты движка фильтров
 npm run dist:win         # распакованная сборка в dist/win-unpacked
 npm run dist:portable    # один переносимый exe
 npm run dist:installer   # установщик NSIS (только из-под Windows: electron-builder
