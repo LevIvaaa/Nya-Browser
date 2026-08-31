@@ -14,10 +14,18 @@
 
 const { execFileSync } = require('child_process')
 
-/** Runs a command, returning null when it is simply not installed. */
+/**
+ * Runs a command, reporting failure rather than throwing. stdin is closed on
+ * purpose: EVS asks for an account name when none is configured, and a build
+ * must fail fast there instead of waiting forever on a prompt nobody sees.
+ */
 function run(command, args, options = {}) {
   try {
-    return execFileSync(command, args, { encoding: 'utf8', stdio: 'pipe', ...options })
+    return execFileSync(command, args, {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      ...options
+    })
   } catch (error) {
     return { failed: true, message: String(error.stderr || error.stdout || error.message) }
   }
@@ -43,11 +51,19 @@ exports.default = async function afterPack(context) {
   console.log(`  signing for Widevine (VMP): ${context.appOutDir}`)
   const signed = run(python, ['-m', 'castlabs_evs.vmp', 'sign-pkg', context.appOutDir])
   if (signed && signed.failed) {
+    // Being asked for an account name means there is no EVS account yet; any
+    // other failure is usually an expired session.
+    const noAccount = /Account Name|EOFError|not logged in/i.test(signed.message)
     console.log(
-      '\n  VMP signing failed. The build is otherwise fine; DRM playback may not be.\n' +
-        `  ${signed.message.trim().split('\n').slice(-3).join('\n  ')}\n` +
-        '  Most often this means the EVS account needs a refresh:\n' +
-        '                 python -m castlabs_evs.account reauth\n'
+      '\n  VMP signing failed. The build itself is fine; DRM playback may not be.\n' +
+        `  ${signed.message.trim().split('\n').slice(-3).join('\n  ')}\n\n` +
+        (noAccount
+          ? '  There is no EVS account on this machine yet. Creating one is free,\n' +
+            '  but only you can: a confirmation code goes to your email.\n' +
+            '      python -m castlabs_evs.account signup\n'
+          : '  The EVS session has probably expired:\n' +
+            '      python -m castlabs_evs.account reauth\n') +
+        '  Details in docs/widevine.md\n'
     )
     return
   }
