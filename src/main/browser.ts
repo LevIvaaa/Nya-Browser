@@ -35,6 +35,7 @@ import {
   stats
 } from './security'
 import { engine, hideCss } from './filters'
+import { loadExtensions, setExtensionSession } from './extensions'
 import { normalizeInput } from '../shared/search'
 import type {
   ContentLayout,
@@ -42,6 +43,7 @@ import type {
   Profile,
   Suggestion,
   TabState,
+  UpdateState,
   WindowState
 } from '../shared/types'
 
@@ -428,6 +430,11 @@ export class BrowserWindow {
       if (this.getActive()?.wc?.id === id) this.broadcast()
     })
     downloads.attach(this.ses)
+
+    // Extensions belong to the profile, and Chromium keeps no registry of them,
+    // so every launch and every profile switch loads them again.
+    setExtensionSession(this.ses)
+    void loadExtensions(this.ses)
 
     // The autofill script lives on the session, so it applies to every page in
     // this profile and to none of the chrome UI.
@@ -1135,6 +1142,10 @@ export class BrowserWindow {
   /** Pushes the current list to the UI after a bulk change such as an import. */
   sendBookmarks() {
     this.send('state:bookmarks', bookmarks.all())
+  }
+
+  sendUpdateState(state: UpdateState) {
+    this.send('state:update', state)
   }
 
   /* ----------------------------------------------------------- suggestions */

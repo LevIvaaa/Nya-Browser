@@ -271,6 +271,39 @@ export interface SecurityCheck {
   evidence: string
 }
 
+/** Where the self-update stands. */
+export interface UpdateState {
+  stage: 'idle' | 'checking' | 'current' | 'downloading' | 'ready' | 'error' | 'unsupported'
+  /** the version running now */
+  version: string
+  /** the version found on GitHub, when there is a newer one */
+  available: string | null
+  /** download progress, 0-100 */
+  percent: number
+  error: string
+  /** false for the portable build and in development, which cannot self-update */
+  supported: boolean
+  checkedAt: number
+}
+
+/** A Chrome extension loaded into the active profile. */
+export interface InstalledExtension {
+  id: string
+  name: string
+  version: string
+  /** folder it was loaded from */
+  path: string
+  /** false when the folder is gone or Electron refused the manifest */
+  loaded: boolean
+  /** manifest_version: 2 or 3, 0 when unreadable */
+  manifest: number
+}
+
+export interface AddExtensionResult {
+  added?: InstalledExtension
+  error?: string
+}
+
 /** State of the downloadable EasyList-style filter lists. */
 export interface FilterStatus {
   enabled: boolean

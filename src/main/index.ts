@@ -13,6 +13,8 @@ import { registerProtocols, registerSchemes } from './protocol'
 import { BLOCKLIST_SIZE, clearBrowsingData, hardenApp, hardenSession, resetStats, stats } from './security'
 import { detectSources, importBookmarks, importPasswordsCsv } from './import'
 import { engine, filterStatus, loadFilters } from './filters'
+import { addExtension, listExtensions, removeExtension, revealExtension } from './extensions'
+import { check as checkUpdates, initUpdates, installNow, onUpdateState, updateState } from './updates'
 import {
   defaultBrowserState,
   registerAsBrowser,
@@ -141,6 +143,9 @@ if (!app.requestSingleInstanceLock()) {
     // Re-assert the shell registration on every launch: a portable build the
     // user moved would otherwise leave a dead association behind.
     void registerAsBrowser()
+
+    initUpdates()
+    onUpdateState((state) => browser?.sendUpdateState(state))
 
     app.on('activate', () => {
       if (!browser || browser.win.isDestroyed()) {
@@ -373,6 +378,17 @@ function registerIpc(initial: BrowserWindow) {
       await clearBrowsingData(session.fromPartition(profiles.partition(profile.id)))
     }
   })
+  /* ---- updates ---- */
+  ipcMain.handle('updates:state', () => updateState())
+  ipcMain.handle('updates:check', () => checkUpdates())
+  ipcMain.handle('updates:install', () => installNow())
+
+  /* ---- extensions ---- */
+  ipcMain.handle('ext:list', () => listExtensions())
+  ipcMain.handle('ext:add', () => addExtension())
+  ipcMain.handle('ext:remove', (_e, path: unknown) => removeExtension(str(path, 600)))
+  ipcMain.handle('ext:reveal', (_e, path: unknown) => revealExtension(str(path, 600)))
+
   /* ---- filter lists ---- */
   ipcMain.handle('filters:status', () => filterStatus())
   ipcMain.handle('filters:refresh', () => loadFilters(true))

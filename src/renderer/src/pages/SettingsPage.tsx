@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react'
 import type {
   AppInfo,
+  DefaultBrowserState,
+  FilterStatus,
+  InstalledExtension,
   PermissionPolicy,
   PermissionSettings,
   Profile,
   ProfilesState,
   SearchEngine,
   SecurityStats,
-  Settings
+  Settings,
+  UpdateState
 } from '../../../shared/types'
-import type { DefaultBrowserState, FilterStatus } from '../../../shared/types'
 import type { ImportSource, VaultState } from '../../../preload/index'
 import logoUrl from '../assets/logo.png'
 import {
@@ -19,6 +22,7 @@ import {
   Eraser,
   Film,
   Gear,
+  Grid,
   Image,
   Key,
   Keyboard,
@@ -30,6 +34,7 @@ import {
   Moon,
   Palette,
   Plus,
+  Refresh,
   Search,
   Shield,
   Sparkles,
@@ -96,6 +101,28 @@ const PERMISSION_ROWS: Array<{ key: keyof PermissionSettings; title: string; hin
   { key: 'download', title: 'Внешние приложения', hint: 'Открытие ссылок в других программах' }
 ]
 
+/** One line describing where the updater has got to. */
+function updateHint(state: UpdateState | null): string {
+  if (!state) return 'Проверяем состояние…'
+  if (!state.supported) {
+    return state.error || 'Обновляться умеет только установленная версия, не портативная'
+  }
+  switch (state.stage) {
+    case 'checking':
+      return 'Спрашиваем GitHub…'
+    case 'downloading':
+      return `Скачиваем ${state.available ?? ''} — ${state.percent}%`
+    case 'ready':
+      return `Версия ${state.available} загружена и установится при перезапуске`
+    case 'current':
+      return 'Установлена последняя версия'
+    case 'error':
+      return `Не получилось: ${state.error}`
+    default:
+      return 'Проверка выполняется автоматически раз в 6 часов'
+  }
+}
+
 const POLICY_OPTIONS: Array<{ value: PermissionPolicy; label: string }> = [
   { value: 'ask', label: 'Спрашивать' },
   { value: 'allow', label: 'Разрешать' },
@@ -124,10 +151,15 @@ export default function SettingsPage({
   const [sources, setSources] = useState<ImportSource[] | null>(null)
   const [filters, setFilters] = useState<FilterStatus | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [extensions, setExtensions] = useState<InstalledExtension[] | null>(null)
+  const [update, setUpdate] = useState<UpdateState | null>(null)
 
   useEffect(() => {
     void window.browser.appInfo().then(setInfo)
     void window.browser.vaultState().then(setVault)
+    void window.browser.updateState().then(setUpdate)
+    // Download progress arrives on its own, so the panel must not have to poll.
+    return window.browser.onUpdate(setUpdate)
   }, [])
 
   // Shell and disk lookups, so they are only paid for when the tab is opened.
@@ -135,6 +167,7 @@ export default function SettingsPage({
     if (tab === 'system') {
       void window.browser.defaultBrowser().then(setDefaults)
       void window.browser.importSources().then(setSources)
+      void window.browser.extensions().then(setExtensions)
     }
     if (tab === 'privacy') void window.browser.filterStatus().then(setFilters)
   }, [tab])
@@ -840,6 +873,35 @@ export default function SettingsPage({
           {tab === 'system' && (
             <>
               <Section
+                title="Обновления"
+                icon={<Refresh width={15} height={15} />}
+                description="Из релизов проекта на GitHub"
+              >
+                <Row
+                  title={`Установлена версия ${info?.version ?? '—'}`}
+                  hint={updateHint(update)}
+                >
+                  {update?.stage === 'ready' ? (
+                    <button className="btn btn-primary" onClick={() => window.browser.installUpdate()}>
+                      Перезапустить и обновить
+                    </button>
+                  ) : (
+                    <button
+                      className="btn"
+                      disabled={update?.stage === 'checking' || update?.stage === 'downloading'}
+                      onClick={async () => setUpdate(await window.browser.checkUpdates())}
+                    >
+                      {update?.stage === 'checking'
+                        ? 'Проверяем…'
+                        : update?.stage === 'downloading'
+                          ? `Загрузка ${update.percent}%`
+                          : 'Проверить'}
+                    </button>
+                  )}
+                </Row>
+              </Section>
+
+              <Section
                 title="Браузер по умолчанию"
                 icon={<Monitor width={15} height={15} />}
                 description="Чтобы ссылки из Telegram, почты и редактора открывались здесь"
@@ -925,6 +987,63 @@ export default function SettingsPage({
                     }}
                   >
                     Выбрать файл
+                  </button>
+                </Row>
+              </Section>
+
+              <Section
+                title="Расширения"
+                icon={<Grid width={15} height={15} />}
+                description="Папка с manifest.json, либо файл .crx или .zip — распакуется сам"
+              >
+                {extensions === null ? (
+                  <Row title="Читаем список…" />
+                ) : extensions.length === 0 ? (
+                  <Row title="Пока ничего не установлено" />
+                ) : (
+                  extensions.map((item) => (
+                    <Row
+                      key={item.path}
+                      title={item.version ? `${item.name} · ${item.version}` : item.name}
+                      hint={item.loaded ? item.path : 'Не загрузилось — подробности в nya.log'}
+                    >
+                      <div className="flex items-center gap-2">
+                        {item.loaded ? (
+                          item.manifest > 0 && <Pill>MV{item.manifest}</Pill>
+                        ) : (
+                          <Pill tone="bad">Ошибка</Pill>
+                        )}
+                        <button className="btn" onClick={() => window.browser.revealExtension(item.path)}>
+                          Папка
+                        </button>
+                        <button
+                          className="btn btn-danger"
+                          onClick={async () => {
+                            await window.browser.removeExtension(item.path)
+                            setExtensions(await window.browser.extensions())
+                            flash('Расширение удалено')
+                          }}
+                        >
+                          Удалить
+                        </button>
+                      </div>
+                    </Row>
+                  ))
+                )}
+                <Row
+                  title="Установить"
+                  hint="Работает всё на content-скриптах: Dark Reader, Stylus и подобные. Блокировщики рекламы и менеджеры паролей — нет: Electron не даёт расширениям ни блокирующий webRequest, ни кнопку на панели"
+                >
+                  <button
+                    className="btn btn-primary"
+                    onClick={async () => {
+                      const result = await window.browser.addExtension()
+                      setExtensions(await window.browser.extensions())
+                      if (result.error) flash(result.error)
+                      else if (result.added) flash(`Установлено: ${result.added.name}`)
+                    }}
+                  >
+                    Выбрать файл или папку
                   </button>
                 </Row>
               </Section>

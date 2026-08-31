@@ -13,7 +13,8 @@
     "test": "node tests/filters.mjs",
     "dist:win": "electron-vite build && electron-builder --win --dir",
     "dist:portable": "electron-vite build && electron-builder --win portable",
-    "dist:installer": "electron-vite build && electron-builder --win nsis"
+    "dist:installer": "electron-vite build && electron-builder --win nsis",
+    "release": "electron-vite build && electron-builder --win nsis --publish always"
   },
   "build": {
     "appId": "com.nya.browser",
@@ -29,6 +30,12 @@
     "win": {
       "target": [
         {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
           "target": "portable",
           "arch": [
             "x64"
@@ -36,7 +43,8 @@
         }
       ],
       "icon": "build/icon.ico",
-      "artifactName": "NyaBrowser-${version}-${arch}.${ext}"
+      "artifactName": "NyaBrowser-${version}-${arch}.${ext}",
+      "verifyUpdateCodeSignature": false
     },
     "portable": {
       "artifactName": "NyaBrowser-${version}-portable.exe",
@@ -49,9 +57,15 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Nya Browser",
-      "artifactName": "NyaBrowser-${version}-setup.${ext}"
+      "artifactName": "NyaBrowser-${version}-setup.${ext}",
+      "differentialPackage": true
     },
-    "compression": "maximum"
+    "compression": "maximum",
+    "publish": {
+      "provider": "github",
+      "owner": "LevIvaaa",
+      "repo": "Nya-Browser"
+    }
   },
   "devDependencies": {
     "@types/node": "22.20.1",
@@ -68,6 +82,7 @@
     "vite": "7.3.6"
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
