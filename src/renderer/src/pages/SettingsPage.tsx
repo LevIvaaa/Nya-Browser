@@ -9,7 +9,7 @@ import type {
   SecurityStats,
   Settings
 } from '../../../shared/types'
-import type { DefaultBrowserState } from '../../../shared/types'
+import type { DefaultBrowserState, FilterStatus } from '../../../shared/types'
 import type { ImportSource, VaultState } from '../../../preload/index'
 import logoUrl from '../assets/logo.png'
 import {
@@ -122,17 +122,21 @@ export default function SettingsPage({
   const [importOpen, setImportOpen] = useState(false)
   const [defaults, setDefaults] = useState<DefaultBrowserState | null>(null)
   const [sources, setSources] = useState<ImportSource[] | null>(null)
+  const [filters, setFilters] = useState<FilterStatus | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     void window.browser.appInfo().then(setInfo)
     void window.browser.vaultState().then(setVault)
   }, [])
 
-  // Both are shell lookups, so they are only paid for when the tab is opened.
+  // Shell and disk lookups, so they are only paid for when the tab is opened.
   useEffect(() => {
-    if (tab !== 'system') return
-    void window.browser.defaultBrowser().then(setDefaults)
-    void window.browser.importSources().then(setSources)
+    if (tab === 'system') {
+      void window.browser.defaultBrowser().then(setDefaults)
+      void window.browser.importSources().then(setSources)
+    }
+    if (tab === 'privacy') void window.browser.filterStatus().then(setFilters)
   }, [tab])
 
   const engine = engines.find((item) => item.id === settings.searchEngine) ?? engines[0]
@@ -536,6 +540,62 @@ export default function SettingsPage({
                 <Row title="Убирать метки из ссылок" hint="utm_*, fbclid, gclid, yclid и ещё около 60">
                   <Toggle checked={settings.stripTrackingParams} onChange={(v) => onPatch({ stripTrackingParams: v })} />
                 </Row>
+              </Section>
+
+              <Section
+                title="Списки фильтров"
+                icon={<Shield width={15} height={15} />}
+                description="EasyList и другие правила поверх встроенного списка доменов — без них реклама на YouTube и баннеры на сайтах остаются"
+              >
+                <Row
+                  title="Использовать списки фильтров"
+                  hint={
+                    filters?.enabled
+                      ? `${filters.rules.toLocaleString('ru-RU')} сетевых правил, ${filters.cosmetic.toLocaleString('ru-RU')} косметических`
+                      : 'Списки скачиваются один раз и обновляются раз в 5 дней'
+                  }
+                >
+                  <Toggle checked={settings.filterLists} onChange={(v) => onPatch({ filterLists: v })} />
+                </Row>
+                <Row title="Прятать пустые блоки" hint="Скрывает рамки и заглушки, оставшиеся от заблокированной рекламы">
+                  <Toggle
+                    checked={settings.cosmeticFiltering}
+                    onChange={(v) => onPatch({ cosmeticFiltering: v })}
+                  />
+                </Row>
+                <Row
+                  title="Обновление"
+                  hint={
+                    filters && filters.updated > 0
+                      ? `Последнее: ${new Date(filters.updated).toLocaleString('ru-RU')}`
+                      : 'Списки ещё не загружались'
+                  }
+                >
+                  <button
+                    className="btn"
+                    disabled={refreshing}
+                    onClick={async () => {
+                      setRefreshing(true)
+                      try {
+                        setFilters(await window.browser.refreshFilters())
+                        flash('Списки обновлены')
+                      } finally {
+                        setRefreshing(false)
+                      }
+                    }}
+                  >
+                    {refreshing ? 'Обновляем…' : 'Обновить сейчас'}
+                  </button>
+                </Row>
+                {filters?.lists.map((list) => (
+                  <Row
+                    key={list.id}
+                    title={list.name}
+                    hint={list.updated > 0 ? new Date(list.updated).toLocaleDateString('ru-RU') : 'нет данных'}
+                  >
+                    <span className="text-sm text-dim">{Math.round(list.bytes / 1024)} КБ</span>
+                  </Row>
+                ))}
               </Section>
 
               <Section title="Свои списки" icon={<Eraser width={15} height={15} />} description="Дополнительные домены поверх встроенного списка">

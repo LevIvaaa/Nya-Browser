@@ -12,6 +12,7 @@ import { flushAll, installExitHooks } from './store'
 import { registerProtocols, registerSchemes } from './protocol'
 import { BLOCKLIST_SIZE, clearBrowsingData, hardenApp, hardenSession, resetStats, stats } from './security'
 import { detectSources, importBookmarks, importPasswordsCsv } from './import'
+import { engine, filterStatus, loadFilters } from './filters'
 import {
   defaultBrowserState,
   registerAsBrowser,
@@ -115,6 +116,9 @@ if (!app.requestSingleInstanceLock()) {
     hardenApp(app)
     hardenSession(session.defaultSession)
     nativeTheme.themeSource = settings.get().theme
+    // Served from the on-disk cache when it is fresh, so this is normally
+    // instant and offline; only a stale list actually hits the network.
+    if (settings.get().filterLists) void loadFilters()
 
     browser = new BrowserWindow()
     registerIpc(browser)
@@ -237,6 +241,7 @@ function registerIpc(initial: BrowserWindow) {
     const next = settings.patch((patch ?? {}) as Partial<Settings>)
     nativeTheme.themeSource = next.theme
     current().applySettings()
+    if (next.filterLists && !engine.ready) void loadFilters()
     return next
   })
   ipcMain.handle('settings:reset', () => {
@@ -368,6 +373,10 @@ function registerIpc(initial: BrowserWindow) {
       await clearBrowsingData(session.fromPartition(profiles.partition(profile.id)))
     }
   })
+  /* ---- filter lists ---- */
+  ipcMain.handle('filters:status', () => filterStatus())
+  ipcMain.handle('filters:refresh', () => loadFilters(true))
+
   /* ---- import from another browser ---- */
   ipcMain.handle('import:sources', () => detectSources())
   ipcMain.handle('import:bookmarks', (_e, id: unknown) => {

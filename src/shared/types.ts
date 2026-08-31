@@ -110,6 +110,10 @@ export interface Settings {
   blockAds: boolean
   blockTrackers: boolean
   blockCrypto: boolean
+  /** EasyList-style rules on top of the built-in domain list; needs downloads */
+  filterLists: boolean
+  /** hide leftover ad frames and banners with injected CSS */
+  cosmeticFiltering: boolean
   customBlocked: string[]
   customAllowed: string[]
   httpsOnly: boolean
@@ -265,6 +269,16 @@ export interface SecurityCheck {
   detail: string
   status: 'pass' | 'warn' | 'fail'
   evidence: string
+}
+
+/** State of the downloadable EasyList-style filter lists. */
+export interface FilterStatus {
+  enabled: boolean
+  rules: number
+  cosmetic: number
+  /** newest list timestamp, 0 when nothing has been downloaded yet */
+  updated: number
+  lists: Array<{ id: string; name: string; bytes: number; updated: number }>
 }
 
 /** How Windows currently sees us as a browser. */

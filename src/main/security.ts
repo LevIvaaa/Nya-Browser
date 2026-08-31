@@ -9,6 +9,7 @@ import {
   TRACKING_PARAMS
 } from './blocklist'
 import { settings } from './settings'
+import { engine } from './filters'
 import type { PermissionRequest, PermissionSettings, SecurityStats } from '../shared/types'
 
 const ads = new DomainMatcher(AD_DOMAINS)
@@ -30,6 +31,13 @@ export const stats: SecurityStats = {
 
 /** Per-tab block counters, keyed by webContents id. */
 export const perTabBlocked = new Map<number, number>()
+
+/**
+ * webContents id → hostname of the page it is showing. Filter rules need the
+ * *document's* host to decide first- vs third-party and to apply `$domain=`,
+ * and the Referer header is both optional and easily wrong.
+ */
+export const documentHosts = new Map<number, string>()
 
 /** Hosts that proved they have no HTTPS endpoint; only used after a failure. */
 const httpsFallback = new Set<string>()
@@ -184,7 +192,20 @@ export function hardenSession(ses: Session, onBlocked?: (webContentsId: number) 
     }
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return callback({})
 
-    const kind = classify(url.hostname, url.pathname)
+    let kind = classify(url.hostname, url.pathname)
+
+    // The domain list stops whole ad networks; the filter lists catch what is
+    // served from the page's own host, which is most of what is actually seen.
+    if (!kind && s.filterLists && (s.blockAds || s.blockTrackers)) {
+      const id = details.webContentsId
+      const host =
+        details.resourceType === 'mainFrame'
+          ? url.hostname
+          : (id !== undefined ? documentHosts.get(id) : undefined) ?? hostOf(details.referrer || '')
+      const hit = engine.match(details.url, host, details.resourceType)
+      if (hit && (hit === 'ad' ? s.blockAds : s.blockTrackers)) kind = hit
+    }
+
     if (kind) {
       if (kind === 'ad') stats.ads++
       else if (kind === 'tracker') stats.trackers++

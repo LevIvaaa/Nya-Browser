@@ -6,7 +6,8 @@ import {
   screen,
   session,
   shell,
-  type Session
+  type Session,
+  type WebContents
 } from 'electron'
 import { copyFileSync, existsSync, readFileSync, renameSync, writeFileSync } from 'fs'
 import { basename, extname, join } from 'path'
@@ -24,6 +25,7 @@ import { pageContextMenu, tabContextMenu } from './menus'
 import {
   allowHttpFallback,
   clearBrowsingData,
+  documentHosts,
   hardenSession,
   isHttpsFallback,
   perTabBlocked,
@@ -32,6 +34,7 @@ import {
   setPermissionPrompt,
   stats
 } from './security'
+import { engine, hideCss } from './filters'
 import { normalizeInput } from '../shared/search'
 import type {
   ContentLayout,
@@ -43,6 +46,37 @@ import type {
 } from '../shared/types'
 
 export const START_URL = 'nya://start'
+
+/** A world of our own, so the survey cannot be observed or broken by the page. */
+const COSMETIC_WORLD = 1000
+
+/**
+ * Collects the class names and ids the document actually uses. Capped, because
+ * on a huge page walking every element is not free and the tail adds nothing.
+ */
+const SURVEY_SCRIPT = `(() => {
+  const classes = new Set(), ids = new Set()
+  const nodes = document.querySelectorAll('[class],[id]')
+  const limit = Math.min(nodes.length, 20000)
+  for (let i = 0; i < limit; i++) {
+    const el = nodes[i]
+    if (el.id) ids.add(el.id)
+    const list = el.classList
+    for (let j = 0; j < list.length; j++) classes.add(list[j])
+  }
+  return { classes: [...classes], ids: [...ids] }
+})()`
+
+/** Selectors already injected, per webContents, so a re-survey only adds new ones. */
+const cosmeticSeen = new Map<number, Set<string>>()
+
+const hostOfUrl = (raw: string): string => {
+  try {
+    return new URL(raw).hostname
+  } catch {
+    return ''
+  }
+}
 const isDev = !app.isPackaged
 
 interface PersistedTab {
@@ -141,6 +175,8 @@ class Tab {
     parent.contentView.removeChildView(this.view)
     if (!this.view.webContents.isDestroyed()) {
       perTabBlocked.delete(this.view.webContents.id)
+      documentHosts.delete(this.view.webContents.id)
+      cosmeticSeen.delete(this.view.webContents.id)
       this.view.webContents.close()
     }
     this.view = null
@@ -154,6 +190,8 @@ class Tab {
     parent.contentView.removeChildView(this.view)
     if (!this.view.webContents.isDestroyed()) {
       perTabBlocked.delete(this.view.webContents.id)
+      documentHosts.delete(this.view.webContents.id)
+      cosmeticSeen.delete(this.view.webContents.id)
       this.view.webContents.close()
     }
     this.view = null
@@ -614,11 +652,23 @@ export class BrowserWindow {
     })
     wc.on('did-start-navigation', (details) => {
       if (!details.isMainFrame) return
+      // Subresources of the page being loaded must be judged against the page
+      // they belong to, so this has to be set before they start arriving.
+      documentHosts.set(wc.id, hostOfUrl(details.url))
+      // Injected CSS does not survive a new document, so the record of what has
+      // already been injected must not either.
+      cosmeticSeen.delete(wc.id)
       tab.progress = 0.25
       this.broadcast()
     })
+    wc.on('dom-ready', () => {
+      void this.applyCosmetic(wc)
+      // Much of the ad furniture arrives after DOMContentLoaded.
+      setTimeout(() => void this.applyCosmetic(wc), 1500)
+    })
     wc.on('did-navigate', (_e, url) => {
       tab.url = url
+      documentHosts.set(wc.id, hostOfUrl(url))
       tab.progress = 0.7
       tab.upgraded = url.startsWith('https://')
       history.record(url, tab.title)
@@ -627,6 +677,8 @@ export class BrowserWindow {
     })
     wc.on('did-navigate-in-page', (_e, url, isMainFrame) => {
       if (!isMainFrame) return
+      // A route change in a single-page app brings a whole new set of elements.
+      void this.applyCosmetic(wc)
       tab.url = url
       history.record(url, tab.title)
       this.broadcast()
@@ -1043,6 +1095,41 @@ export class BrowserWindow {
     bookmarks.add({ title: tab.title, url: tab.url })
     this.send('state:bookmarks', bookmarks.all())
     this.send('toast', 'Добавлено в закладки')
+  }
+
+  /**
+   * Hides what the network blocker cannot: the empty frames and banner shells
+   * left behind on the page. Only selectors whose class or id the document
+   * actually uses are sent, and a re-survey injects just the new ones.
+   */
+  private async applyCosmetic(wc: WebContents) {
+    if (!settings.get().cosmeticFiltering || !engine.ready) return
+    if (wc.isDestroyed()) return
+    const host = hostOfUrl(wc.getURL())
+    if (!host) return
+
+    let survey: { classes?: string[]; ids?: string[] } | null = null
+    try {
+      survey = await wc.executeJavaScriptInIsolatedWorld(COSMETIC_WORLD, [{ code: SURVEY_SCRIPT }])
+    } catch {
+      return // the page went away, or scripts cannot run there
+    }
+    if (!survey || wc.isDestroyed()) return
+
+    let seen = cosmeticSeen.get(wc.id)
+    if (!seen) {
+      seen = new Set<string>()
+      cosmeticSeen.set(wc.id, seen)
+    }
+    const known = seen
+    const fresh = engine
+      .cosmeticSelectors(host, survey.classes ?? [], survey.ids ?? [])
+      .filter((selector) => !known.has(selector))
+    if (fresh.length === 0) return
+
+    for (const selector of fresh) known.add(selector)
+    // 'user' origin outranks the page's own !important declarations.
+    await wc.insertCSS(hideCss(fresh), { cssOrigin: 'user' }).catch(() => undefined)
   }
 
   /** Pushes the current list to the UI after a bulk change such as an import. */
