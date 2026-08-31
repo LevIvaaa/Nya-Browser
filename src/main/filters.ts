@@ -227,6 +227,14 @@ interface ParsedRule {
   rule: NetworkRule
   /** every literal in the pattern that a matching URL must also contain */
   tokens: string[]
+  /**
+   * Identity of the filter, ignoring $badfilter itself. A "…$badfilter" line
+   * cancels the rule with the same identity wherever in the lists it appears —
+   * that is how maintainers retire a rule that turned out to break a site.
+   */
+  identity: string
+  /** true when this line exists only to cancel another one */
+  badfilter: boolean
 }
 
 function parseNetworkRule(line: string, category: FilterCategory): ParsedRule | null {
@@ -255,10 +263,15 @@ function parseNetworkRule(line: string, category: FilterCategory): ParsedRule | 
   if (FILTER_DEBUG) rule.source = line
   let matchCase = false
   let isPopupOnly = false
+  let badfilter = false
 
   for (const raw of options ? options.split(',') : []) {
     const negated = raw.startsWith('~')
     if (raw === 'popup' || raw === 'popunder') isPopupOnly = true
+    if (raw === 'badfilter') {
+      badfilter = true
+      continue
+    }
     const option = negated ? raw.slice(1) : raw
     const [name, value] = option.includes('=') ? [option.slice(0, option.indexOf('=')), option.slice(option.indexOf('=') + 1)] : [option, '']
 
@@ -287,7 +300,16 @@ function parseNetworkRule(line: string, category: FilterCategory): ParsedRule | 
   const matcher = compilePattern(text, matchCase)
   if (!matcher) return null
   rule.matcher = matcher
-  return { rule, tokens: tokensOf(text) }
+
+  // Options are sorted so "$script,third-party" and "$third-party,script" are
+  // recognised as the same filter.
+  const canonical = (options ? options.split(',') : [])
+    .map((option) => option.trim().toLowerCase())
+    .filter((option) => option && option !== 'badfilter')
+    .sort()
+  const identity = (exception ? '@@' : '') + text + '$' + canonical.join(',')
+
+  return { rule, tokens: tokensOf(text), identity, badfilter }
 }
 
 /**
@@ -350,12 +372,20 @@ class FilterEngine {
    * request looks up its own host and each parent domain, so these cost a
    * couple of Map hits instead of a scan.
    */
+  /**
+   * "||host^" with no options at all — nine out of ten host rules. Storing the
+   * verdict alone instead of a rule object saves tens of megabytes across the
+   * full lists, and the lookup stays a single Map hit.
+   */
+  private plainHosts = new Map<string, FilterCategory>()
+  /** "||host^" rules that do carry options, or that are exceptions. */
   private hostIndex = new Map<string, NetworkRule[]>()
   private buckets = new Map<string, NetworkRule[]>()
   private generic: NetworkRule[] = []
-  /** Rules held until finish(), when token frequencies across all lists are known. */
+  /** Rules held until finish(), when $badfilter and token counts are all known. */
   private pending: ParsedRule[] = []
-  private tokenCounts = new Map<string, number>()
+  /** Identities cancelled by a $badfilter line anywhere in any list. */
+  private cancelled = new Set<string>()
   private cosmetic: CosmeticRules = {
     byClass: new Map(),
     byId: new Map(),
@@ -369,9 +399,10 @@ class FilterEngine {
   ready = false
 
   clear() {
+    this.plainHosts.clear()
     this.hostIndex.clear()
     this.pending = []
-    this.tokenCounts.clear()
+    this.cancelled.clear()
     this.buckets.clear()
     this.generic = []
     this.cosmetic = {
@@ -436,32 +467,52 @@ class FilterEngine {
       const parsed = parseNetworkRule(line, category)
       if (!parsed) continue
 
-      if (parsed.rule.matcher.kind === 'host') {
-        const host = parsed.rule.matcher.host
-        const bucket = this.hostIndex.get(host) ?? []
-        bucket.push(parsed.rule)
-        this.hostIndex.set(host, bucket)
-      } else {
-        // Filing waits for finish(): picking a bucket needs to know how common
-        // each token is across every list, not just this one.
-        this.pending.push(parsed)
-        for (const token of parsed.tokens) {
-          this.tokenCounts.set(token, (this.tokenCounts.get(token) ?? 0) + 1)
-        }
-      }
-      this.ruleCount++
+      // Nothing is filed yet: a $badfilter in a later list can cancel this
+      // rule, and choosing a token bucket needs counts across every list.
+      if (parsed.badfilter) this.cancelled.add(parsed.identity)
+      else this.pending.push(parsed)
     }
   }
 
   finish() {
-    // File every remaining rule under its RAREST token. Filing under the
-    // longest instead piles hundreds of rules onto words like "analytics",
-    // which then all get tested whenever such a word appears in a URL.
+    const kept: ParsedRule[] = []
+    const tokenCounts = new Map<string, number>()
+
     for (const parsed of this.pending) {
+      if (this.cancelled.has(parsed.identity)) continue
+      const rule = parsed.rule
+      const matcher = rule.matcher
+      this.ruleCount++
+
+      if (matcher.kind === 'host') {
+        if (isUnconditional(rule)) {
+          // Two lists claiming the same host is common; either verdict is
+          // correct, so the first wins and the duplicate costs nothing.
+          if (!this.plainHosts.has(matcher.host)) {
+            this.plainHosts.set(matcher.host, rule.category)
+          }
+        } else {
+          const bucket = this.hostIndex.get(matcher.host) ?? []
+          bucket.push(rule)
+          this.hostIndex.set(matcher.host, bucket)
+        }
+        continue
+      }
+
+      kept.push(parsed)
+      for (const token of parsed.tokens) {
+        tokenCounts.set(token, (tokenCounts.get(token) ?? 0) + 1)
+      }
+    }
+
+    // File each remaining rule under its RAREST token. Filing under the longest
+    // instead piles hundreds of rules onto words like "analytics", which then
+    // all get tested whenever such a word appears in a URL.
+    for (const parsed of kept) {
       let best = ''
       let bestCount = Infinity
       for (const token of parsed.tokens) {
-        const count = this.tokenCounts.get(token) ?? 0
+        const count = tokenCounts.get(token) ?? 0
         if (count < bestCount || (count === bestCount && token.length > best.length)) {
           best = token
           bestCount = count
@@ -475,9 +526,9 @@ class FilterEngine {
         this.generic.push(parsed.rule)
       }
     }
-    this.pending = []
-    this.tokenCounts.clear()
 
+    this.pending = []
+    this.cancelled.clear()
     this.ready = this.ruleCount > 0 || this.cosmeticCount > 0
   }
 
@@ -515,6 +566,8 @@ class FilterEngine {
     // Buckets are scanned in place: the vast majority of requests touch only a
     // few hundred rules out of ~120 000, and nothing is allocated to do it.
     for (let name = host; name.includes('.'); name = name.slice(name.indexOf('.') + 1)) {
+      const plain = this.plainHosts.get(name)
+      if (plain !== undefined) block ??= plain
       const bucket = this.hostIndex.get(name)
       if (bucket) scan(bucket)
     }
@@ -578,6 +631,8 @@ class FilterEngine {
       }
     }
     for (let name = host; name.includes('.'); name = name.slice(name.indexOf('.') + 1)) {
+      const plain = this.plainHosts.get(name)
+      if (plain !== undefined) out.push(plain + ' ||' + name + '^')
       const bucket = this.hostIndex.get(name)
       if (bucket) scan(bucket)
     }
@@ -596,6 +651,7 @@ class FilterEngine {
     let hostRules = 0
     for (const rules of this.hostIndex.values()) hostRules += rules.length
     return {
+      plainHosts: this.plainHosts.size,
       hosts: this.hostIndex.size,
       hostRules,
       buckets: this.buckets.size,
@@ -631,6 +687,16 @@ class FilterEngine {
     return [...out]
   }
 }
+
+/** True when a rule blocks outright, with nothing to check beyond the pattern. */
+const isUnconditional = (rule: NetworkRule): boolean =>
+  !rule.exception &&
+  !rule.important &&
+  rule.thirdParty === undefined &&
+  !rule.types &&
+  !rule.notTypes &&
+  !rule.domains &&
+  !rule.notDomains
 
 /** Chunked so one malformed selector cannot take the whole stylesheet down. */
 export function hideCss(selectors: readonly string[]): string {

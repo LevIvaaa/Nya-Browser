@@ -55,13 +55,23 @@ const RULES = [
   'example.com##.sponsored',
   'news.ru,blog.ru##div[data-ad]',
   'example.com#@#.ad-banner',
-  'tricky.example##.x:has-text(Ad)'
+  'tricky.example##.x:has-text(Ad)',
+  '||cancelled.example^',
+  '||cancelled.example^$badfilter',
+  '||keep.example^$script',
+  '||keep.example^$badfilter',
+  '||opts.example^$script,third-party'
 ].join('\n')
 
+// A second list, to prove a $badfilter cancels across list boundaries and
+// whatever order its options happen to be written in.
+const SECOND_LIST = ['||later.example^', '||opts.example^$third-party,script,badfilter'].join('\n')
+
 engine.ingest(RULES, 'ad')
+engine.ingest(SECOND_LIST, 'tracker')
 engine.finish()
 
-check('only the rules we can honour survive', engine.ruleCount, 10)
+check('only the rules we can honour survive', engine.ruleCount, 12)
 check('cosmetic rules counted', engine.cosmeticCount, 3)
 
 const m = (url, host, type) => engine.match(url, host, type)
@@ -101,6 +111,12 @@ check('regex pattern', m('https://x.com/adserver/banner?id=1', 'x.com', 'image')
 check('$popup dropped', m('https://popuponly.example/a', 'a.com', 'script'), null)
 check('$removeparam dropped', m('https://shady.example/a?x=1', 'a.com', 'script'), null)
 check('$removeparam=/re/ dropped', m('https://regexparam.example/a', 'a.com', 'script'), null)
+
+// ---- $badfilter
+check('cancels its twin', m('https://cancelled.example/a', 'a.com', 'script'), null)
+check('spares a differently-scoped rule', m('https://keep.example/a', 'a.com', 'script'), 'ad')
+check('reaches across lists, any option order', m('https://opts.example/a', 'other.com', 'script'), null)
+check('list two still blocks what was not cancelled', m('https://later.example/a', 'a.com', 'script'), 'tracker')
 
 // ---- cosmetic: only what the page can actually use comes back
 const sel = (host, classes = [], ids = []) => engine.cosmeticSelectors(host, classes, ids)
