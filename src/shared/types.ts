@@ -127,6 +127,8 @@ export interface Settings {
   /** off by default costs nothing; on, Chromium downloads dictionaries from Google */
   spellcheck: boolean
   spellcheckLanguages: string[]
+  /** Widevine: lets Netflix and friends play, at the cost of fetching Google's CDM */
+  drm: boolean
 
   // ---- performance
   hardwareAcceleration: boolean
@@ -269,6 +271,18 @@ export interface SecurityCheck {
   detail: string
   status: 'pass' | 'warn' | 'fail'
   evidence: string
+}
+
+/** Whether protected video can play. */
+export interface WidevineState {
+  /** the user asked for DRM */
+  enabled: boolean
+  /** the CDM is installed and usable now */
+  ready: boolean
+  version: string
+  error: string
+  /** false on a build without the castlabs component updater */
+  supported: boolean
 }
 
 /** Where the self-update stands. */

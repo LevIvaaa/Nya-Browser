@@ -104,6 +104,7 @@ export const DEFAULT_SETTINGS: Settings = {
   webrtcPolicy: 'public_only',
   spellcheck: true,
   spellcheckLanguages: ['ru', 'en-US'],
+  drm: false,
 
   hardwareAcceleration: true,
   preconnect: true,
@@ -263,6 +264,7 @@ export function sanitize(input: Partial<Settings>): Settings {
     webrtcPolicy: oneOf(input.webrtcPolicy, ['default', 'public_only', 'proxy_only'] as const, d.webrtcPolicy),
     spellcheck: bool(input.spellcheck, d.spellcheck),
     spellcheckLanguages: localeList(input.spellcheckLanguages, d.spellcheckLanguages),
+    drm: bool(input.drm, d.drm),
 
     hardwareAcceleration: bool(input.hardwareAcceleration, d.hardwareAcceleration),
     preconnect: bool(input.preconnect, d.preconnect),

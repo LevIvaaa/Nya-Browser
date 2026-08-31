@@ -15,6 +15,7 @@ import { detectSources, importBookmarks, importPasswordsCsv } from './import'
 import { engine, filterStatus, loadFilters } from './filters'
 import { addExtension, listExtensions, removeExtension, revealExtension } from './extensions'
 import { check as checkUpdates, initUpdates, installNow, onUpdateState, updateState } from './updates'
+import { initWidevine, needsRestart, widevineState } from './widevine'
 import {
   defaultBrowserState,
   registerAsBrowser,
@@ -114,6 +115,11 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform === 'win32') app.setAppUserModelId('com.nya.browser')
 
     initLog()
+    // Deliberately not awaited. The CDM is a ~10 MB download from Google's
+    // component server on first use, and waiting for it would leave the window
+    // unpainted for as long as that takes. The cost is that a DRM page opened in
+    // the first seconds may need a reload, which the settings page mentions.
+    void initWidevine()
     registerProtocols()
     hardenApp(app)
     hardenSession(session.defaultSession)
@@ -379,6 +385,7 @@ function registerIpc(initial: BrowserWindow) {
     }
   })
   /* ---- updates ---- */
+  ipcMain.handle('drm:state', () => ({ ...widevineState(), needsRestart: needsRestart() }))
   ipcMain.handle('updates:state', () => updateState())
   ipcMain.handle('updates:check', () => checkUpdates())
   ipcMain.handle('updates:install', () => installNow())

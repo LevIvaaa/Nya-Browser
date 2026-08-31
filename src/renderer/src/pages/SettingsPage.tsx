@@ -11,7 +11,8 @@ import type {
   SearchEngine,
   SecurityStats,
   Settings,
-  UpdateState
+  UpdateState,
+  WidevineState
 } from '../../../shared/types'
 import type { ImportSource, VaultState } from '../../../preload/index'
 import logoUrl from '../assets/logo.png'
@@ -101,6 +102,18 @@ const PERMISSION_ROWS: Array<{ key: keyof PermissionSettings; title: string; hin
   { key: 'download', title: 'Внешние приложения', hint: 'Открытие ссылок в других программах' }
 ]
 
+/** One line describing what DRM can and cannot do right now. */
+function drmHint(state: (WidevineState & { needsRestart: boolean }) | null, wanted: boolean): string {
+  if (!state) return 'Проверяем состояние…'
+  if (!state.supported) return state.error || 'Эта сборка без поддержки Widevine'
+  if (!wanted) {
+    return 'Выключено. При включении Chromium один раз скачает модуль Widevine с серверов Google — это единственная причина, по которой пункт не включён сразу'
+  }
+  if (state.error) return `Не удалось установить модуль: ${state.error}`
+  if (state.ready) return `Модуль Widevine ${state.version} готов`
+  return 'Модуль скачивается — это около минуты. Если видео не пошло, обновите страницу'
+}
+
 /** One line describing where the updater has got to. */
 function updateHint(state: UpdateState | null): string {
   if (!state) return 'Проверяем состояние…'
@@ -153,6 +166,7 @@ export default function SettingsPage({
   const [refreshing, setRefreshing] = useState(false)
   const [extensions, setExtensions] = useState<InstalledExtension[] | null>(null)
   const [update, setUpdate] = useState<UpdateState | null>(null)
+  const [drm, setDrm] = useState<(WidevineState & { needsRestart: boolean }) | null>(null)
 
   useEffect(() => {
     void window.browser.appInfo().then(setInfo)
@@ -168,6 +182,7 @@ export default function SettingsPage({
       void window.browser.defaultBrowser().then(setDefaults)
       void window.browser.importSources().then(setSources)
       void window.browser.extensions().then(setExtensions)
+      void window.browser.drmState().then(setDrm)
     }
     if (tab === 'privacy') void window.browser.filterStatus().then(setFilters)
   }, [tab])
@@ -988,6 +1003,25 @@ export default function SettingsPage({
                   >
                     Выбрать файл
                   </button>
+                </Row>
+              </Section>
+
+              <Section
+                title="Защищённое видео"
+                icon={<Film width={15} height={15} />}
+                description="Widevine — без него Netflix, Spotify и Кинопоиск не играют"
+              >
+                <Row
+                  title="Разрешить DRM"
+                  hint={drmHint(drm, settings.drm)}
+                >
+                  <Toggle checked={settings.drm} onChange={(value) => onPatch({ drm: value })} />
+                </Row>
+                <Row
+                  title="Качество ограничено"
+                  hint="Доступен только программный L3, поэтому сервисы отдают 480p–720p. 4K требует аппаратной защиты, которой нет ни у одного браузера на Electron"
+                >
+                  <Pill>L3</Pill>
                 </Row>
               </Section>
 
