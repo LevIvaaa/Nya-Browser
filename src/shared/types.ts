@@ -152,11 +152,23 @@ export interface Settings {
   askWhereToSave: boolean
 }
 
+export interface AvatarCrop {
+  x: number
+  y: number
+  scale: number
+}
+
 export interface Profile {
   id: string
   name: string
-  /** emoji, or "file:<name>" for a picture stored in the profile folder */
+  /** emoji, or "file:<name>" for a picture in the shared avatars folder */
   avatar: string
+  /**
+   * How a picture sits inside the circle: the offset is a fraction of the
+   * circle, the zoom a multiplier. Cropping this way rather than by rewriting
+   * the file is what lets an animated avatar stay animated.
+   */
+  crop?: AvatarCrop
   color: string
   created: number
   lastUsed: number

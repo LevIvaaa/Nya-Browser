@@ -2,10 +2,10 @@ import { useState } from 'react'
 import type { Profile, ProfilesState } from '../../../shared/types'
 import {
   Clock,
-  Incognito,
   Download,
   Eraser,
   Gear,
+  Incognito,
   Key,
   Keyboard,
   Plus,
@@ -108,7 +108,7 @@ export function ProfileMenu({
               className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-[var(--surface-hover)]"
               style={{ transition: 'background var(--t-fast) linear' }}
             >
-              <Avatar avatar={profile.avatar} color={profile.color} size={30} ring={profile.id === state.activeId} />
+              <Avatar avatar={profile.avatar} crop={profile.crop} color={profile.color} size={30} ring={profile.id === state.activeId} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-base font-medium">{profile.name}</span>
                 <span className="block text-2xs text-faint">

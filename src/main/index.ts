@@ -1,10 +1,10 @@
-import { app, ipcMain, Menu, nativeTheme, session, shell, type MenuItemConstructorOptions } from 'electron'
+import { app, dialog, ipcMain, Menu, nativeTheme, session, shell, type MenuItemConstructorOptions } from 'electron'
 import { join } from 'path'
 import { BrowserWindow } from './browser'
 import { settings } from './settings'
 import { history } from './history'
 import { bookmarks } from './bookmarks'
-import { profiles, AVATAR_CHOICES, COLOR_CHOICES } from './profiles'
+import { profiles, AVATAR_CHOICES, AVATAR_PICTURE_EXTENSIONS, COLOR_CHOICES } from './profiles'
 import { vault } from './vault'
 import { downloads } from './downloads'
 import { initLog, log } from './log'
@@ -340,6 +340,28 @@ function registerIpc() {
   })
   ipcMain.handle('profiles:update', (event, id: unknown, patch: unknown) => {
     const state = profiles.update(str(id, 64), (patch ?? {}) as Record<string, string>)
+    current(event).sendProfiles()
+    return state
+  })
+  ipcMain.handle('profiles:pick-avatar', async (event, id: unknown) => {
+    const win = current(event)
+    const picked = await dialog.showOpenDialog(win.win, {
+      title: 'Выберите картинку для аватара',
+      properties: ['openFile'],
+      filters: [{ name: 'Картинки', extensions: AVATAR_PICTURE_EXTENSIONS }]
+    })
+    if (picked.canceled || !picked.filePaths[0]) return profiles.state
+    let state = profiles.state
+    try {
+      state = profiles.setAvatarFile(str(id, 64), picked.filePaths[0])
+    } catch (error) {
+      log('profiles: could not use that picture', String(error))
+    }
+    win.sendProfiles()
+    return state
+  })
+  ipcMain.handle('profiles:clear-avatar', (event, id: unknown, emoji: unknown) => {
+    const state = profiles.clearAvatarFile(str(id, 64), str(emoji, 8) || '🐱')
     current(event).sendProfiles()
     return state
   })

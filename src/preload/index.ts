@@ -140,8 +140,15 @@ const api = {
   profiles: (): Promise<ProfilesState> => ipcRenderer.invoke('profiles:list'),
   profileChoices: (): Promise<{ avatars: string[]; colors: string[] }> => ipcRenderer.invoke('profiles:choices'),
   createProfile: (name: string): Promise<Profile> => ipcRenderer.invoke('profiles:create', name),
-  updateProfile: (id: string, patch: Partial<Pick<Profile, 'name' | 'avatar' | 'color'>>): Promise<ProfilesState> =>
+  updateProfile: (
+    id: string,
+    patch: Partial<Pick<Profile, 'name' | 'avatar' | 'crop' | 'color'>>
+  ): Promise<ProfilesState> =>
     ipcRenderer.invoke('profiles:update', id, patch),
+  pickProfileAvatar: (id: string): Promise<ProfilesState> =>
+    ipcRenderer.invoke('profiles:pick-avatar', id),
+  clearProfileAvatar: (id: string, emoji: string): Promise<ProfilesState> =>
+    ipcRenderer.invoke('profiles:clear-avatar', id, emoji),
   removeProfile: (id: string): Promise<ProfilesState> => ipcRenderer.invoke('profiles:remove', id),
   switchProfile: (id: string): Promise<ProfilesState> => ipcRenderer.invoke('profiles:switch', id),
 
