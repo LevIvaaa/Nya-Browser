@@ -36,6 +36,15 @@ const normalizeUrl = (raw: string) => {
   return /^https?:\/\//i.test(value) ? value : `https://${value}`
 }
 
+/** Tiles are keyed by host, the way the icon cache is. */
+function hostOf(url: string): string {
+  try {
+    return new URL(/^https?:\/\//i.test(url) ? url : `https://${url}`).hostname.replace(/^www\./, '').toLowerCase()
+  } catch {
+    return ''
+  }
+}
+
 export default function StartPage({
   settings,
   engine,
@@ -49,11 +58,18 @@ export default function StartPage({
   const [editing, setEditing] = useState(false)
   const [dialog, setDialog] = useState<{ mode: 'add' | 'edit'; item: Favorite } | null>(null)
   const [now, setNow] = useState(() => new Date())
+  // Icons of sites that have been visited, kept by the main process; tiles for
+  // anything else fall back to the letter.
+  const [icons, setIcons] = useState<Record<string, string>>({})
   const dragId = useRef<string | null>(null)
   const [dropIndex, setDropIndex] = useState<number | null>(null)
 
   const page = settings.startPage
   const blockedTotal = stats.ads + stats.trackers + stats.crypto
+
+  useEffect(() => {
+    void window.browser.favicons().then(setIcons)
+  }, [settings.favorites])
 
   useEffect(() => {
     void window.browser.recentHistory(12).then(setRecent)
@@ -203,10 +219,10 @@ export default function StartPage({
                       onMouseOut={(event) => (event.currentTarget.style.background = 'transparent')}
                     >
                       <span
-                        className="flex h-[54px] w-[54px] items-center justify-center rounded-[17px] text-[20px] font-semibold text-white"
+                        className="flex h-[54px] w-[54px] items-center justify-center overflow-hidden rounded-[17px] text-[20px] font-semibold text-white"
                         style={{
-                          background: fav.icon
-                            ? 'var(--field-idle)'
+                          background: icons[hostOf(fav.url)]
+                            ? 'var(--surface-solid)'
                             : `linear-gradient(140deg, hsl(${hue} 72% 58%), hsl(${(hue + 42) % 360} 70% 46%))`,
                           boxShadow: 'var(--shadow-sm)',
                           transition: 'transform var(--t-base) var(--ease-spring), box-shadow var(--t-base) var(--ease-out)'
@@ -220,7 +236,11 @@ export default function StartPage({
                           event.currentTarget.style.boxShadow = 'var(--shadow-sm)'
                         }}
                       >
-                        {fav.icon ?? fav.title.charAt(0).toUpperCase()}
+                        {icons[hostOf(fav.url)] ? (
+                          <img src={icons[hostOf(fav.url)]} alt="" className="h-8 w-8 object-contain" />
+                        ) : (
+                          fav.title.charAt(0).toUpperCase()
+                        )}
                       </span>
                       <span className="w-full truncate text-center text-sm text-dim">{fav.title}</span>
                     </button>
@@ -354,7 +374,6 @@ export default function StartPage({
 }
 
 /* ------------------------------------------------------------ add / edit */
-const EMOJI = ['🌐', '⭐', '🔥', '🎬', '🎵', '📚', '💻', '🛒', '✉️', '📰', '🎮', '☁️', '🐙', '🦆', '🤖', '📷']
 
 function FavoriteDialog({
   mode,
@@ -371,7 +390,6 @@ function FavoriteDialog({
 }) {
   const [title, setTitle] = useState(item.title)
   const [url, setUrl] = useState(item.url)
-  const [icon, setIcon] = useState(item.icon ?? '')
 
   return (
     <Modal
@@ -387,7 +405,7 @@ function FavoriteDialog({
           <button className="btn" onClick={onClose}>
             Отмена
           </button>
-          <button className="btn btn-primary" onClick={() => onSave({ ...item, title, url, icon: icon || undefined })}>
+          <button className="btn btn-primary" onClick={() => onSave({ ...item, title, url })}>
             Сохранить
           </button>
         </>
@@ -402,35 +420,6 @@ function FavoriteDialog({
           <span className="text-sm text-dim">Название</span>
           <TextField value={title} onChange={setTitle} placeholder="Как подписать плитку" width="100%" />
         </label>
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm text-dim">Значок</span>
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              onClick={() => setIcon('')}
-              className="flex h-8 w-8 items-center justify-center rounded-[10px] text-sm"
-              style={{
-                background: icon ? 'var(--field-idle)' : 'var(--accent)',
-                color: icon ? 'var(--text-dim)' : '#fff'
-              }}
-              title="Буква"
-            >
-              A
-            </button>
-            {EMOJI.map((value) => (
-              <button
-                key={value}
-                onClick={() => setIcon(value)}
-                className="flex h-8 w-8 items-center justify-center rounded-[10px] text-base"
-                style={{
-                  background: icon === value ? 'color-mix(in srgb, var(--accent) 24%, transparent)' : 'var(--field-idle)',
-                  transition: 'background var(--t-fast) linear, transform var(--t-fast) var(--ease-spring)'
-                }}
-              >
-                {value}
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
     </Modal>
   )

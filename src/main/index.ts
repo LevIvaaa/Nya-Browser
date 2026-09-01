@@ -14,6 +14,7 @@ import { BLOCKLIST_SIZE, clearBrowsingData, hardenApp, hardenSession, resetStats
 import { detectSources, importBookmarks, importPasswordsCsv } from './import'
 import { engine, filterStatus, loadFilters } from './filters'
 import { addExtension, listExtensions, removeExtension, revealExtension } from './extensions'
+import { favicons } from './favicons'
 import {
   check as checkUpdates,
   download as downloadUpdate,
@@ -408,6 +409,7 @@ function registerIpc(initial: BrowserWindow) {
   ipcMain.handle('drm:state', () => ({ ...widevineState(), needsRestart: needsRestart() }))
   ipcMain.handle('updates:state', () => updateState())
   ipcMain.handle('updates:check', () => checkUpdates())
+  ipcMain.handle('favicons:all', () => favicons.all())
   ipcMain.handle('updates:download', () => downloadUpdate())
   ipcMain.handle('updates:install', () => installNow())
 

@@ -16,6 +16,7 @@ import { URL } from 'url'
 import { settings } from './settings'
 import { history } from './history'
 import { bookmarks } from './bookmarks'
+import { favicons } from './favicons'
 import { vault } from './vault'
 import { profiles } from './profiles'
 import { downloads } from './downloads'
@@ -422,6 +423,7 @@ export class BrowserWindow {
       history.flush()
       bookmarks.flush()
       vault.flush()
+      favicons.flush()
     })
 
     setPermissionPrompt((request) => this.askPermission(request))
@@ -437,6 +439,7 @@ export class BrowserWindow {
     const dir = profiles.dir()
     settings.load(dir)
     history.load(dir)
+    favicons.load(dir)
     history.setEnabled(settings.get().saveHistory)
     bookmarks.load(dir)
     vault.load(dir)
@@ -682,6 +685,9 @@ export class BrowserWindow {
     wc.on('page-favicon-updated', (_e, icons) => {
       tab.favicon = icons[icons.length - 1] ?? null
       this.broadcast()
+      // Kept so the start page can draw a real icon on its tiles without
+      // going out to the site every time it opens.
+      if (tab.favicon) void favicons.remember(tab.url, tab.favicon, this.ses)
     })
     wc.on('did-start-loading', () => {
       tab.loading = true
