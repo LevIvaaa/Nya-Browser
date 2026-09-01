@@ -175,6 +175,7 @@ npm run dist:portable    # один переносимый exe
 npm run dist:installer   # установщик NSIS (только из-под Windows: electron-builder
                          # запускает собранный установщик, чтобы сгенерировать деинсталлятор)
 npm run release          # собрать установщик и выложить релиз на GitHub (нужен GH_TOKEN)
+npm run release:signed   # то же плюс подпись Authenticode — см. docs/signing.md
 ```
 
 `npm install` тянет Electron с GitHub, а не из npm: нужен форк

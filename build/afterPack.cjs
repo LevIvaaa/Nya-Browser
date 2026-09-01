@@ -31,8 +31,33 @@ function run(command, args, options = {}) {
   }
 }
 
+/**
+ * Says out loud whether the build will carry an Authenticode signature.
+ *
+ * electron-builder signs when CSC_LINK points at a certificate and stays quiet
+ * when it does not, which is the one case worth being loud about: an unsigned
+ * installer works, but SmartScreen warns every single person who downloads it.
+ */
+function reportAuthenticode() {
+  if (process.env.CSC_LINK || process.env.WIN_CSC_LINK) {
+    console.log('  Authenticode: certificate configured, electron-builder will sign')
+    return
+  }
+  console.log(
+    [
+      '',
+      '  Authenticode: no certificate (CSC_LINK is not set).',
+      '  The installer will work, but SmartScreen will warn on every download.',
+      '  Details in docs/signing.md',
+      ''
+    ].join('\n')
+  )
+}
+
 exports.default = async function afterPack(context) {
   if (context.electronPlatformName !== 'win32' && context.electronPlatformName !== 'darwin') return
+
+  if (context.electronPlatformName === 'win32') reportAuthenticode()
 
   const python = process.platform === 'win32' ? 'python' : 'python3'
   const probe = run(python, ['-m', 'castlabs_evs.vmp', '--help'])
