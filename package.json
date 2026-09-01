@@ -1,6 +1,6 @@
 {
   "name": "nya-browser",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Nya Browser — быстрый и приватный браузер на Electron с вертикальными вкладками, автоскрытием интерфейса и встроенной блокировкой рекламы",
   "main": "./out/main/index.js",
   "author": "Nya",
@@ -73,7 +73,8 @@
     "publish": {
       "provider": "github",
       "owner": "LevIvaaa",
-      "repo": "Nya-Browser"
+      "repo": "Nya-Browser",
+      "releaseType": "release"
     },
     "afterPack": "build/afterPack.cjs"
   },
