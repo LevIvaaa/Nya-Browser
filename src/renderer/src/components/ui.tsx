@@ -412,12 +412,15 @@ export function Popover({
   onClose,
   anchor = 'right',
   width = 300,
-  top = 46
+  top = 46,
+  inset = 8
 }: {
   children: ReactNode
   onClose: () => void
   anchor?: 'left' | 'right'
   width?: number
+  /** distance from the window edge it is anchored to */
+  inset?: number
   top?: number
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -442,7 +445,7 @@ export function Popover({
         className="animate-fade-down contain absolute z-50 overflow-hidden rounded-card"
         style={{
           top,
-          [anchor]: 8,
+          [anchor]: inset,
           width,
           background: 'var(--elevated)',
           border: '1px solid var(--line)',

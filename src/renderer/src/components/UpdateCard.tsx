@@ -32,7 +32,10 @@ export default function UpdateCard({
         : 'Доступно обновление'
 
   return (
-    <Popover onClose={onClose}>
+    // Further in than a menu: this one arrives on its own, and a card flush
+    // against the window edge reads as a system toast rather than as part of
+    // the browser.
+    <Popover onClose={onClose} inset={20}>
       <div className="flex flex-col gap-3 p-4">
         <div className="flex items-center gap-[11px]">
           <img src={logoUrl} alt="" className="h-[38px] w-[38px] shrink-0" />
