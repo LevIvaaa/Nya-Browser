@@ -218,10 +218,16 @@ function sanitizeLayout(v: unknown): Record<WidgetId, WidgetBox> {
 
 function sanitizePlace(v: unknown): WeatherSettings {
   const p = (v ?? {}) as Partial<WeatherSettings>
+  const lat = Number(p.lat)
+  const lon = Number(p.lon)
+  // A coordinate that cannot exist is not clamped to the nearest pole — it is
+  // thrown away along with the name, because the widget would otherwise report
+  // the weather somewhere the user never chose.
+  const real = Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180
   return {
-    place: str(p.place, 80, ''),
-    lat: clamp(p.lat, -90, 90, 0),
-    lon: clamp(p.lon, -180, 180, 0),
+    place: real ? str(p.place, 80, '') : '',
+    lat: real ? lat : 0,
+    lon: real ? lon : 0,
     fahrenheit: bool(p.fahrenheit, false)
   }
 }
