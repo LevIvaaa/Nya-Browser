@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Check, ChevronDown, Cross } from './Icons'
+import type { AvatarCrop } from '../../../shared/types'
 
 export const cx = (...parts: Array<string | false | null | undefined>) => parts.filter(Boolean).join(' ')
 
@@ -470,20 +471,46 @@ export function EmptyState({ icon, title, hint }: { icon?: ReactNode; title: str
   )
 }
 
+/** The URL a "file:<name>" avatar is served from, or null for an emoji. */
+export function avatarUrl(avatar: string): string | null {
+  return avatar.startsWith('file:')
+    ? `nya-media://avatar/${encodeURIComponent(avatar.slice(5))}`
+    : null
+}
+
+/**
+ * The crop as CSS. The picture fills the circle at scale 1 and grows from
+ * there; the offset is a fraction of the circle, so one crop looks the same at
+ * every size the avatar is drawn at.
+ */
+export function avatarImageStyle(crop?: AvatarCrop): React.CSSProperties {
+  const { x = 0, y = 0, scale = 1 } = crop ?? {}
+  return {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    transform: `translate(${x * 100}%, ${y * 100}%) scale(${scale})`,
+    transformOrigin: 'center'
+  }
+}
+
 export function Avatar({
   avatar,
   color,
+  crop,
   size = 26,
   ring
 }: {
   avatar: string
   color: string
+  crop?: AvatarCrop
   size?: number
   ring?: boolean
 }) {
+  const url = avatarUrl(avatar)
   return (
     <span
-      className="inline-flex shrink-0 items-center justify-center rounded-pill"
+      className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-pill"
       style={{
         width: size,
         height: size,
@@ -493,7 +520,7 @@ export function Avatar({
         transition: 'box-shadow var(--t-base) var(--ease-out), transform var(--t-fast) var(--ease-spring)'
       }}
     >
-      {avatar.startsWith('file:') ? '🖼️' : avatar}
+      {url ? <img src={url} alt="" draggable={false} style={avatarImageStyle(crop)} /> : avatar}
     </span>
   )
 }

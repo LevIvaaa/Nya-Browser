@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type {
   AppInfo,
+  AvatarCrop,
   DefaultBrowserState,
   FilterStatus,
   InstalledExtension,
@@ -56,6 +57,8 @@ import {
   Slider,
   TextField,
   Toggle,
+  avatarImageStyle,
+  avatarUrl,
   cx
 } from '../components/ui'
 
@@ -553,7 +556,7 @@ export default function SettingsPage({
             >
               {profiles.profiles.map((profile) => (
                 <div key={profile.id} className="flex items-center gap-3 px-4 py-3" style={{ borderTop: '1px solid var(--line)' }}>
-                  <Avatar avatar={profile.avatar} color={profile.color} size={34} ring={profile.id === profiles.activeId} />
+                  <Avatar avatar={profile.avatar} crop={profile.crop} color={profile.color} size={34} ring={profile.id === profiles.activeId} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 text-base font-medium">
                       {profile.name}
@@ -1208,6 +1211,81 @@ export default function SettingsPage({
 }
 
 /* ------------------------------------------------------------- dialogs */
+
+/**
+ * A picture can only be pushed as far as its overflow allows: at 1x it exactly
+ * fills the circle and cannot move at all, and every step of zoom buys half a
+ * step of travel in each direction. Without this the frame could be dragged
+ * off the picture and leave a bare wedge of background.
+ */
+function clampCrop(crop: AvatarCrop): AvatarCrop {
+  const room = Math.max(0, (crop.scale - 1) / 2)
+  return {
+    scale: crop.scale,
+    x: Math.min(room, Math.max(-room, crop.x)),
+    y: Math.min(room, Math.max(-room, crop.y))
+  }
+}
+
+/** The circular viewport: drag the picture to choose what the circle shows. */
+function AvatarCropper({
+  picture,
+  color,
+  crop,
+  onChange
+}: {
+  picture: string | null
+  color: string
+  crop: AvatarCrop
+  onChange: (crop: AvatarCrop) => void
+}) {
+  const SIZE = 132
+  const drag = useRef<{ id: number; x: number; y: number; from: AvatarCrop } | null>(null)
+
+  return (
+    <div
+      className="relative shrink-0 overflow-hidden rounded-pill"
+      style={{
+        width: SIZE,
+        height: SIZE,
+        background: `linear-gradient(140deg, ${color}, color-mix(in srgb, ${color} 55%, #000))`,
+        boxShadow: 'var(--shadow-sm)',
+        cursor: picture && crop.scale > 1 ? 'grab' : 'default',
+        touchAction: 'none'
+      }}
+      onPointerDown={(event) => {
+        if (!picture) return
+        drag.current = { id: event.pointerId, x: event.clientX, y: event.clientY, from: crop }
+        event.currentTarget.setPointerCapture(event.pointerId)
+      }}
+      onPointerMove={(event) => {
+        const state = drag.current
+        if (!state || state.id !== event.pointerId) return
+        onChange(
+          clampCrop({
+            ...state.from,
+            x: state.from.x + (event.clientX - state.x) / SIZE,
+            y: state.from.y + (event.clientY - state.y) / SIZE
+          })
+        )
+      }}
+      onPointerUp={() => {
+        drag.current = null
+      }}
+      onWheel={(event) => {
+        if (!picture) return
+        onChange(clampCrop({ ...crop, scale: Math.min(4, Math.max(1, crop.scale - event.deltaY / 600)) }))
+      }}
+    >
+      {picture ? (
+        <img src={picture} alt="" draggable={false} style={avatarImageStyle(crop)} />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-3xl">🖼️</div>
+      )}
+    </div>
+  )
+}
+
 function ProfileDialog({
   profile,
   onClose,
@@ -1219,12 +1297,23 @@ function ProfileDialog({
 }) {
   const [name, setName] = useState(profile.name)
   const [avatar, setAvatar] = useState(profile.avatar)
+  const [crop, setCrop] = useState<AvatarCrop>(profile.crop ?? { x: 0, y: 0, scale: 1 })
   const [color, setColor] = useState(profile.color)
   const [choices, setChoices] = useState<{ avatars: string[]; colors: string[] }>({ avatars: [], colors: [] })
+  const picture = avatarUrl(avatar)
 
   useEffect(() => {
     void window.browser.profileChoices().then(setChoices)
   }, [])
+
+  // The picture is copied to disk the moment it is chosen, the way a file
+  // dialog implies; the crop around it is what "Сохранить" commits.
+  const readBack = (state: ProfilesState) => {
+    const mine = state.profiles.find((p) => p.id === profile.id)
+    if (!mine) return
+    setAvatar(mine.avatar)
+    setCrop(mine.crop ?? { x: 0, y: 0, scale: 1 })
+  }
 
   return (
     <Modal
@@ -1236,7 +1325,12 @@ function ProfileDialog({
           <button
             className="btn btn-primary"
             onClick={async () => {
-              await window.browser.updateProfile(profile.id, { name, avatar, color })
+              await window.browser.updateProfile(profile.id, {
+                name,
+                avatar,
+                color,
+                crop: avatar.startsWith('file:') ? crop : undefined
+              })
               onSaved()
             }}
           >
@@ -1247,12 +1341,54 @@ function ProfileDialog({
     >
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-3">
-          <Avatar avatar={avatar} color={color} size={44} />
+          <Avatar avatar={avatar} crop={crop} color={color} size={44} />
           <TextField value={name} onChange={setName} placeholder="Имя профиля" width="100%" autoFocus />
         </div>
 
+        <div className="flex gap-4">
+          <AvatarCropper picture={picture} color={color} crop={crop} onChange={setCrop} />
+          <div className="flex min-w-0 flex-1 flex-col justify-center gap-2">
+            <p className="text-sm text-dim">
+              {picture
+                ? 'Тяните картинку, чтобы выбрать кадр, и меняйте масштаб ползунком. Анимация останется анимацией.'
+                : 'Своя картинка или анимация — PNG, JPEG, WebP, GIF или AVIF.'}
+            </p>
+            {picture && (
+              <Slider
+                value={crop.scale}
+                min={1}
+                max={4}
+                step={0.01}
+                width={190}
+                format={(value) => `${value.toFixed(1)}×`}
+                onChange={(scale) => setCrop((c) => clampCrop({ ...c, scale }))}
+              />
+            )}
+            <div className="flex gap-2">
+              <button
+                className="btn"
+                onClick={async () => readBack(await window.browser.pickProfileAvatar(profile.id))}
+              >
+                {picture ? 'Заменить картинку' : 'Загрузить картинку'}
+              </button>
+              {picture && (
+                <button
+                  className="btn"
+                  onClick={async () =>
+                    readBack(
+                      await window.browser.clearProfileAvatar(profile.id, choices.avatars[0] ?? '🐱')
+                    )
+                  }
+                >
+                  Убрать
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div className="flex flex-col gap-1.5">
-          <span className="text-sm text-dim">Аватар</span>
+          <span className="text-sm text-dim">Или значок</span>
           <div className="flex flex-wrap gap-1.5">
             {choices.avatars.map((value) => (
               <button

@@ -39,9 +39,9 @@ export function registerSchemes() {
 }
 
 /**
- * Serves internal pages and the user's wallpapers. Only plain file names from
- * the active profile's wallpapers folder are accepted, so a crafted URL cannot
- * reach anything else on disk.
+ * Serves internal pages, the user's wallpapers and profile avatars. Only plain
+ * file names from those two folders are accepted, so a crafted URL cannot reach
+ * anything else on disk.
  *
  * Protocol handlers are PER-SESSION in Chromium: registering on the default
  * session covers the chrome UI, but every profile partition needs its own
@@ -70,13 +70,16 @@ export function registerProtocols(ses: Session = session.defaultSession) {
 
   proto.handle('nya-media', async (request) => {
     const url = new URL(request.url)
-    if (url.host !== 'wallpaper') return new Response('Not found', { status: 404 })
+    if (url.host !== 'wallpaper' && url.host !== 'avatar') {
+      return new Response('Not found', { status: 404 })
+    }
 
     const name = basename(decodeURIComponent(url.pathname.replace(/^\//, '')))
     const ext = extname(name).toLowerCase()
     if (!name || !MIME[ext]) return new Response('Forbidden', { status: 403 })
 
-    const file = join(profiles.wallpaperDir(), name)
+    const file =
+      url.host === 'avatar' ? join(profiles.avatarDir(), name) : join(profiles.wallpaperDir(), name)
     let size = 0
     try {
       size = statSync(file).size

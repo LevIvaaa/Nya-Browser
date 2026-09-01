@@ -262,7 +262,7 @@ export default function Toolbar({
               onClick={() => onToggleView('profiles')}
               style={view === 'profiles' ? { background: 'var(--surface-hover)' } : undefined}
             >
-              <Avatar avatar={profile.avatar} color={profile.color} size={22} />
+              <Avatar avatar={profile.avatar} crop={profile.crop} color={profile.color} size={22} />
             </button>
           </Tooltip>
         )}
