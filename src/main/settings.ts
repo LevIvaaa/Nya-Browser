@@ -5,8 +5,12 @@ import type {
   Favorite,
   PermissionSettings,
   Settings,
-  StartPageSettings
+  StartPageSettings,
+  WeatherSettings,
+  WidgetBox,
+  WidgetId
 } from '../shared/types'
+import { DEFAULT_LAYOUT, GRID_COLUMNS } from '../shared/startPage'
 
 /** Bump when the shape changes in a way sanitize() cannot infer. */
 export const SETTINGS_VERSION = 1
@@ -35,6 +39,8 @@ export const DEFAULT_PERMISSIONS: PermissionSettings = {
   download: 'ask'
 }
 
+export const DEFAULT_PLACE: WeatherSettings = { place: '', lat: 0, lon: 0, fahrenheit: false }
+
 export const DEFAULT_START_PAGE: StartPageSettings = {
   greeting: true,
   clock: true,
@@ -42,7 +48,12 @@ export const DEFAULT_START_PAGE: StartPageSettings = {
   recent: true,
   stats: true,
   closed: true,
-  columns: 8
+  weather: false,
+  columns: 8,
+  font: 'system',
+  tiles: 'card',
+  layout: { ...DEFAULT_LAYOUT },
+  place: { ...DEFAULT_PLACE }
 }
 
 const fav = (title: string, url: string, icon?: string): Favorite => ({
@@ -182,6 +193,38 @@ function sanitizePermissions(v: unknown): PermissionSettings {
   }
 }
 
+function sanitizeBox(v: unknown, fallback: WidgetBox): WidgetBox {
+  const b = (v ?? {}) as Partial<WidgetBox>
+  const w = clamp(b.w, 2, GRID_COLUMNS, fallback.w)
+  return {
+    w,
+    h: clamp(b.h, 1, 40, fallback.h),
+    // Clamped against its own width, so a widget can never start off the grid.
+    x: clamp(b.x, 0, GRID_COLUMNS - w, Math.min(fallback.x, GRID_COLUMNS - w)),
+    y: clamp(b.y, 0, 80, fallback.y),
+    scale: clamp(b.scale, 0.6, 2.2, fallback.scale)
+  }
+}
+
+function sanitizeLayout(v: unknown): Record<WidgetId, WidgetBox> {
+  const raw = (v ?? {}) as Partial<Record<WidgetId, WidgetBox>>
+  const out = {} as Record<WidgetId, WidgetBox>
+  for (const key of Object.keys(DEFAULT_LAYOUT) as WidgetId[]) {
+    out[key] = sanitizeBox(raw[key], DEFAULT_LAYOUT[key])
+  }
+  return out
+}
+
+function sanitizePlace(v: unknown): WeatherSettings {
+  const p = (v ?? {}) as Partial<WeatherSettings>
+  return {
+    place: str(p.place, 80, ''),
+    lat: clamp(p.lat, -90, 90, 0),
+    lon: clamp(p.lon, -180, 180, 0),
+    fahrenheit: bool(p.fahrenheit, false)
+  }
+}
+
 function sanitizeStartPage(v: unknown): StartPageSettings {
   const s = (v ?? {}) as Partial<StartPageSettings>
   const d = DEFAULT_START_PAGE
@@ -192,7 +235,12 @@ function sanitizeStartPage(v: unknown): StartPageSettings {
     recent: bool(s.recent, d.recent),
     stats: bool(s.stats, d.stats),
     closed: bool(s.closed, d.closed),
-    columns: clamp(s.columns, 4, 12, d.columns)
+    weather: bool(s.weather, d.weather),
+    columns: clamp(s.columns, 4, 12, d.columns),
+    font: oneOf(s.font, ['system', 'rounded', 'serif', 'mono'] as const, d.font),
+    tiles: oneOf(s.tiles, ['card', 'icon'] as const, d.tiles),
+    layout: sanitizeLayout(s.layout),
+    place: sanitizePlace(s.place)
   }
 }
 

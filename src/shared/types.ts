@@ -67,6 +67,64 @@ export interface PermissionSettings {
   download: PermissionPolicy
 }
 
+/** Everything the start page can put on its canvas. */
+export type WidgetId =
+  | 'clock'
+  | 'greeting'
+  | 'search'
+  | 'favorites'
+  | 'stats'
+  | 'recent'
+  | 'closed'
+  | 'weather'
+
+/**
+ * Where a widget sits, in grid cells. The grid is the same width on every
+ * screen, so a layout arranged on one window looks the same on another.
+ */
+export interface WidgetBox {
+  x: number
+  y: number
+  w: number
+  h: number
+  /** text size multiplier, so one widget can shout and another whisper */
+  scale: number
+}
+
+export type StartPageFont = 'system' | 'rounded' | 'serif' | 'mono'
+/** Yandex-style cards with the caption inside, or bare icons with a label. */
+export type TileStyle = 'card' | 'icon'
+
+/** A city the geocoder found. */
+export interface Place {
+  name: string
+  region: string
+  country: string
+  lat: number
+  lon: number
+}
+
+/** What the start page draws: now, today, and the next few days. */
+export interface Weather {
+  temperature: number
+  feels: number
+  code: number
+  wind: number
+  day: boolean
+  high: number
+  low: number
+  forecast: { day: string; code: number; high: number; low: number }[]
+  fetched: number
+}
+
+export interface WeatherSettings {
+  /** what the user typed; empty until they pick somewhere */
+  place: string
+  lat: number
+  lon: number
+  fahrenheit: boolean
+}
+
 export interface StartPageSettings {
   greeting: boolean
   clock: boolean
@@ -74,7 +132,12 @@ export interface StartPageSettings {
   recent: boolean
   stats: boolean
   closed: boolean
+  weather: boolean
   columns: number
+  font: StartPageFont
+  tiles: TileStyle
+  layout: Record<WidgetId, WidgetBox>
+  place: WeatherSettings
 }
 
 export interface Settings {

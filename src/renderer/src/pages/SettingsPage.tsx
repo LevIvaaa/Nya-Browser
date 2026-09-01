@@ -12,9 +12,12 @@ import type {
   SearchEngine,
   SecurityStats,
   Settings,
+  StartPageFont,
+  TileStyle,
   UpdateState,
   WidevineState
 } from '../../../shared/types'
+import { DEFAULT_LAYOUT } from '../../../shared/startPage'
 import type { ImportSource, VaultState } from '../../../preload/index'
 import logoUrl from '../assets/logo.png'
 import {
@@ -479,6 +482,39 @@ export default function SettingsPage({
               <Row title="Недавние страницы"><Toggle checked={settings.startPage.recent} onChange={(v) => onPatch({ startPage: { ...settings.startPage, recent: v } })} /></Row>
               <Row title="Недавно закрытые вкладки"><Toggle checked={settings.startPage.closed} onChange={(v) => onPatch({ startPage: { ...settings.startPage, closed: v } })} /></Row>
               <Row title="Счётчик защиты"><Toggle checked={settings.startPage.stats} onChange={(v) => onPatch({ startPage: { ...settings.startPage, stats: v } })} /></Row>
+              <Row title="Погода" hint="Город выбирается в самом виджете; без него никуда ничего не уходит">
+                <Toggle checked={settings.startPage.weather} onChange={(v) => onPatch({ startPage: { ...settings.startPage, weather: v } })} />
+              </Row>
+              <Row title="Шрифт главной">
+                <Select
+                  value={settings.startPage.font}
+                  options={[
+                    { value: 'system', label: 'Системный' },
+                    { value: 'rounded', label: 'Округлый' },
+                    { value: 'serif', label: 'С засечками' },
+                    { value: 'mono', label: 'Моноширинный' }
+                  ]}
+                  onChange={(v) => onPatch({ startPage: { ...settings.startPage, font: v as StartPageFont } })}
+                />
+              </Row>
+              <Row title="Вид плиток">
+                <Segmented
+                  value={settings.startPage.tiles}
+                  options={[
+                    { value: 'card', label: 'Карточки' },
+                    { value: 'icon', label: 'Значки' }
+                  ]}
+                  onChange={(v) => onPatch({ startPage: { ...settings.startPage, tiles: v as TileStyle } })}
+                />
+              </Row>
+              <Row title="Расположение виджетов" hint="Двигать и менять размер можно прямо на главной — кнопка «Настроить» в углу">
+                <button
+                  className="btn"
+                  onClick={() => onPatch({ startPage: { ...settings.startPage, layout: { ...DEFAULT_LAYOUT } } })}
+                >
+                  Сбросить
+                </button>
+              </Row>
             </Section>
           )}
 

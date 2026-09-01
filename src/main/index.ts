@@ -15,6 +15,7 @@ import { detectSources, importBookmarks, importPasswordsCsv } from './import'
 import { engine, filterStatus, loadFilters } from './filters'
 import { addExtension, listExtensions, removeExtension, revealExtension } from './extensions'
 import { favicons } from './favicons'
+import { currentWeather, searchPlaces } from './weather'
 import {
   check as checkUpdates,
   download as downloadUpdate,
@@ -343,6 +344,15 @@ function registerIpc() {
     current(event).sendProfiles()
     return state
   })
+  /* ---- weather ---- */
+  ipcMain.handle('weather:search', (_event, query: unknown) => searchPlaces(str(query, 80)))
+  ipcMain.handle('weather:current', (_event, lat: unknown, lon: unknown) => {
+    const latitude = Number(lat)
+    const longitude = Number(lon)
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null
+    return currentWeather(latitude, longitude)
+  })
+
   ipcMain.handle('profiles:pick-avatar', async (event, id: unknown) => {
     const win = current(event)
     const picked = await dialog.showOpenDialog(win.win, {
