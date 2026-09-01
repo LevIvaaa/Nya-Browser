@@ -59,13 +59,6 @@ export const DEFAULT_START_PAGE: StartPageSettings = {
   place: { ...DEFAULT_PLACE }
 }
 
-const fav = (title: string, url: string, icon?: string): Favorite => ({
-  id: title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-  title,
-  url,
-  icon
-})
-
 export const DEFAULT_SETTINGS: Settings = {
   onboarded: false,
   theme: 'system',
@@ -88,16 +81,10 @@ export const DEFAULT_SETTINGS: Settings = {
   confirmCloseMultiple: true,
 
   startPage: { ...DEFAULT_START_PAGE },
-  favorites: [
-    fav('DuckDuckGo', 'https://duckduckgo.com', '🦆'),
-    fav('GitHub', 'https://github.com', '🐙'),
-    fav('YouTube', 'https://youtube.com', '▶️'),
-    fav('Wikipedia', 'https://wikipedia.org', '📚'),
-    fav('Reddit', 'https://reddit.com', '👽'),
-    fav('Hacker News', 'https://news.ycombinator.com', '📰'),
-    fav('MDN', 'https://developer.mozilla.org', '📘'),
-    fav('ChatGPT', 'https://chat.openai.com', '🤖')
-  ],
+  // Empty on purpose. A new browser filling the start page with sites nobody
+  // asked for is advertising, and it buries the "Добавить" tile under eight
+  // things to delete first.
+  favorites: [],
   searchEngine: 'duckduckgo',
   customSearchUrl: 'https://searx.be/search?q=%s',
   historySuggestions: true,
