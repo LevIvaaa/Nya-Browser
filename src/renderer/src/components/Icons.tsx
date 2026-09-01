@@ -122,6 +122,12 @@ export const Download = (p: P) => (
     <path d="M5 18.5h14" />
   </svg>
 )
+export const UpdateArrow = (p: P) => (
+  <svg {...svg(p, 1.6)}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M12 8v7.5M8.8 12.3 12 15.5l3.2-3.2" />
+  </svg>
+)
 export const Clock = (p: P) => (
   <svg {...svg(p, 1.6)}>
     <circle cx="12" cy="12" r="8.5" />

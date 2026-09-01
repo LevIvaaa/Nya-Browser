@@ -123,6 +123,8 @@ function updateHint(state: UpdateState | null): string {
   switch (state.stage) {
     case 'checking':
       return 'Спрашиваем GitHub…'
+    case 'available':
+      return `Доступна версия ${state.available} — загрузить?`
     case 'downloading':
       return `Скачиваем ${state.available ?? ''} — ${state.percent}%`
     case 'ready':
@@ -899,6 +901,10 @@ export default function SettingsPage({
                   {update?.stage === 'ready' ? (
                     <button className="btn btn-primary" onClick={() => window.browser.installUpdate()}>
                       Перезапустить и обновить
+                    </button>
+                  ) : update?.stage === 'available' ? (
+                    <button className="btn btn-primary" onClick={() => window.browser.downloadUpdate()}>
+                      Загрузить
                     </button>
                   ) : (
                     <button

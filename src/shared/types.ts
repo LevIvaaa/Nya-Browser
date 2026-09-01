@@ -287,13 +287,24 @@ export interface WidevineState {
 
 /** Where the self-update stands. */
 export interface UpdateState {
-  stage: 'idle' | 'checking' | 'current' | 'downloading' | 'ready' | 'error' | 'unsupported'
+  /** 'available' means found but not fetched: downloading is the user's call */
+  stage:
+    | 'idle'
+    | 'checking'
+    | 'current'
+    | 'available'
+    | 'downloading'
+    | 'ready'
+    | 'error'
+    | 'unsupported'
   /** the version running now */
   version: string
   /** the version found on GitHub, when there is a newer one */
   available: string | null
   /** download progress, 0-100 */
   percent: number
+  /** size of the update in bytes, known as soon as it is found */
+  size: number
   error: string
   /** false for the portable build and in development, which cannot self-update */
   supported: boolean

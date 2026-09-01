@@ -21,6 +21,7 @@ let state: UpdateState = {
   version: app.getVersion(),
   available: null,
   percent: 0,
+  size: 0,
   error: '',
   supported: false,
   checkedAt: 0
@@ -62,7 +63,10 @@ export function initUpdates() {
   if (wired) return
   wired = true
 
-  autoUpdater.autoDownload = true
+  // Nothing is fetched until the user says so: a browser that quietly pulls a
+  // hundred megabytes on someone's tethered connection has decided something
+  // that was not its to decide. What it may do is say a version exists.
+  autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
   autoUpdater.logger = { info: log, warn: log, error: log, debug: () => undefined }
 
@@ -70,9 +74,17 @@ export function initUpdates() {
   autoUpdater.on('update-not-available', () =>
     emit({ stage: 'current', available: null, checkedAt: Date.now() })
   )
-  autoUpdater.on('update-available', (info) =>
-    emit({ stage: 'downloading', available: info.version, percent: 0, checkedAt: Date.now() })
-  )
+  autoUpdater.on('update-available', (info) => {
+    log('updates: found', info.version)
+    emit({
+      stage: 'available',
+      available: info.version,
+      // The installer is the only file in the release that matters here.
+      size: info.files?.[0]?.size ?? 0,
+      percent: 0,
+      checkedAt: Date.now()
+    })
+  })
   autoUpdater.on('download-progress', (progress) =>
     emit({ stage: 'downloading', percent: Math.round(progress.percent) })
   )
@@ -105,6 +117,19 @@ export async function check(): Promise<UpdateState> {
     emit({ stage: 'error', error: String(error instanceof Error ? error.message : error) })
   }
   return state
+}
+
+/** Starts the download the user asked for. */
+export async function download(): Promise<boolean> {
+  if (state.stage !== 'available') return false
+  emit({ stage: 'downloading', percent: 0 })
+  try {
+    await autoUpdater.downloadUpdate()
+    return true
+  } catch (error) {
+    emit({ stage: 'error', error: String(error instanceof Error ? error.message : error) })
+    return false
+  }
 }
 
 /** Quits and lets the downloaded installer take over. */

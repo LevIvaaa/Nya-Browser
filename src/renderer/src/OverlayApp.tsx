@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useBrowser } from './state/useBrowser'
 import CommandPalette from './components/CommandPalette'
 import { AppMenu, ProfileMenu } from './components/Menus'
+import UpdateCard from './components/UpdateCard'
+import type { UpdateState } from '../../shared/types'
 
 /**
  * The overlay renderer.
@@ -14,8 +16,16 @@ import { AppMenu, ProfileMenu } from './components/Menus'
 export default function OverlayApp() {
   const { settings, profiles, active, engine } = useBrowser()
   const [mode, setMode] = useState<string | null>(null)
+  const [update, setUpdate] = useState<UpdateState | null>(null)
 
   useEffect(() => window.browser.onOverlay(setMode), [])
+
+  // The main process opens the update card by itself when a download
+  // finishes, so the state has to be here before the mode arrives.
+  useEffect(() => {
+    void window.browser.updateState().then(setUpdate)
+    return window.browser.onUpdate(setUpdate)
+  }, [])
 
   // Same theme tokens as the chrome UI, minus the opaque page background.
   useEffect(() => {
@@ -59,6 +69,7 @@ export default function OverlayApp() {
           }}
         />
       )}
+      {mode === 'update' && update && <UpdateCard state={update} onClose={close} />}
       {mode === 'profiles' && profiles && (
         <ProfileMenu
           state={profiles}

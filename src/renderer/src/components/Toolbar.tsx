@@ -1,4 +1,4 @@
-import type { Profile, Settings, TabState } from '../../../shared/types'
+import type { Profile, Settings, TabState, UpdateState } from '../../../shared/types'
 import {
   ArrowLeft,
   ArrowRight,
@@ -14,7 +14,8 @@ import {
   Shield,
   Star,
   StarFilled,
-  Unlock
+  Unlock,
+  UpdateArrow
 } from './Icons'
 import WindowControls from './WindowControls'
 import { Avatar, Tooltip, cx } from './ui'
@@ -26,9 +27,11 @@ interface Props {
   maximized: boolean
   bookmarked: boolean
   downloadCount: number
+  /** null until something about a new version is worth a button */
+  update: UpdateState | null
   view: string
   onOpenAddress: () => void
-  onToggleView: (view: 'settings' | 'downloads' | 'menu' | 'profiles') => void
+  onToggleView: (view: 'settings' | 'downloads' | 'menu' | 'profiles' | 'update') => void
 }
 
 export default function Toolbar({
@@ -38,6 +41,7 @@ export default function Toolbar({
   maximized,
   bookmarked,
   downloadCount,
+  update,
   view,
   onOpenAddress,
   onToggleView
@@ -49,6 +53,15 @@ export default function Toolbar({
   const canBookmark = Boolean(tab?.url && /^https?:/i.test(tab.url))
   const zoomed = (tab?.zoom ?? 0) !== settings.defaultZoom
   const height = settings.compact ? 40 : 44
+
+  const downloadingUpdate = update?.stage === 'downloading'
+  const updateBadge =
+    update?.stage === 'available' || downloadingUpdate || update?.stage === 'ready'
+  const updateLabel = downloadingUpdate
+    ? `Загружаем обновление — ${update?.percent}%`
+    : update?.stage === 'ready'
+      ? 'Обновление готово к установке'
+      : 'Доступно обновление'
 
   return (
     <div className="drag flex items-center gap-1 pl-2 pr-0" style={{ height }}>
@@ -161,6 +174,47 @@ export default function Toolbar({
             {bookmarked ? <StarFilled /> : <Star />}
           </button>
         </Tooltip>
+
+        {updateBadge && (
+          <Tooltip label={updateLabel}>
+            <button
+              className="icon-btn relative"
+              onClick={() => onToggleView('update')}
+              style={
+                view === 'update'
+                  ? { background: 'var(--surface-hover)', color: 'var(--text)' }
+                  : { color: 'var(--accent)' }
+              }
+            >
+              <UpdateArrow />
+              {/* The hidden download keeps reporting from here: the ring is
+                  the same progress the card was showing. */}
+              {downloadingUpdate && (
+                <svg className="absolute inset-0" width={30} height={30} viewBox="0 0 30 30">
+                  <circle
+                    cx="15"
+                    cy="15"
+                    r="12.5"
+                    fill="none"
+                    stroke="var(--accent)"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeDasharray={2 * Math.PI * 12.5}
+                    strokeDashoffset={2 * Math.PI * 12.5 * (1 - (update?.percent ?? 0) / 100)}
+                    transform="rotate(-90 15 15)"
+                    style={{ transition: 'stroke-dashoffset var(--t-slow) var(--ease-out)' }}
+                  />
+                </svg>
+              )}
+              {update?.stage === 'ready' && (
+                <span
+                  className="animate-pulse-soft absolute right-1 top-1 h-[6px] w-[6px] rounded-pill"
+                  style={{ background: 'var(--accent)' }}
+                />
+              )}
+            </button>
+          </Tooltip>
+        )}
 
         <Tooltip label="Загрузки · Ctrl+J">
           <button

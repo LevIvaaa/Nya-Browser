@@ -14,7 +14,14 @@ import { BLOCKLIST_SIZE, clearBrowsingData, hardenApp, hardenSession, resetStats
 import { detectSources, importBookmarks, importPasswordsCsv } from './import'
 import { engine, filterStatus, loadFilters } from './filters'
 import { addExtension, listExtensions, removeExtension, revealExtension } from './extensions'
-import { check as checkUpdates, initUpdates, installNow, onUpdateState, updateState } from './updates'
+import {
+  check as checkUpdates,
+  download as downloadUpdate,
+  initUpdates,
+  installNow,
+  onUpdateState,
+  updateState
+} from './updates'
 import { initWidevine, needsRestart, widevineState } from './widevine'
 import {
   defaultBrowserState,
@@ -151,7 +158,20 @@ if (!app.requestSingleInstanceLock()) {
     void registerAsBrowser()
 
     initUpdates()
-    onUpdateState((state) => browser?.sendUpdateState(state))
+
+    // The card shows itself at the two moments that need an answer: when a
+    // version is found (download it?) and when it has arrived (install it?).
+    // Once each per version, so a check every six hours cannot become a
+    // recurring interruption.
+    let announced = ''
+    onUpdateState((state) => {
+      browser?.sendUpdateState(state)
+      const moment = `${state.available}:${state.stage}`
+      if ((state.stage === 'available' || state.stage === 'ready') && announced !== moment) {
+        announced = moment
+        browser?.setOverlayMode('update')
+      }
+    })
 
     app.on('activate', () => {
       if (!browser || browser.win.isDestroyed()) {
@@ -388,6 +408,7 @@ function registerIpc(initial: BrowserWindow) {
   ipcMain.handle('drm:state', () => ({ ...widevineState(), needsRestart: needsRestart() }))
   ipcMain.handle('updates:state', () => updateState())
   ipcMain.handle('updates:check', () => checkUpdates())
+  ipcMain.handle('updates:download', () => downloadUpdate())
   ipcMain.handle('updates:install', () => installNow())
 
   /* ---- extensions ---- */

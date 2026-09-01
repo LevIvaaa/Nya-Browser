@@ -13,9 +13,10 @@ import DownloadsPage from './pages/DownloadsPage'
 import BookmarksPage from './pages/BookmarksPage'
 import PasswordsPage from './pages/PasswordsPage'
 import ErrorPage from './pages/ErrorPage'
+import type { UpdateState } from '../../shared/types'
 
 type View = 'page' | 'settings' | 'history' | 'downloads' | 'bookmarks' | 'passwords'
-type Overlay = 'menu' | 'profiles' | null
+type Overlay = 'menu' | 'profiles' | 'update' | null
 
 export default function App() {
   const state = useBrowser()
@@ -27,8 +28,15 @@ export default function App() {
 
   const [view, setView] = useState<View>('page')
   const [overlay, setOverlay] = useState<Overlay>(null)
+  // Only for the toolbar button; the card itself lives in the overlay.
+  const [update, setUpdate] = useState<UpdateState | null>(null)
   const [findOpen, setFindOpen] = useState(false)
   const [revealed, setRevealed] = useState(false)
+
+  useEffect(() => {
+    void window.browser.updateState().then(setUpdate)
+    return window.browser.onUpdate(setUpdate)
+  }, [])
 
   const contentRef = useRef<HTMLDivElement>(null)
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -229,10 +237,11 @@ export default function App() {
                 maximized={win.maximized}
                 bookmarked={bookmarked}
                 downloadCount={activeDownloads}
+                update={update}
                 view={overlay ?? view}
                 onOpenAddress={openPalette}
                 onToggleView={(target) => {
-                  if (target === 'menu' || target === 'profiles') {
+                  if (target === 'menu' || target === 'profiles' || target === 'update') {
                     void window.browser.setOverlay(overlay === target ? null : target)
                   } else {
                     toggleView(target as View)
