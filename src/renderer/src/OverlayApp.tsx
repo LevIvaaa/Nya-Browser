@@ -76,7 +76,7 @@ export default function OverlayApp() {
           onClose={close}
           onManage={() => {
             void window.browser.setOverlay(null)
-            window.browser.openChromePage('settings')
+            window.browser.openChromePage('settings#profiles')
           }}
         />
       )}

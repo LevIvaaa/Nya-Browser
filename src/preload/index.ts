@@ -233,7 +233,7 @@ const api = {
   onSavePassword: (cb: (offer: SavePasswordOffer) => void) => on<SavePasswordOffer>('state:save-password', cb),
   onEdge: (cb: (near: boolean) => void) => on<boolean>('state:edge', cb),
   onOverlay: (cb: (mode: string | null) => void) => on<string | null>('state:overlay', cb),
-  onPage: (cb: (page: string) => void) => on<string>('state:page', cb),
+  onPageSection: (cb: (page: string) => void) => on<string>('state:page-section', cb),
   onUpdate: (cb: (state: UpdateState) => void) => on<UpdateState>('state:update', cb),
   onToast: (cb: (message: string) => void) => on<string>('toast', cb),
   onShortcut: (cb: (action: string) => void) => on<string>('shortcut', cb)

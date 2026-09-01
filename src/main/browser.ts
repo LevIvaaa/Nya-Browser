@@ -39,6 +39,7 @@ import { loadExtensions, setExtensionSession } from './extensions'
 import { normalizeInput } from '../shared/search'
 import type {
   ContentLayout,
+  InternalPage,
   PermissionRequest,
   Profile,
   Suggestion,
@@ -90,9 +91,20 @@ interface PersistedTab {
 /* ========================================================================= */
 /* Tab                                                                        */
 /* ========================================================================= */
+/** Title and tab icon for each of the browser's own pages. */
+const INTERNAL_PAGES: Record<InternalPage, string> = {
+  settings: 'Настройки',
+  history: 'История',
+  downloads: 'Загрузки',
+  bookmarks: 'Закладки',
+  passwords: 'Пароли'
+}
+
 class Tab {
   readonly id: number
   view: WebContentsView | null = null
+  /** set for a tab that holds one of the browser's own pages */
+  internal: InternalPage | null = null
   title = 'Новая вкладка'
   url = START_URL
   favicon: string | null = null
@@ -123,6 +135,9 @@ class Tab {
 
   /** Creates the native view on demand: restored tabs cost nothing until used. */
   ensureView(wire: (tab: Tab) => void): boolean {
+    // A settings tab has nothing to render in a web view, and giving it one
+    // would put a blank page over the interface.
+    if (this.internal) return false
     if (this.view) return false
     this.view = new WebContentsView({
       webPreferences: {
@@ -212,9 +227,12 @@ class Tab {
     }
     return {
       id: this.id,
+      internal: this.internal,
       title: this.title || origin || 'Новая вкладка',
-      url: this.url === START_URL ? '' : this.url,
-      displayUrl: this.url === START_URL ? '' : prettyUrl(this.url),
+      // Our own pages leave the address bar empty: it is a place to type, and
+      // "nya://settings" is not an address anyone needs to see or return to.
+      url: this.url === START_URL || this.internal ? '' : this.url,
+      displayUrl: this.url === START_URL || this.internal ? '' : prettyUrl(this.url),
       origin,
       favicon: this.favicon,
       loading: this.loading,
@@ -553,9 +571,33 @@ export class BrowserWindow {
     active.view.setVisible(r.visible && active.hasContent && !active.sleeping)
   }
 
-  /** Asks the chrome UI to switch to one of its built-in pages. */
+  /**
+   * Opens one of the browser's own pages. They are tabs like any other, so a
+   * new tab opened next to them is a new tab and does not take their place,
+   * and the tab strip names them.
+   */
   openChromePage(page: string) {
-    this.chrome.webContents.send('state:page', page)
+    const [name, section] = page.split('#')
+    const internal = name as InternalPage
+    if (!(internal in INTERNAL_PAGES)) return
+
+    const existing = this.tabs.find((t) => t.internal === internal)
+    if (existing) {
+      this.switchTab(existing.id)
+    } else {
+      const tab = new Tab(++this.seq, this.ses)
+      tab.internal = internal
+      tab.title = INTERNAL_PAGES[internal]
+      tab.url = `nya://${internal}`
+      const insertAt = this.tabs.findIndex((t) => t.id === this.activeId) + 1
+      this.tabs.splice(insertAt > 0 ? insertAt : this.tabs.length, 0, tab)
+      this.activeId = tab.id
+      this.showActive()
+      this.broadcast()
+    }
+
+    // The section is a hint for the page itself, not tab state.
+    if (section) this.chrome.webContents.send('state:page-section', `${internal}#${section}`)
   }
 
   /**

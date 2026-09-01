@@ -68,6 +68,8 @@ interface Props {
   onReset: () => void
   onClose: () => void
   onOpenPasswords: () => void
+  /** the section to open at, when something asked for one in particular */
+  section?: string
 }
 
 const ACCENTS = ['#7C6CFF', '#0A84FF', '#00B8A9', '#2FBF71', '#F5A524', '#FF6B6B', '#E255A1', '#8E8E93']
@@ -152,9 +154,18 @@ export default function SettingsPage({
   onPatch,
   onReset,
   onClose,
-  onOpenPasswords
+  onOpenPasswords,
+  section
 }: Props) {
-  const [tab, setTab] = useState<TabId>('look')
+  const [tab, setTab] = useState<TabId>(
+    () => (TABS.some((t) => t.id === section) ? (section as TabId) : 'look')
+  )
+
+  // Asking for the same section again while the page is open should still
+  // move to it — the settings page is not remounted between requests.
+  useEffect(() => {
+    if (section && TABS.some((t) => t.id === section)) setTab(section as TabId)
+  }, [section])
   const [info, setInfo] = useState<AppInfo | null>(null)
   const [vault, setVault] = useState<VaultState | null>(null)
   const [notice, setNotice] = useState('')

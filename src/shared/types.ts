@@ -162,8 +162,18 @@ export interface ProfilesState {
   activeId: string
 }
 
+/** The browser's own pages, the ones that live in a tab without a web view. */
+export type InternalPage =
+  | 'settings'
+  | 'history'
+  | 'downloads'
+  | 'bookmarks'
+  | 'passwords'
+
 export interface TabState {
   id: number
+  /** set when this tab holds one of the browser's own pages instead of a site */
+  internal: InternalPage | null
   title: string
   url: string
   displayUrl: string

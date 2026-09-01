@@ -26,10 +26,15 @@ export default function App() {
     edge, toasts, patch, refreshBookmarks, setPermission, setAutofill, setSavePassword
   } = state
 
-  const [view, setView] = useState<View>('page')
+  // Which page is on screen is a property of the active tab, not of the
+  // window: opening a new tab next to the settings leaves the settings where
+  // they were, and coming back finds them still open.
+  const view: View = (active?.internal ?? 'page') as View
   const [overlay, setOverlay] = useState<Overlay>(null)
   // Only for the toolbar button; the card itself lives in the overlay.
   const [update, setUpdate] = useState<UpdateState | null>(null)
+  // Which part of the settings page to open at, when asked for one.
+  const [section, setSection] = useState('')
   const [findOpen, setFindOpen] = useState(false)
   const [revealed, setRevealed] = useState(false)
 
@@ -114,12 +119,9 @@ export default function App() {
     report
   ])
 
-  /* --------------------------------------------- reset chrome pages on tab */
-  // Settings, history and downloads are chrome-level views. Opening or
-  // switching a tab must show that tab, not keep the old panel on screen.
+  /* ------------------------------------------------ close menus on tab swap */
   const activeId = active?.id
   useEffect(() => {
-    setView('page')
     void window.browser.setOverlay(null)
     setFindOpen(false)
   }, [activeId])
@@ -129,16 +131,31 @@ export default function App() {
     void window.browser.setOverlay('palette')
   }, [])
 
-  const toggleView = useCallback((next: View) => {
-    void window.browser.setOverlay(null)
-    setView((current) => (current === next ? 'page' : next))
-  }, [])
+  // Asking for a page the active tab already shows closes it, the way a
+  // toolbar button that is already lit should.
+  const toggleView = useCallback(
+    (next: View) => {
+      void window.browser.setOverlay(null)
+      if (next === 'page') return
+      if (active?.internal === next) void window.browser.closeTab(active.id)
+      else void window.browser.openChromePage(next)
+    },
+    [active?.internal, active?.id]
+  )
 
   // The overlay owns menu state; mirror it so toolbar buttons stay highlighted.
   useEffect(() => window.browser.onOverlay((mode) => setOverlay(mode === 'menu' || mode === 'profiles' ? mode : null)), [])
 
-  // The overlay can ask the chrome UI to open one of its pages.
-  useEffect(() => window.browser.onPage((page) => setView(page as View)), [])
+  // A page can be asked to open at a particular section, as in
+  // "settings#profiles"; the tab itself is opened by the main process.
+  useEffect(
+    () =>
+      window.browser.onPageSection((page) => {
+        const [, part] = page.split('#')
+        setSection(part ?? '')
+      }),
+    []
+  )
 
   useEffect(() => {
     return window.browser.onShortcut((action) => {
@@ -179,11 +196,11 @@ export default function App() {
       if (event.key !== 'Escape') return
       if (overlay) void window.browser.setOverlay(null)
       else if (findOpen) setFindOpen(false)
-      else if (view !== 'page') setView('page')
+      else if (view !== 'page' && active) void window.browser.closeTab(active.id)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [overlay, findOpen, view])
+  }, [overlay, findOpen, view, active])
 
   /* ------------------------------------------------------------ auto-hide */
   const reveal = useCallback(() => {
@@ -278,7 +295,7 @@ export default function App() {
                 onClose={() => setAutofill(null)}
                 onUnlock={() => {
                   setAutofill(null)
-                  setView('passwords')
+                  void window.browser.openChromePage('passwords')
                 }}
               />
             )}
@@ -306,22 +323,39 @@ export default function App() {
               />
             )}
             {hasError && active?.error && view === 'page' && <ErrorPage error={active.error} />}
-            {view === 'settings' && (
-              <SettingsPage
-                settings={settings}
-                engines={engines}
-                stats={stats}
-                profiles={profiles}
-                onPatch={patch}
-                onReset={() => void window.browser.resetSettings()}
-                onClose={() => setView('page')}
-                onOpenPasswords={() => setView('passwords')}
-              />
-            )}
-            {view === 'history' && <HistoryPage />}
-            {view === 'downloads' && <DownloadsPage items={downloads} />}
-            {view === 'bookmarks' && <BookmarksPage items={bookmarks} onRefresh={refreshBookmarks} />}
-            {view === 'passwords' && <PasswordsPage />}
+
+            {/* One mounted page per internal tab, hidden rather than unmounted:
+                coming back to the settings finds the same section and the same
+                scroll position, which is the point of them being tabs. */}
+            {tabs
+              .filter((tab) => tab.internal)
+              .map((tab) => (
+                <div
+                  key={tab.id}
+                  className="absolute inset-0"
+                  hidden={tab.id !== active?.id}
+                >
+                  {tab.internal === 'settings' && (
+                    <SettingsPage
+                      settings={settings}
+                      engines={engines}
+                      stats={stats}
+                      profiles={profiles}
+                      onPatch={patch}
+                      onReset={() => void window.browser.resetSettings()}
+                      onClose={() => void window.browser.closeTab(tab.id)}
+                      onOpenPasswords={() => void window.browser.openChromePage('passwords')}
+                      section={section}
+                    />
+                  )}
+                  {tab.internal === 'history' && <HistoryPage />}
+                  {tab.internal === 'downloads' && <DownloadsPage items={downloads} />}
+                  {tab.internal === 'bookmarks' && (
+                    <BookmarksPage items={bookmarks} onRefresh={refreshBookmarks} />
+                  )}
+                  {tab.internal === 'passwords' && <PasswordsPage />}
+                </div>
+              ))}
           </div>
 
           {vertical && settings.tabPosition === 'right' && !chromeHidden && (

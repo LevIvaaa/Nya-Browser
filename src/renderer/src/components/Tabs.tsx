@@ -1,7 +1,16 @@
 import { useRef, useState } from 'react'
-import type { Settings, TabState } from '../../../shared/types'
-import { Cross, Globe, Plus, Sleep, Volume, VolumeOff } from './Icons'
+import type { InternalPage, Settings, TabState } from '../../../shared/types'
+import { Clock, Cross, Download, Gear, Globe, Key, Plus, Sleep, Star, Volume, VolumeOff } from './Icons'
 import { cx } from './ui'
+
+/** The same icons these pages carry in the toolbar and in the menu. */
+const INTERNAL_ICONS: Record<InternalPage, typeof Gear> = {
+  settings: Gear,
+  history: Clock,
+  downloads: Download,
+  bookmarks: Star,
+  passwords: Key
+}
 
 /* ----------------------------------------------------------------- favicon */
 function Favicon({ tab, size = 15 }: { tab: TabState; size?: number }) {
@@ -20,6 +29,13 @@ function Favicon({ tab, size = 15 }: { tab: TabState; size?: number }) {
         }}
       />
     )
+  }
+
+  // One of the browser's own pages: it has no favicon to fetch, and the icon
+  // is the same one its button in the toolbar carries.
+  if (tab.internal) {
+    const Icon = INTERNAL_ICONS[tab.internal]
+    return <Icon width={size} height={size} className="shrink-0" style={{ color: 'var(--accent)' }} />
   }
 
   if (tab.favicon && !failed) {

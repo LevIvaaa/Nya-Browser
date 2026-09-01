@@ -73,8 +73,16 @@ export function ProfileMenu({
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
 
-  const switchTo = async (profile: Profile) => {
-    if (profile.id !== state.activeId) await window.browser.switchProfile(profile.id)
+  // Clicking the profile you are already in used to do nothing but close the
+  // menu. There is nothing to switch to, so it goes where a profile can
+  // actually be changed instead.
+  const choose = async (profile: Profile) => {
+    if (profile.id === state.activeId) {
+      onManage()
+      onClose()
+      return
+    }
+    await window.browser.switchProfile(profile.id)
     onClose()
   }
 
@@ -91,7 +99,7 @@ export function ProfileMenu({
           {state.profiles.map((profile) => (
             <button
               key={profile.id}
-              onClick={() => void switchTo(profile)}
+              onClick={() => void choose(profile)}
               className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-[var(--surface-hover)]"
               style={{ transition: 'background var(--t-fast) linear' }}
             >
@@ -99,7 +107,7 @@ export function ProfileMenu({
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-base font-medium">{profile.name}</span>
                 <span className="block text-2xs text-faint">
-                  {profile.id === state.activeId ? 'активный' : 'переключиться'}
+                  {profile.id === state.activeId ? 'активный · настроить' : 'переключиться'}
                 </span>
               </span>
             </button>
