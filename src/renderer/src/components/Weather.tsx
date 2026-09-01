@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { Place, Weather, WeatherSettings } from '../../../shared/types'
+import type { Place, TileShape, Weather, WeatherSettings } from '../../../shared/types'
 import { Modal, TextField, cx } from './ui'
 
 /* ------------------------------------------------------------- wmo codes */
@@ -198,11 +198,16 @@ function SkyArt({ sky, day, size = 64 }: { sky: Sky; day: boolean; size?: number
 
 export default function WeatherWidget({
   place,
+  shape,
   onPick
 }: {
   place: WeatherSettings
+  shape: TileShape
   onPick: (place: WeatherSettings) => void
 }) {
+  // A circle is the wrong shape for a panel of numbers, so the roundest of the
+  // soft options stands in for it.
+  const radius = shape === 'square' ? 0 : shape === 'soft' ? 12 : 20
   const [data, setData] = useState<Weather | null>(null)
   const [picking, setPicking] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -234,11 +239,11 @@ export default function WeatherWidget({
         <button
           onClick={() => setPicking(true)}
           className="card flex h-full w-full flex-col items-center justify-center gap-1 p-3 text-center"
-          style={{ transition: 'background var(--t-base) var(--ease-out)' }}
+          style={{ borderRadius: radius, transition: 'background var(--t-base) var(--ease-out)' }}
         >
           <SkyArt sky="clear" day size={40} />
           <span className="text-sm font-medium">Выберите город</span>
-          <span className="text-2xs text-faint">Погода появится здесь</span>
+          <span className="text-2xs opacity-55">Погода появится здесь</span>
         </button>
         {picking && <PlaceDialog place={place} onClose={() => setPicking(false)} onPick={onPick} />}
       </>
@@ -250,11 +255,12 @@ export default function WeatherWidget({
       <button
         onClick={() => setPicking(true)}
         className="card flex h-full w-full flex-col justify-between overflow-hidden p-3 text-left"
+        style={{ borderRadius: radius }}
         title="Сменить город"
       >
         <div className="flex w-full items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="truncate text-2xs font-semibold uppercase tracking-wider text-faint">
+            <div className="truncate text-2xs font-semibold uppercase tracking-wider opacity-60">
               {place.place}
             </div>
             <div className="mt-0.5 text-[30px] font-semibold leading-none tabular-nums tracking-[-0.03em]">
@@ -265,11 +271,11 @@ export default function WeatherWidget({
         </div>
 
         <div className="w-full">
-          <div className="truncate text-sm text-dim">
+          <div className="truncate text-sm opacity-75">
             {failed ? 'Нет связи с сервисом погоды' : data ? words(data.code) : 'Загружаем…'}
           </div>
           {data && (
-            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-2xs tabular-nums text-faint">
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-2xs tabular-nums opacity-55">
               <span>
                 {temp(data.low, place.fahrenheit)} … {temp(data.high, place.fahrenheit)}
               </span>
@@ -283,11 +289,11 @@ export default function WeatherWidget({
           <div className="mt-1.5 flex w-full items-end justify-between gap-1">
             {data.forecast.map((entry) => (
               <div key={entry.day} className="flex min-w-0 flex-1 flex-col items-center gap-0.5">
-                <span className="text-2xs text-faint">
+                <span className="text-2xs opacity-55">
                   {new Date(entry.day).toLocaleDateString('ru-RU', { weekday: 'short' })}
                 </span>
                 <SkyArt sky={skyOf(entry.code)} day size={22} />
-                <span className="text-2xs tabular-nums text-dim">
+                <span className="text-2xs tabular-nums opacity-75">
                   {temp(entry.high, place.fahrenheit)}
                 </span>
               </div>

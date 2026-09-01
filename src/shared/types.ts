@@ -94,6 +94,8 @@ export interface WidgetBox {
 export type StartPageFont = 'system' | 'rounded' | 'serif' | 'mono'
 /** Yandex-style cards with the caption inside, or bare icons with a label. */
 export type TileStyle = 'card' | 'icon'
+/** How square the corners are, on tiles and on the cards around widgets. */
+export type TileShape = 'rounded' | 'soft' | 'circle' | 'square'
 
 /** A city the geocoder found. */
 export interface Place {
@@ -136,6 +138,15 @@ export interface StartPageSettings {
   columns: number
   font: StartPageFont
   tiles: TileStyle
+  shape: TileShape
+  /** captions under the tile icons; off leaves the icon alone in the card */
+  tileLabels: boolean
+  /**
+   * Text colour for the whole start page, as a hex string. Empty means "follow
+   * the theme" — which is right over a plain background and wrong over a
+   * wallpaper, so the page lets it be set by hand.
+   */
+  ink: string
   layout: Record<WidgetId, WidgetBox>
   place: WeatherSettings
 }

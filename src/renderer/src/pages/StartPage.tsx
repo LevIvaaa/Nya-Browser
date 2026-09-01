@@ -7,6 +7,7 @@ import type {
   StartPageFont,
   StartPageSettings,
   Suggestion,
+  TileShape,
   WidgetBox,
   WidgetId
 } from '../../../shared/types'
@@ -85,6 +86,25 @@ const ORDER: WidgetId[] = [
   'closed',
   'weather'
 ]
+
+const SHAPES: { value: TileShape; label: string }[] = [
+  { value: 'rounded', label: 'Скруглённые' },
+  { value: 'soft', label: 'Мягкие' },
+  { value: 'circle', label: 'Круглые' },
+  { value: 'square', label: 'Прямые' }
+]
+
+/**
+ * The corner radius for a box of a given size. Circles are half the size
+ * rather than a fixed number so an icon and the card around it stay the same
+ * shape at different scales.
+ */
+function radiusFor(shape: TileShape, size: number): number {
+  if (shape === 'square') return 0
+  if (shape === 'circle') return size / 2
+  if (shape === 'soft') return Math.round(size * 0.16)
+  return Math.round(size * 0.27)
+}
 
 const clamp = (value: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, value))
 
@@ -223,7 +243,7 @@ export default function StartPage({
             <h1 className="text-[19px] font-medium tracking-[-0.03em]">
               {incognito ? 'Приватное окно' : `${hello}${profileName ? `, ${profileName}` : ''}`}
             </h1>
-            <p className="mt-1 text-base text-dim">
+            <p className="mt-1 text-base opacity-70">
               {incognito
                 ? 'История, кэш и cookie этого окна исчезнут, когда вы его закроете'
                 : blockedTotal > 0
@@ -246,10 +266,10 @@ export default function StartPage({
               transition: 'transform var(--t-base) var(--ease-out), box-shadow var(--t-base) var(--ease-out), border-color var(--t-base) linear'
             }}
           >
-            <Search width={19} height={19} className="text-faint" />
-            <span className="flex-1 text-[15px] text-faint">Поиск или адрес сайта</span>
+            <Search width={19} height={19} className="opacity-45" />
+            <span className="flex-1 text-[15px] opacity-45">Поиск или адрес сайта</span>
             <span
-              className="rounded-pill px-2.5 py-1 text-2xs font-medium text-dim"
+              className="rounded-pill px-2.5 py-1 text-2xs font-medium opacity-70"
               style={{ background: 'var(--field-idle)' }}
             >
               {engine.name}
@@ -269,6 +289,8 @@ export default function StartPage({
                 fav={fav}
                 icon={icons[hostOf(fav.url)]}
                 style={page.tiles}
+                shape={page.shape}
+                labels={page.tileLabels}
                 editing={editing}
                 dropping={dropIndex === index && editing}
                 onOpen={() => open(fav.url)}
@@ -285,6 +307,8 @@ export default function StartPage({
             ))}
             <AddTile
               style={page.tiles}
+              shape={page.shape}
+              labels={page.tileLabels}
               onClick={() => setDialog({ mode: 'add', item: { id: newId(), title: '', url: '' } })}
             />
           </div>
@@ -292,7 +316,7 @@ export default function StartPage({
 
       case 'stats':
         return (
-          <Card icon={<Shield width={13} height={13} />} title="Защита">
+          <Card icon={<Shield width={13} height={13} />} title="Защита" shape={page.shape}>
             <div className="grid grid-cols-4 gap-2">
               {[
                 { label: 'Реклама', value: stats.ads },
@@ -302,7 +326,7 @@ export default function StartPage({
               ].map((item) => (
                 <div key={item.label}>
                   <div className="text-[22px] font-semibold tabular-nums tracking-[-0.02em]">{item.value}</div>
-                  <div className="text-sm text-dim">{item.label}</div>
+                  <div className="text-sm opacity-65">{item.label}</div>
                 </div>
               ))}
             </div>
@@ -311,7 +335,7 @@ export default function StartPage({
 
       case 'closed':
         return (
-          <Card icon={<Star width={13} height={13} />} title="Недавно закрытые">
+          <Card icon={<Star width={13} height={13} />} title="Недавно закрытые" shape={page.shape}>
             <div className="flex flex-col">
               {closed.slice(0, 5).map((tab) => (
                 <button
@@ -320,8 +344,8 @@ export default function StartPage({
                   className="flex items-center gap-2 truncate rounded-[9px] px-2 py-1.5 text-left text-sm hover:bg-[var(--surface-hover)]"
                   style={{ transition: 'background var(--t-fast) linear' }}
                 >
-                  <Cross width={12} height={12} className="shrink-0 text-faint" />
-                  <span className="truncate text-ink">{tab.title || tab.url}</span>
+                  <Cross width={12} height={12} className="shrink-0 opacity-45" />
+                  <span className="truncate">{tab.title || tab.url}</span>
                 </button>
               ))}
             </div>
@@ -330,9 +354,9 @@ export default function StartPage({
 
       case 'recent':
         return (
-          <Card icon={<Clock width={13} height={13} />} title="Недавнее">
+          <Card icon={<Clock width={13} height={13} />} title="Недавнее" shape={page.shape}>
             {recent.length === 0 ? (
-              <p className="text-sm text-faint">История пуста</p>
+              <p className="text-sm opacity-55">История пуста</p>
             ) : (
               <div className="flex flex-col">
                 {recent.slice(0, 6).map((item) => (
@@ -343,8 +367,8 @@ export default function StartPage({
                     className="flex items-center gap-2 truncate rounded-[9px] px-2 py-1.5 text-left text-sm hover:bg-[var(--surface-hover)]"
                     style={{ transition: 'background var(--t-fast) linear' }}
                   >
-                    <Zap width={12} height={12} className="shrink-0 text-faint" />
-                    <span className="truncate text-ink">{item.title}</span>
+                    <Zap width={12} height={12} className="shrink-0 opacity-45" />
+                    <span className="truncate">{item.title}</span>
                   </button>
                 ))}
               </div>
@@ -353,12 +377,26 @@ export default function StartPage({
         )
 
       case 'weather':
-        return <WeatherWidget place={page.place} onPick={(place) => patchPage({ place })} />
+        return (
+          <WeatherWidget
+            place={page.place}
+            shape={page.shape}
+            onPick={(place) => patchPage({ place })}
+          />
+        )
     }
   }
 
   return (
-    <div className="relative z-10 h-full overflow-y-auto" style={{ fontFamily: FONTS[page.font] }}>
+    <div
+      className="relative z-10 h-full overflow-y-auto"
+      style={{
+        fontFamily: FONTS[page.font],
+        // One colour for the whole page: the widgets inherit it, so a light
+        // theme over a dark wallpaper can be made readable in one move.
+        ...(page.ink ? { color: page.ink } : null)
+      }}
+    >
       <div
         ref={canvas}
         className="mx-auto grid w-full max-w-[1280px] px-6 py-8"
@@ -601,6 +639,51 @@ function EditBar({
             <option value="card">Плитки карточками</option>
             <option value="icon">Плитки значками</option>
           </select>
+          <select
+            className="h-7 rounded-pill px-2 text-2xs"
+            style={{ background: 'var(--field-idle)', color: 'var(--ink)', border: 'none' }}
+            value={page.shape}
+            onChange={(event) => onPatch({ shape: event.target.value as TileShape })}
+          >
+            {SHAPES.map((item) => (
+              <option key={item.value} value={item.value}>
+                Форма: {item.label.toLowerCase()}
+              </option>
+            ))}
+          </select>
+          <button
+            className="btn h-7 px-2.5 text-2xs"
+            onClick={() => onPatch({ tileLabels: !page.tileLabels })}
+          >
+            {page.tileLabels ? 'Скрыть подписи' : 'Показать подписи'}
+          </button>
+
+          {/* Text colour. Over a wallpaper the theme's ink is often the wrong
+              one, and the page has no way to know that — so it is a choice.
+              The swatch is the input itself rather than a label wrapping a
+              hidden one: a label that big is easy to hit by accident, and
+              turning all the text black by accident is not a small mistake. */}
+          <span
+            className="flex h-7 items-center gap-1.5 rounded-pill pl-1.5 pr-2.5 text-2xs"
+            style={{ background: 'var(--field-idle)' }}
+          >
+            <input
+              type="color"
+              className="h-[18px] w-[18px] cursor-pointer border-0 bg-transparent p-0"
+              value={page.ink || '#ffffff'}
+              onChange={(event) => onPatch({ ink: event.target.value })}
+              title="Цвет текста главной"
+            />
+            Цвет текста
+          </span>
+          <button
+            className="btn h-7 px-2.5 text-2xs"
+            onClick={() => onPatch({ ink: '' })}
+            disabled={!page.ink}
+          >
+            По теме
+          </button>
+
           <button className="btn h-7 px-2.5 text-2xs" onClick={onReset}>
             Сбросить расположение
           </button>
@@ -618,10 +701,27 @@ function EditBar({
 
 /* ---------------------------------------------------------------- parts */
 
-function Card({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
+function Card({
+  icon,
+  title,
+  shape,
+  children
+}: {
+  icon: ReactNode
+  title: string
+  shape: TileShape
+  children: ReactNode
+}) {
   return (
-    <div className="card h-full overflow-hidden p-4">
-      <div className="mb-2.5 flex items-center gap-2 text-2xs font-semibold uppercase tracking-wider text-faint">
+    <div
+      className="card h-full overflow-hidden p-4"
+      // A circle is the wrong shape for a panel of text, so the widget cards
+      // take the roundest of the two soft options instead of a real circle.
+      style={{ borderRadius: radiusFor(shape === 'circle' ? 'rounded' : shape, 72) }}
+    >
+      <div
+        className="mb-2.5 flex items-center gap-2 text-2xs font-semibold uppercase tracking-wider opacity-60"
+      >
         {icon} {title}
       </div>
       {children}
@@ -633,6 +733,8 @@ function Tile({
   fav,
   icon,
   style,
+  shape,
+  labels,
   editing,
   dropping,
   onOpen,
@@ -646,6 +748,8 @@ function Tile({
   fav: Favorite
   icon: string | undefined
   style: StartPageSettings['tiles']
+  shape: TileShape
+  labels: boolean
   editing: boolean
   dropping: boolean
   onOpen: () => void
@@ -658,14 +762,16 @@ function Tile({
 }) {
   const hue = hueFor(fav.url)
   const card = style === 'card'
+  const size = card ? 44 : 54
 
   const glyph = (
     <span
-      className={cx(
-        'flex items-center justify-center overflow-hidden font-semibold text-white',
-        card ? 'h-[38px] w-[38px] rounded-[12px] text-[17px]' : 'h-[54px] w-[54px] rounded-[17px] text-[20px]'
-      )}
+      className="flex shrink-0 items-center justify-center overflow-hidden font-semibold text-white"
       style={{
+        width: size,
+        height: size,
+        fontSize: size * 0.4,
+        borderRadius: radiusFor(shape, size),
         background: icon
           ? 'var(--surface-solid)'
           : `linear-gradient(140deg, hsl(${hue} 72% 58%), hsl(${(hue + 42) % 360} 70% 46%))`,
@@ -673,7 +779,7 @@ function Tile({
       }}
     >
       {icon ? (
-        <img src={icon} alt="" className={card ? 'h-6 w-6 object-contain' : 'h-8 w-8 object-contain'} />
+        <img src={icon} alt="" className={card ? 'h-7 w-7 object-contain' : 'h-8 w-8 object-contain'} />
       ) : (
         fav.title.charAt(0).toUpperCase()
       )}
@@ -704,14 +810,17 @@ function Tile({
         onClick={() => (editing ? onEdit() : onOpen())}
         onMouseEnter={() => void window.browser.preconnect(fav.url)}
         onAuxClick={(event) => event.button === 1 && void window.browser.newTab(fav.url, true)}
+        // The Yandex shape: the icon in the middle of the card, the caption
+        // centred right under it, both on the same vertical line.
         className={cx(
-          'lift w-full',
-          card
-            ? 'flex aspect-[1.45] flex-col justify-between rounded-card border p-3 text-left'
-            : 'flex flex-col items-center gap-2 rounded-card p-2'
+          'lift flex w-full flex-col items-center justify-center gap-2',
+          // Without a caption the card has nothing to be wide for, so it
+          // becomes a square and the logo sits dead centre in it.
+          card ? (labels ? 'aspect-[1.25] border p-3' : 'aspect-square border p-3') : 'p-2'
         )}
-        style={
-          card
+        style={{
+          borderRadius: radiusFor(shape, 96),
+          ...(card
             ? {
                 background: 'var(--surface)',
                 borderColor: 'var(--line)',
@@ -719,8 +828,8 @@ function Tile({
                 boxShadow: 'var(--shadow-sm)',
                 transition: 'transform var(--t-base) var(--ease-out), box-shadow var(--t-base) var(--ease-out)'
               }
-            : { transition: 'background var(--t-base) var(--ease-out)' }
-        }
+            : { transition: 'background var(--t-base) var(--ease-out)' })
+        }}
         onMouseOver={(event) => {
           if (!card) event.currentTarget.style.background = 'var(--surface)'
         }}
@@ -729,14 +838,13 @@ function Tile({
         }}
       >
         {glyph}
-        <span
-          className={cx(
-            'w-full truncate text-sm',
-            card ? 'text-left font-medium text-ink' : 'text-center text-dim'
-          )}
-        >
-          {fav.title}
-        </span>
+        {labels && (
+          <span
+            className={cx('w-full truncate text-center text-sm', card ? 'font-medium' : 'opacity-75')}
+          >
+            {fav.title}
+          </span>
+        )}
       </button>
 
       {editing && (
@@ -763,22 +871,35 @@ function Tile({
   )
 }
 
-function AddTile({ style, onClick }: { style: StartPageSettings['tiles']; onClick: () => void }) {
+function AddTile({
+  style,
+  shape,
+  labels,
+  onClick
+}: {
+  style: StartPageSettings['tiles']
+  shape: TileShape
+  labels: boolean
+  onClick: () => void
+}) {
   const card = style === 'card'
   return (
     <button
       onClick={onClick}
       className={cx(
-        'flex items-center justify-center gap-2 rounded-card border border-dashed text-faint hover:text-ink',
-        card ? 'aspect-[1.45] flex-col' : 'flex-col p-2'
+        'flex flex-col items-center justify-center gap-2 border border-dashed opacity-55 hover:opacity-100',
+        card ? (labels ? 'aspect-[1.25] p-3' : 'aspect-square p-3') : 'p-2'
       )}
       style={{
-        borderColor: 'var(--line-strong)',
-        transition: 'color var(--t-fast) linear, border-color var(--t-fast) linear'
+        borderRadius: radiusFor(shape, 96),
+        // currentColor, so the dashed outline follows the page's text colour
+        // instead of a token that assumes a light or dark background.
+        borderColor: 'currentColor',
+        transition: 'opacity var(--t-fast) linear'
       }}
     >
       <Plus width={19} height={19} />
-      <span className="text-sm">Добавить</span>
+      {labels && <span className="text-sm">Добавить</span>}
     </button>
   )
 }
