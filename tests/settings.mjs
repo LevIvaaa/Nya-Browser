@@ -79,6 +79,15 @@ check('an impossible latitude takes the place with it', page({ place: { place: '
 })
 check('a real coordinate is kept', page({ place: { place: 'Киев', lat: 50.4547, lon: 30.5238 } }).place.lat, 50.4547)
 
+// ---- a fresh profile brings nothing with it
+check('a new profile has no favourites', sanitize({}).favorites, [])
+check(
+  'an existing list is kept',
+  sanitize({ favorites: [{ id: 'a', title: 'A', url: 'https://a.dev' }] }).favorites.length,
+  1
+)
+check('a list emptied on purpose stays empty', sanitize({ favorites: [] }).favorites, [])
+
 // ---- a couple of the older knobs, to catch a sanitizer that stops sanitizing
 check('an unknown theme falls back', sanitize({ theme: 'neon' }).theme, DEFAULT_SETTINGS.theme)
 check('a bad accent falls back', sanitize({ accent: 'red' }).accent, DEFAULT_SETTINGS.accent)
