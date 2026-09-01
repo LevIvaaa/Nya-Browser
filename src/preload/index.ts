@@ -201,7 +201,7 @@ const api = {
   drmState: (): Promise<WidevineState & { needsRestart: boolean }> => ipcRenderer.invoke('drm:state'),
   updateState: (): Promise<UpdateState> => ipcRenderer.invoke('updates:state'),
   checkUpdates: (): Promise<UpdateState> => ipcRenderer.invoke('updates:check'),
-  newWindow: (): Promise<boolean> => ipcRenderer.invoke('window:new'),
+  newWindow: (incognito = false): Promise<boolean> => ipcRenderer.invoke('window:new', incognito),
   favicons: (): Promise<Record<string, string>> => ipcRenderer.invoke('favicons:all'),
   downloadUpdate: (): Promise<boolean> => ipcRenderer.invoke('updates:download'),
   installUpdate: (): Promise<boolean> => ipcRenderer.invoke('updates:install'),

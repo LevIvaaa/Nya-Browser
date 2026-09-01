@@ -6,6 +6,7 @@ import {
   Download,
   Gear,
   Home,
+  Incognito,
   Lock,
   More,
   Plus,
@@ -29,6 +30,8 @@ interface Props {
   downloadCount: number
   /** null until something about a new version is worth a button */
   update: UpdateState | null
+  /** this window keeps nothing; the badge says so */
+  incognito: boolean
   view: string
   onOpenAddress: () => void
   onToggleView: (view: 'settings' | 'downloads' | 'menu' | 'profiles' | 'update') => void
@@ -42,6 +45,7 @@ export default function Toolbar({
   bookmarked,
   downloadCount,
   update,
+  incognito,
   view,
   onOpenAddress,
   onToggleView
@@ -163,6 +167,18 @@ export default function Toolbar({
       </div>
 
       {/* actions */}
+      {incognito && (
+        <Tooltip label="Приватное окно · история, кэш и cookie исчезнут вместе с ним">
+          <span
+            className="mr-1 flex h-[26px] shrink-0 items-center gap-1.5 rounded-pill px-2.5 text-2xs font-semibold"
+            style={{ background: 'color-mix(in srgb, var(--accent) 22%, transparent)', color: 'var(--accent)' }}
+          >
+            <Incognito width={14} height={14} />
+            Приватно
+          </span>
+        </Tooltip>
+      )}
+
       <div className="no-drag flex items-center gap-0.5 pr-1">
         <Tooltip label={bookmarked ? 'Убрать из закладок · Ctrl+D' : 'В закладки · Ctrl+D'}>
           <button

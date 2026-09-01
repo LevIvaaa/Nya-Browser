@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Profile, ProfilesState } from '../../../shared/types'
 import {
   Clock,
+  Incognito,
   Download,
   Eraser,
   Gear,
@@ -38,6 +39,10 @@ export function AppMenu({ onClose, onOpen }: { onClose: () => void; onOpen: (vie
   return (
     <Popover onClose={onClose} width={280}>
       <div className="py-1.5">
+        {item(<Incognito width={15} height={15} />, 'Приватное окно', 'Ctrl+Shift+N', () =>
+          void window.browser.newWindow(true)
+        )}
+        <div className="my-1.5" style={{ borderTop: '1px solid var(--line)' }} />
         {item(<Star width={15} height={15} />, 'Закладки', 'Ctrl+Shift+O', () => onOpen('bookmarks'))}
         {item(<Clock width={15} height={15} />, 'История', 'Ctrl+H', () => onOpen('history'))}
         {item(<Download width={15} height={15} />, 'Загрузки', 'Ctrl+J', () => onOpen('downloads'))}

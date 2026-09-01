@@ -292,8 +292,18 @@ export class BrowserWindow {
 
   /** How many windows are already up, so the next one is not stacked on them. */
   private static open = 0
+  /** Numbers the throwaway sessions private windows run in. */
+  private static privateSeq = 0
 
-  constructor() {
+  /**
+   * A private window keeps nothing: its session is in memory only, so cookies,
+   * storage and the cache die with the window, and everything this browser
+   * writes for itself — history, the icon cache, the saved session — skips it.
+   */
+  readonly incognito: boolean
+
+  constructor(incognito = false) {
+    this.incognito = incognito
     const saved = this.readBounds()
     const offset = BrowserWindow.open++ * 32
     this.offsetFromFirst = offset > 0
@@ -375,6 +385,9 @@ export class BrowserWindow {
       this.win.show()
       this.win.focus()
       this.chrome.webContents.focus()
+      // The focus event above can beat the renderer's first listener, and a
+      // private window that does not know it is private is just a window.
+      this.sendWindowState()
     })
 
     this.chrome.webContents.on('before-input-event', (event, input) => {
@@ -455,7 +468,11 @@ export class BrowserWindow {
     vault.load(dir)
     refreshCustomLists()
 
-    this.ses = session.fromPartition(profiles.partition())
+    // No "persist:" prefix means Chromium keeps it in memory and throws it
+    // away with the window.
+    this.ses = this.incognito
+      ? session.fromPartition(`nya-private-${++BrowserWindow.privateSeq}`)
+      : session.fromPartition(profiles.partition())
     registerProtocols(this.ses)
     hardenSession(this.ses, (id) => {
       if (this.getActive()?.wc?.id === id) this.broadcast()
@@ -463,9 +480,13 @@ export class BrowserWindow {
     downloads.attach(this.ses)
 
     // Extensions belong to the profile, and Chromium keeps no registry of them,
-    // so every launch and every profile switch loads them again.
-    setExtensionSession(this.ses)
-    void loadExtensions(this.ses)
+    // so every launch and every profile switch loads them again. A private
+    // window loads none: an extension sees every page, and the point here is
+    // that nothing does.
+    if (!this.incognito) {
+      setExtensionSession(this.ses)
+      void loadExtensions(this.ses)
+    }
 
     // The autofill script lives on the session, so it applies to every page in
     // this profile and to none of the chrome UI.
@@ -504,7 +525,7 @@ export class BrowserWindow {
     this.send('state:closed', [])
     // The saved session belongs to the browser, not to every window of it: a
     // second window starts empty rather than cloning the first.
-    if (this.offsetFromFirst || !this.restoreSession()) this.newTab()
+    if (this.incognito || this.offsetFromFirst || !this.restoreSession()) this.newTab()
     this.broadcast()
   }
 
@@ -668,7 +689,8 @@ export class BrowserWindow {
       maximized: this.win.isMaximized(),
       fullscreen: this.win.isFullScreen(),
       focused: this.win.isFocused(),
-      platform: process.platform
+      platform: process.platform,
+      incognito: this.incognito
     }
     this.send('state:window', state)
   }
@@ -695,7 +717,7 @@ export class BrowserWindow {
 
     wc.on('page-title-updated', (_e, title) => {
       tab.title = title
-      history.updateTitle(tab.url, title)
+      if (!this.incognito) history.updateTitle(tab.url, title)
       this.broadcast()
     })
     wc.on('page-favicon-updated', (_e, icons) => {
@@ -703,7 +725,7 @@ export class BrowserWindow {
       this.broadcast()
       // Kept so the start page can draw a real icon on its tiles without
       // going out to the site every time it opens.
-      if (tab.favicon) void favicons.remember(tab.url, tab.favicon, this.ses)
+      if (tab.favicon && !this.incognito) void favicons.remember(tab.url, tab.favicon, this.ses)
     })
     wc.on('did-start-loading', () => {
       tab.loading = true
@@ -742,7 +764,7 @@ export class BrowserWindow {
       documentHosts.set(wc.id, hostOfUrl(url))
       tab.progress = 0.7
       tab.upgraded = url.startsWith('https://')
-      history.record(url, tab.title)
+      if (!this.incognito) history.record(url, tab.title)
       this.persistSession()
       this.broadcast()
     })
@@ -751,7 +773,7 @@ export class BrowserWindow {
       // A route change in a single-page app brings a whole new set of elements.
       void this.applyCosmetic(wc)
       tab.url = url
-      history.record(url, tab.title)
+      if (!this.incognito) history.record(url, tab.title)
       this.broadcast()
     })
     wc.on('did-fail-load', (_e, code, description, url, isMainFrame) => {
@@ -851,6 +873,8 @@ export class BrowserWindow {
 
     if (input.shift) {
       switch (key) {
+        case 'n':
+          return this.run(() => this.chrome.webContents.send('shortcut', 'new-private-window'))
         case 't':
           return this.run(() => this.reopenClosed())
         case 'r':
@@ -1224,7 +1248,10 @@ export class BrowserWindow {
   suggestions(query: string): Suggestion[] {
     const q = query.trim()
     const s = settings.get()
-    if (!q) return s.historySuggestions ? history.recent(8) : []
+    // A private window neither writes history nor reads it back: suggesting
+    // yesterday's browsing to whoever is at the keyboard now defeats the point.
+    const useHistory = s.historySuggestions && !this.incognito
+    if (!q) return useHistory ? history.recent(8) : []
 
     const out: Suggestion[] = []
     const lower = q.toLowerCase()
@@ -1240,7 +1267,7 @@ export class BrowserWindow {
       }
       if (out.length > 6) break
     }
-    if (s.historySuggestions) out.push(...history.search(q, 6))
+    if (useHistory) out.push(...history.search(q, 6))
 
     const direct = normalizeInput(q, s)
     if (!/^https?:\/\/(duckduckgo|www\.google|www\.bing|search|yandex|www\.startpage|www\.mojeek|www\.ecosia|searx)/i.test(direct)) {
@@ -1314,6 +1341,9 @@ export class BrowserWindow {
   /** A page submitted credentials: offer to save them. */
   handleAutofillSubmitted(host: string, username: string, password: string) {
     if (!password) return
+    // Offering to save a password from a private window would be the one
+    // thing it promised not to do.
+    if (this.incognito) return
     const existing = vault.forOrigin(host).find((e) => e.username === username)
     this.send('state:save-password', {
       host,
@@ -1449,7 +1479,7 @@ export class BrowserWindow {
   }
 
   private persistSession() {
-    if (this.offsetFromFirst) return
+    if (this.incognito || this.offsetFromFirst) return
     if (!settings.get().restoreSession) return
     try {
       const payload = {

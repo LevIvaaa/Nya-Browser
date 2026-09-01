@@ -10,6 +10,8 @@ interface Props {
   stats: SecurityStats
   closed: ClosedTab[]
   profileName: string
+  /** a private window greets differently: it has nothing to remember */
+  incognito: boolean
   onOpenAddress: () => void
   onPatch: (patch: Partial<Settings>) => void
 }
@@ -51,6 +53,7 @@ export default function StartPage({
   stats,
   closed,
   profileName,
+  incognito,
   onOpenAddress,
   onPatch
 }: Props) {
@@ -128,13 +131,14 @@ export default function StartPage({
             {page.greeting && (
               <>
                 <h1 className={cx('tracking-[-0.03em]', page.clock ? 'text-[19px] font-medium' : 'text-[34px] font-semibold')}>
-                  {hello}
-                  {profileName ? `, ${profileName}` : ''}
+                  {incognito ? 'Приватное окно' : `${hello}${profileName ? `, ${profileName}` : ''}`}
                 </h1>
                 <p className="mt-1 text-base text-dim">
-                  {blockedTotal > 0
-                    ? `Заблокировано ${blockedTotal} трекеров и рекламных запросов`
-                    : 'Быстрый и приватный старт'}
+                  {incognito
+                    ? 'История, кэш и cookie этого окна исчезнут, когда вы его закроете'
+                    : blockedTotal > 0
+                      ? `Заблокировано ${blockedTotal} трекеров и рекламных запросов`
+                      : 'Быстрый и приватный старт'}
                 </p>
               </>
             )}
@@ -311,7 +315,7 @@ export default function StartPage({
             </div>
           )}
 
-          {page.closed && closed.length > 0 && (
+          {page.closed && !incognito && closed.length > 0 && (
             <div className="card p-4">
               <div className="mb-2.5 flex items-center gap-2 text-2xs font-semibold uppercase tracking-wider text-faint">
                 <Star width={13} height={13} /> Недавно закрытые
@@ -332,7 +336,7 @@ export default function StartPage({
             </div>
           )}
 
-          {page.recent && (
+          {page.recent && !incognito && (
             <div className="card p-4">
               <div className="mb-2.5 flex items-center gap-2 text-2xs font-semibold uppercase tracking-wider text-faint">
                 <Clock width={13} height={13} /> Недавнее

@@ -122,6 +122,16 @@ export const Download = (p: P) => (
     <path d="M5 18.5h14" />
   </svg>
 )
+/** A hat and glasses: the shorthand every browser uses for a private window. */
+export const Incognito = (p: P) => (
+  <svg {...svg(p, 1.6)}>
+    <path d="M4 12.5h16" />
+    <path d="M7.5 12.5 9 6.2a1.6 1.6 0 0 1 2-1.1l1 .3 1-.3a1.6 1.6 0 0 1 2 1.1l1.5 6.3" />
+    <circle cx="7.8" cy="16.4" r="2.6" />
+    <circle cx="16.2" cy="16.4" r="2.6" />
+    <path d="M10.4 16.4c.5-.5 2.7-.5 3.2 0" />
+  </svg>
+)
 export const UpdateArrow = (p: P) => (
   <svg {...svg(p, 1.6)}>
     <circle cx="12" cy="12" r="8.5" />

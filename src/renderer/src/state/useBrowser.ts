@@ -37,7 +37,7 @@ export function useBrowser() {
     ads: 0, trackers: 0, crypto: 0, upgrades: 0, params: 0, cookies: 0, since: Date.now()
   })
   const [win, setWin] = useState<WindowState>({
-    maximized: false, fullscreen: false, focused: true, platform: 'win32'
+    maximized: false, fullscreen: false, focused: true, platform: 'win32', incognito: false
   })
   const [permission, setPermission] = useState<PermissionRequest | null>(null)
   const [autofill, setAutofill] = useState<AutofillOffer | null>(null)
