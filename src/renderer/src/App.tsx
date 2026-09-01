@@ -239,6 +239,20 @@ export default function App() {
         />
       )}
 
+      {/* The wallpaper is behind the whole interface, and small text over a
+          photograph is hard to read. This is the dial for that: one scrim in
+          the window's own colour, from invisible to fully covering. */}
+      {overlayVisible && settings.veil > 0 && (
+        <div
+          className="pointer-events-none absolute inset-0 z-10"
+          style={{
+            background: 'var(--bg)',
+            opacity: settings.veil / 100,
+            transition: 'opacity var(--t-base) var(--ease-out)'
+          }}
+        />
+      )}
+
       <div
         className="relative z-20 flex min-h-0 flex-1 flex-col"
         onMouseLeave={settings.tabAutoHide ? scheduleHide : undefined}

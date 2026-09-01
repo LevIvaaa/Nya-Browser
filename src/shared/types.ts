@@ -84,6 +84,12 @@ export interface Settings {
   radius: number
   compact: boolean
   glass: boolean
+  /**
+   * How much of the wallpaper is allowed through the interface, 0-100. The
+   * glass toggle decides whether panels blur what is behind them; this decides
+   * how much there is to see in the first place.
+   */
+  veil: number
   reduceMotion: boolean
   animationSpeed: number
   background: BackgroundSettings

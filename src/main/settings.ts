@@ -58,6 +58,8 @@ export const DEFAULT_SETTINGS: Settings = {
   radius: 14,
   compact: false,
   glass: true,
+  // A little by default: a photograph behind small text is unreadable at zero.
+  veil: 30,
   reduceMotion: false,
   animationSpeed: 1,
   background: { ...DEFAULT_BACKGROUND },
@@ -221,6 +223,7 @@ export function sanitize(input: Partial<Settings>): Settings {
     radius: clamp(input.radius, 0, 28, d.radius),
     compact: bool(input.compact, d.compact),
     glass: bool(input.glass, d.glass),
+    veil: clamp(input.veil, 0, 100, d.veil),
     reduceMotion: bool(input.reduceMotion, d.reduceMotion),
     animationSpeed: clamp(input.animationSpeed, 0.4, 2, d.animationSpeed),
     background: sanitizeBackground(input.background),

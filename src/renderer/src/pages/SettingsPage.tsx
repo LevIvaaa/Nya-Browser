@@ -302,6 +302,16 @@ export default function SettingsPage({
                 <Row title="Эффект стекла" hint="Размытие под панелями">
                   <Toggle checked={settings.glass} onChange={(value) => onPatch({ glass: value })} />
                 </Row>
+                <Row title="Плотность подложки" hint="Насколько обои просвечивают сквозь панели и страницы">
+                  <Slider
+                    value={settings.veil}
+                    min={0}
+                    max={100}
+                    step={5}
+                    format={(v) => `${v}%`}
+                    onChange={(value) => onPatch({ veil: value })}
+                  />
+                </Row>
               </Section>
 
               <Section title="Движение" icon={<Sparkles width={15} height={15} />} description="Скорость и плавность анимаций">
