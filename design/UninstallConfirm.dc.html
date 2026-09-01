@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      margin: 0;
+      font-family: 'Inter var', 'Inter', 'Segoe UI Variable Text', 'Segoe UI', -apple-system, system-ui, sans-serif;
+      font-feature-settings: 'cv02', 'cv03', 'cv04', 'ss01';
+      -webkit-font-smoothing: antialiased;
+      background: #0c0d12;
+      color: #f2f3f7;
+    }
+    a { color: #7c6cff; text-decoration: none; }
+    a:hover { color: #9c90ff; }
+    .blob { position: absolute; border-radius: 50%; filter: blur(90px); mix-blend-mode: screen; pointer-events: none; }
+  </style>
+</helmet>
+
+<div style="position: relative; width: 640px; height: 400px; overflow: hidden; background: #0c0d12; display: flex; flex-direction: column;">
+
+  <div class="blob" style="width: 320px; height: 320px; left: -90px; top: -120px; background: #7c6cff; opacity: 0.22;"></div>
+  <div class="blob" style="width: 280px; height: 280px; right: -80px; top: -60px; background: #e5484d; opacity: 0.14;"></div>
+
+  <div style="position: relative; z-index: 1; display: flex; justify-content: flex-end; align-items: stretch; height: 34px;">
+    <div data-nsis="close-x" style="display: flex; align-items: center; justify-content: center; width: 46px; height: 34px; color: rgba(242, 243, 247, 0.62);">
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+        <path d="M0.6 0.6l8.8 8.8M9.4 0.6L0.6 9.4" stroke="currentColor" stroke-width="1"></path>
+      </svg>
+    </div>
+  </div>
+
+  <div style="position: relative; z-index: 1; flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 32px;">
+    <img src="nya-logo.png" alt="" style="width: 84px; height: 84px; filter: drop-shadow(0 12px 28px rgba(124, 108, 255, 0.35));">
+    <div style="margin-top: 14px; font-size: 26px; line-height: 31px; font-weight: 600; letter-spacing: -0.02em;">Удалить Nya Browser?</div>
+    <div style="margin-top: 6px; font-size: 13.5px; line-height: 19px; color: rgba(242, 243, 247, 0.62); text-align: center;">Браузер и его ярлыки будут удалены с компьютера</div>
+    <div style="margin-top: 24px; display: flex; gap: 12px;">
+      <button data-nsis="remove" style="height: 44px; width: 160px; border: 0; border-radius: 12px; background: #e5484d; color: #ffffff; font: 500 15px/1 'Inter var', 'Inter', 'Segoe UI', system-ui, sans-serif; letter-spacing: -0.01em; cursor: pointer; box-shadow: 0 10px 26px -10px rgba(229, 72, 77, 0.85);">Удалить</button>
+      <button data-nsis="cancel" style="height: 44px; width: 120px; border: 0; border-radius: 12px; background: rgba(255, 255, 255, 0.05); color: #f2f3f7; font: 500 15px/1 'Inter var', 'Inter', 'Segoe UI', system-ui, sans-serif; letter-spacing: -0.01em; cursor: pointer;">Отмена</button>
+    </div>
+  </div>
+
+  <div style="position: relative; z-index: 1; display: flex; flex-direction: column; gap: 10px; padding: 14px 22px 16px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
+    <div data-nsis="row-wipe" style="display: flex; align-items: center; gap: 8px;">
+      <span data-nsis="box-wipe" style="display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 5px; border: 1px solid rgba(255, 255, 255, 0.16); color: #ffffff;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="m5 12.5 4.5 4.5L19 7"></path></svg></span>
+      <span style="font-size: 12.5px; line-height: 17px; color: rgba(242, 243, 247, 0.62);">Удалить также настройки, историю, закладки и пароли</span>
+    </div>
+    <div style="font-size: 11px; line-height: 15px; color: rgba(242, 243, 247, 0.38);">Версия 1.0.0</div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

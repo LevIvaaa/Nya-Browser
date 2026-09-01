@@ -1,0 +1,128 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      margin: 0;
+      font-family: 'Inter var', 'Inter', 'Segoe UI Variable Text', 'Segoe UI', -apple-system, system-ui, sans-serif;
+      font-feature-settings: 'cv02', 'cv03', 'cv04', 'ss01';
+      -webkit-font-smoothing: antialiased;
+      background: #0c0d12;
+      color: #f2f3f7;
+    }
+    a { color: #7c6cff; text-decoration: none; }
+    a:hover { color: #9c90ff; }
+    .blob { position: absolute; border-radius: 50%; filter: blur(90px); mix-blend-mode: screen; pointer-events: none; }
+    .ic { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 10px; color: rgba(242, 243, 247, 0.62); }
+  </style>
+</helmet>
+
+<div style="position: relative; width: 1040px; height: 360px; overflow: hidden; background: #0c0d12; display: flex; flex-direction: column;">
+
+  <div class="blob" style="width: 420px; height: 380px; left: 4%; top: -140px; background: #7c6cff; opacity: 0.20;"></div>
+  <div class="blob" style="width: 380px; height: 340px; right: -60px; bottom: -160px; background: #0a84ff; opacity: 0.14;"></div>
+
+  <div style="position: relative; z-index: 2; display: flex; align-items: center; gap: 4px; height: 44px; padding-left: 8px;">
+    <div style="display: flex; align-items: center; gap: 2px;">
+      <span class="ic" style="opacity: 0.32;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M15 19l-7-7 7-7"></path></svg></span>
+      <span class="ic" style="opacity: 0.32;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"></path></svg></span>
+      <span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1"></path><path d="M20.5 4.5V10H15"></path></svg></span>
+      <span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19z"></path></svg></span>
+    </div>
+
+    <div style="display: flex; flex-grow: 1; min-width: 0; justify-content: center; padding: 0 8px;">
+      <div style="display: flex; align-items: center; gap: 8px; height: 32px; width: 100%; max-width: 760px; border-radius: 11px; background: rgba(255, 255, 255, 0.05); padding: 0 12px;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2fbf71" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><rect x="5.5" y="10.5" width="13" height="9" rx="2.5"></rect><path d="M8.5 10.5V8a3.5 3.5 0 1 1 7 0v2.5"></path></svg>
+        <span style="flex-grow: 1; min-width: 0; font-size: 12.5px; line-height: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><span style="color: #f2f3f7;">github.com</span><span style="color: rgba(242, 243, 247, 0.38);">/LevIvaaa/Nya-Browser/releases</span></span>
+        <span style="display: flex; align-items: center; gap: 4px; flex-shrink: 0; border-radius: 999px; padding: 1px 6px; background: rgba(47, 191, 113, 0.16); color: #2fbf71; font-size: 10px; line-height: 13px; font-weight: 600;">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 19 6v5.6c0 4.3-2.9 7.4-7 8.9-4.1-1.5-7-4.6-7-8.9V6z"></path></svg>
+          7
+        </span>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 2px; padding-right: 4px;">
+      <span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 4 2.5 5.1 5.6.8-4 3.9 1 5.6-5.1-2.7-5.1 2.7 1-5.6-4-3.9 5.6-.8z"></path></svg></span>
+      <span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10.5M8 11l4 4 4-4"></path><path d="M5 18.5h14"></path></svg></span>
+      <span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5.5v13M5.5 12h13"></path></svg></span>
+      <span class="ic"><span style="display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 999px; background: #0a84ff; color: #fff; font-size: 11px; font-weight: 600;">Л</span></span>
+      <span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.1"></circle><path d="M19.4 14.5a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.2a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.2a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.2a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.2a1.6 1.6 0 0 0-1.5 1z"></path></svg></span>
+      <span class="ic" style="position: relative; background: rgba(255, 255, 255, 0.1); color: #f2f3f7;">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><circle cx="5.5" cy="12" r="1.4" fill="currentColor"></circle><circle cx="12" cy="12" r="1.4" fill="currentColor"></circle><circle cx="18.5" cy="12" r="1.4" fill="currentColor"></circle></svg>
+        <span style="position: absolute; right: 4px; top: 4px; width: 6px; height: 6px; border-radius: 999px; background: #7c6cff;"></span>
+      </span>
+    </div>
+
+    <div style="display: flex; align-self: flex-start;">
+      <span style="display: flex; align-items: center; justify-content: center; width: 46px; height: 34px; color: rgba(242, 243, 247, 0.62);"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M0 5.2h10" stroke="currentColor" stroke-width="1"></path></svg></span>
+      <span style="display: flex; align-items: center; justify-content: center; width: 46px; height: 34px; color: rgba(242, 243, 247, 0.62);"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><rect x="0.5" y="0.5" width="9" height="9" stroke="currentColor" stroke-width="1" rx="1.4"></rect></svg></span>
+      <span style="display: flex; align-items: center; justify-content: center; width: 46px; height: 34px; color: rgba(242, 243, 247, 0.62); border-top-right-radius: 10px;"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M0.6 0.6l8.8 8.8M9.4 0.6L0.6 9.4" stroke="currentColor" stroke-width="1"></path></svg></span>
+    </div>
+  </div>
+
+  <div style="position: relative; z-index: 1; display: flex; align-items: center; gap: 4px; padding: 0 8px 6px;">
+    <div style="display: flex; align-items: center; gap: 8px; height: 34px; width: 210px; padding: 0 10px; border-radius: 11px; background: #16171e; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);">
+      <span style="display: flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 4px; background: #f2f3f7; color: #0c0d12; font-size: 9px; font-weight: 700;">G</span>
+      <span style="flex-grow: 1; min-width: 0; font-size: 12.5px; line-height: 17px; font-weight: 500; color: #f2f3f7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Releases · Nya-Browser</span>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(242,243,247,0.38)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 6.5l-11 11M6.5 6.5l11 11"></path></svg>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px; height: 34px; width: 180px; padding: 0 10px; border-radius: 11px;">
+      <span style="display: flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 4px; background: #00b8a9; color: #fff; font-size: 9px; font-weight: 700;">Х</span>
+      <span style="flex-grow: 1; min-width: 0; font-size: 12.5px; line-height: 17px; color: rgba(242, 243, 247, 0.62); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Хабр</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px; height: 34px; width: 180px; padding: 0 10px; border-radius: 11px;">
+      <span style="display: flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 4px; background: #e5484d; color: #fff; font-size: 9px; font-weight: 700;">Y</span>
+      <span style="flex-grow: 1; min-width: 0; font-size: 12.5px; line-height: 17px; color: rgba(242, 243, 247, 0.62); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">YouTube</span>
+    </div>
+    <span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5.5v13M5.5 12h13"></path></svg></span>
+  </div>
+
+  <div style="position: relative; flex-grow: 1; display: flex; flex-direction: column; align-items: center; padding-top: 26px; overflow: hidden;">
+    <div style="font-size: 44px; line-height: 1; font-weight: 600; letter-spacing: -0.03em; font-variant-numeric: tabular-nums;">21:40</div>
+    <div style="margin-top: 8px; font-size: 19px; line-height: 24px; font-weight: 500; letter-spacing: -0.03em;">Добрый вечер</div>
+    <div style="margin-top: 22px; display: flex; align-items: center; gap: 12px; height: 56px; width: 100%; max-width: 640px; border-radius: 18px; border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(255, 255, 255, 0.055); padding: 0 20px;">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="rgba(242,243,247,0.38)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"></circle><path d="m19.5 19.5-3.6-3.6"></path></svg>
+      <span style="font-size: 15px; color: rgba(242, 243, 247, 0.38);">Поиск или адрес сайта</span>
+    </div>
+    <div style="margin-top: 26px; display: flex; gap: 16px;">
+      <span style="display: flex; align-items: center; justify-content: center; width: 54px; height: 54px; border-radius: 17px; background: #7c6cff; color: #fff; font-size: 20px; font-weight: 600;">G</span>
+      <span style="display: flex; align-items: center; justify-content: center; width: 54px; height: 54px; border-radius: 17px; background: #0a84ff; color: #fff; font-size: 20px; font-weight: 600;">T</span>
+      <span style="display: flex; align-items: center; justify-content: center; width: 54px; height: 54px; border-radius: 17px; background: #00b8a9; color: #fff; font-size: 20px; font-weight: 600;">Х</span>
+      <span style="display: flex; align-items: center; justify-content: center; width: 54px; height: 54px; border-radius: 17px; background: #f5a524; color: #fff; font-size: 20px; font-weight: 600;">К</span>
+      <span style="display: flex; align-items: center; justify-content: center; width: 54px; height: 54px; border-radius: 17px; background: #e255a1; color: #fff; font-size: 20px; font-weight: 600;">N</span>
+    </div>
+  </div>
+
+  <div style="position: absolute; inset: 0; z-index: 3; background: rgba(12, 13, 18, 0.4);"></div>
+  <div style="position: absolute; top: 46px; right: 8px; z-index: 4; width: 300px; border-radius: 18px; overflow: hidden; background: rgba(24, 26, 34, 0.92); border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: 0 48px 110px -30px rgba(0, 0, 0, 0.85), 0 0 0 0.5px rgba(255, 255, 255, 0.1); backdrop-filter: blur(28px) saturate(180%);">
+    <div style="display: flex; flex-direction: column; gap: 13px; padding: 16px;">
+      <div style="display: flex; align-items: center; gap: 11px;">
+        <img src="nya-logo.png" alt="" style="width: 38px; height: 38px; flex-shrink: 0;">
+        <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+          <div style="font-size: 13.5px; line-height: 19px; font-weight: 600; letter-spacing: -0.01em;">Доступно обновление</div>
+          <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; line-height: 15px; color: rgba(242, 243, 247, 0.38); font-variant-numeric: tabular-nums;">
+            <span>1.0.0</span>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"></path></svg>
+            <span style="color: #a99fff; font-weight: 600;">1.1.0</span>
+            
+          </div>
+        </div>
+      </div>
+      <div style="font-size: 12.5px; line-height: 17px; color: rgba(242, 243, 247, 0.62); text-wrap: pretty;">Браузер закроется, обновится и откроется снова. Вкладки восстановятся.</div>
+      <div style="display: flex; gap: 8px;">
+        <button style="flex-grow: 1; height: 34px; border: 0; border-radius: 11px; background: #7c6cff; color: #fff; font: 500 12.5px/1 'Inter var', 'Inter', 'Segoe UI', system-ui, sans-serif; cursor: pointer;">Обновить</button>
+        <button style="height: 34px; padding: 0 14px; border: 0; border-radius: 11px; background: rgba(255, 255, 255, 0.05); color: #f2f3f7; font: 500 12.5px/1 'Inter var', 'Inter', 'Segoe UI', system-ui, sans-serif; cursor: pointer;">Позже</button>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      margin: 0;
+      font-family: 'Inter var', 'Inter', 'Segoe UI Variable Text', 'Segoe UI', -apple-system, system-ui, sans-serif;
+      font-feature-settings: 'cv02', 'cv03', 'cv04', 'ss01';
+      -webkit-font-smoothing: antialiased;
+      background: #0c0d12;
+      color: #f2f3f7;
+    }
+    a { color: #7c6cff; text-decoration: none; }
+    a:hover { color: #9c90ff; }
+    .blob { position: absolute; border-radius: 50%; filter: blur(90px); mix-blend-mode: screen; pointer-events: none; }
+  </style>
+</helmet>
+
+<div style="position: relative; width: 640px; height: 400px; overflow: hidden; background: #0c0d12; display: flex; flex-direction: column;">
+
+  <div class="blob" style="width: 340px; height: 340px; left: -100px; top: -140px; background: #7c6cff; opacity: 0.26;"></div>
+  <div class="blob" style="width: 280px; height: 280px; right: -90px; bottom: -120px; background: #0a84ff; opacity: 0.14;"></div>
+
+  <div style="height: 34px;"></div>
+
+  <div style="position: relative; z-index: 1; flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 40px;">
+    <img src="nya-logo.png" alt="" style="width: 64px; height: 64px; filter: drop-shadow(0 10px 24px rgba(124, 108, 255, 0.45));">
+    <div style="margin-top: 16px; font-size: 20px; line-height: 24px; font-weight: 600; letter-spacing: -0.015em;">Обновляем Nya Browser</div>
+
+    <div data-nsis="version" style="margin-top: 10px; display: flex; align-items: center; gap: 8px;">
+      <span style="height: 22px; display: flex; align-items: center; padding: 0 9px; border-radius: 999px; background: rgba(255, 255, 255, 0.05); font-size: 11px; line-height: 15px; font-weight: 500; color: rgba(242, 243, 247, 0.62); font-variant-numeric: tabular-nums;">1.0.0</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(242,243,247,0.38)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"></path></svg>
+      <span style="height: 22px; display: flex; align-items: center; padding: 0 9px; border-radius: 999px; background: rgba(124, 108, 255, 0.16); font-size: 11px; line-height: 15px; font-weight: 600; color: #a99fff; font-variant-numeric: tabular-nums;">1.1.0</span>
+    </div>
+
+    <div style="margin-top: 26px; width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 9px;">
+      <div data-nsis="progress" style="position: relative; height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.07); overflow: hidden;">
+        <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 78%; border-radius: 999px; background: #7c6cff; box-shadow: 0 0 18px -2px rgba(124, 108, 255, 0.9);"></div>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <span style="font-size: 11px; line-height: 15px; color: rgba(242, 243, 247, 0.38);">Заменяем файлы браузера</span>
+        <span data-nsis-hide style="font-size: 11px; line-height: 15px; font-weight: 600; color: rgba(242, 243, 247, 0.62); font-variant-numeric: tabular-nums;">78%</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="position: relative; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 14px 22px 16px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
+    <span style="display: flex; flex-shrink: 0; color: rgba(242, 243, 247, 0.38);">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg>
+    </span>
+    <span style="font-size: 12.5px; line-height: 17px; color: rgba(242, 243, 247, 0.62);">Займёт несколько секунд</span>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

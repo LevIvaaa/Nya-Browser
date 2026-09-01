@@ -12,6 +12,15 @@ out/
 dist/
 release/
 
+# --- generated, not authored -----------------------------------------------
+# The installer's artwork is rendered from design/*.dc.html by `npm run art`;
+# twenty megabytes of bitmaps do not belong in history when the source of them
+# does. The seeded canvas page carries a copy of the design editor for the same
+# reason.
+build/art/
+build/art-layout.nsh
+design/nya-installer-flow.html
+
 # --- caches & logs ---------------------------------------------------------
 *.tsbuildinfo
 *.log

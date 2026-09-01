@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      margin: 0;
+      font-family: 'Inter var', 'Inter', 'Segoe UI Variable Text', 'Segoe UI', -apple-system, system-ui, sans-serif;
+      font-feature-settings: 'cv02', 'cv03', 'cv04', 'ss01';
+      -webkit-font-smoothing: antialiased;
+      background: #0c0d12;
+      color: #f2f3f7;
+    }
+    a { color: #7c6cff; text-decoration: none; }
+    a:hover { color: #9c90ff; }
+    .blob { position: absolute; border-radius: 50%; filter: blur(90px); mix-blend-mode: screen; pointer-events: none; }
+  </style>
+</helmet>
+
+<div style="position: relative; width: 640px; height: 400px; overflow: hidden; background: #0c0d12; display: flex; flex-direction: column;">
+
+  <div class="blob" style="width: 320px; height: 320px; left: -80px; top: -130px; background: #7c6cff; opacity: 0.22;"></div>
+  <div class="blob" style="width: 260px; height: 260px; right: -70px; top: -40px; background: #2fbf71; opacity: 0.14;"></div>
+
+  <div style="height: 34px;"></div>
+
+  <div style="position: relative; z-index: 1; flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 40px;">
+    <div style="position: relative; display: flex; align-items: center; justify-content: center;">
+      <img src="nya-logo.png" alt="" style="width: 72px; height: 72px; filter: drop-shadow(0 12px 28px rgba(124, 108, 255, 0.45));">
+      <span style="position: absolute; right: -4px; bottom: 0; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 999px; background: #2fbf71; color: #0c0d12; border: 3px solid #0c0d12;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7"></path></svg>
+      </span>
+    </div>
+    <div style="margin-top: 16px; font-size: 22px; line-height: 26px; font-weight: 600; letter-spacing: -0.02em;">Обновлено до 1.1.0</div>
+    <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px;">
+      <span style="display: block; width: 13px; height: 13px; border-radius: 999px; border: 2px solid rgba(255, 255, 255, 0.12); border-top-color: #7c6cff;"></span>
+      <span style="font-size: 13.5px; line-height: 19px; color: rgba(242, 243, 247, 0.62);">Запускаем браузер…</span>
+    </div>
+  </div>
+
+  <div style="position: relative; z-index: 1; display: flex; align-items: center; justify-content: flex-start; gap: 12px; padding: 14px 22px 16px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
+    <a href="#" style="font-size: 12.5px; line-height: 17px; font-weight: 500; position: static">Что нового в 1.1.0</a>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
