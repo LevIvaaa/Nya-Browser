@@ -292,20 +292,35 @@ function registerIpc() {
     })
   })
 
+  /**
+   * Settings belong to the profile, not to the window that changed them. A
+   * window told nothing keeps its old copy, and the next thing it saves —
+   * a favourite added on its start page, say — writes that stale copy back
+   * over the change.
+   */
+  const applyEverywhere = () => {
+    for (const win of windows) win.applySettings()
+  }
+
+  /** Same for the profile list: renaming one must not leave a window behind. */
+  const profilesEverywhere = () => {
+    for (const win of windows) win.sendProfiles()
+  }
+
   /* ---- settings ---- */
   ipcMain.handle('settings:get', (event) => settings.get())
   ipcMain.handle('settings:engines', (event) => SEARCH_ENGINES)
   ipcMain.handle('settings:set', (event, patch: unknown) => {
     const next = settings.patch((patch ?? {}) as Partial<Settings>)
     nativeTheme.themeSource = next.theme
-    current(event).applySettings()
+    applyEverywhere()
     if (next.filterLists && !engine.ready) void loadFilters()
     return next
   })
   ipcMain.handle('settings:reset', (event) => {
     const next = settings.reset()
     nativeTheme.themeSource = next.theme
-    current(event).applySettings()
+    applyEverywhere()
     return next
   })
   ipcMain.handle('settings:export', (event) => JSON.stringify(settings.get(), null, 2))
@@ -314,7 +329,7 @@ function registerIpc() {
       const parsed = JSON.parse(str(json, 200_000))
       const next = settings.patch(parsed as Partial<Settings>)
       nativeTheme.themeSource = next.theme
-      current(event).applySettings()
+      applyEverywhere()
       return true
     } catch {
       return false
@@ -326,7 +341,7 @@ function registerIpc() {
     const dir = await downloads.chooseFolder()
     if (dir) {
       settings.patch({ downloadDir: dir })
-      current(event).applySettings()
+      applyEverywhere()
     }
     return dir
   })
@@ -336,12 +351,12 @@ function registerIpc() {
   ipcMain.handle('profiles:choices', (event) => ({ avatars: AVATAR_CHOICES, colors: COLOR_CHOICES }))
   ipcMain.handle('profiles:create', (event, name: unknown) => {
     const profile = profiles.create(str(name, 40) || 'Профиль')
-    current(event).sendProfiles()
+    profilesEverywhere()
     return profile
   })
   ipcMain.handle('profiles:update', (event, id: unknown, patch: unknown) => {
     const state = profiles.update(str(id, 64), (patch ?? {}) as Record<string, string>)
-    current(event).sendProfiles()
+    profilesEverywhere()
     return state
   })
   /* ---- weather ---- */
@@ -367,17 +382,17 @@ function registerIpc() {
     } catch (error) {
       log('profiles: could not use that picture', String(error))
     }
-    win.sendProfiles()
+    profilesEverywhere()
     return state
   })
   ipcMain.handle('profiles:clear-avatar', (event, id: unknown, emoji: unknown) => {
     const state = profiles.clearAvatarFile(str(id, 64), str(emoji, 8) || '🐱')
-    current(event).sendProfiles()
+    profilesEverywhere()
     return state
   })
   ipcMain.handle('profiles:remove', (event, id: unknown) => {
     const state = profiles.remove(str(id, 64))
-    current(event).sendProfiles()
+    profilesEverywhere()
     return state
   })
   ipcMain.handle('profiles:switch', (event, id: unknown) => {
