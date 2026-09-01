@@ -13,6 +13,7 @@ import type {
   SecurityStats,
   Settings,
   StartPageFont,
+  TileShape,
   TileStyle,
   UpdateState,
   WidevineState
@@ -506,6 +507,44 @@ export default function SettingsPage({
                   ]}
                   onChange={(v) => onPatch({ startPage: { ...settings.startPage, tiles: v as TileStyle } })}
                 />
+              </Row>
+              <Row title="Форма плиток и карточек">
+                <Select
+                  value={settings.startPage.shape}
+                  options={[
+                    { value: 'rounded', label: 'Скруглённые' },
+                    { value: 'soft', label: 'Мягкие' },
+                    { value: 'circle', label: 'Круглые' },
+                    { value: 'square', label: 'Прямые' }
+                  ]}
+                  onChange={(v) => onPatch({ startPage: { ...settings.startPage, shape: v as TileShape } })}
+                />
+              </Row>
+              <Row title="Подписи под значками" hint="Выключите, чтобы на плитке остался только логотип сайта">
+                <Toggle
+                  checked={settings.startPage.tileLabels}
+                  onChange={(v) => onPatch({ startPage: { ...settings.startPage, tileLabels: v } })}
+                />
+              </Row>
+              <Row title="Цвет текста" hint={settings.startPage.ink || 'По теме — тёмный на светлой, светлый на тёмной'}>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    className="h-8 w-10 cursor-pointer rounded-[9px] border-0 bg-transparent p-0"
+                    value={settings.startPage.ink || '#ffffff'}
+                    onChange={(event) =>
+                      onPatch({ startPage: { ...settings.startPage, ink: event.target.value } })
+                    }
+                  />
+                  {settings.startPage.ink && (
+                    <button
+                      className="btn"
+                      onClick={() => onPatch({ startPage: { ...settings.startPage, ink: '' } })}
+                    >
+                      По теме
+                    </button>
+                  )}
+                </div>
               </Row>
               <Row title="Расположение виджетов" hint="Двигать и менять размер можно прямо на главной — кнопка «Настроить» в углу">
                 <button

@@ -581,8 +581,11 @@ function SearchStep({
   const list = engines.filter((item) => item.id !== 'custom')
   return (
     <div>
-      <Title title="Чем искать" hint="Отмеченные как приватные не строят на вас профиль" />
-      <div className="grid max-h-[52vh] grid-cols-2 gap-2.5 overflow-y-auto pr-1">
+      <Title title="Чем искать" hint="Поменять можно в любой момент в настройках" />
+      {/* No max-height and no scroller here: with just the names the list fits,
+          and a container that can scroll grows a scrollbar the moment a card
+          lifts on hover. */}
+      <div className="grid grid-cols-3 gap-2.5">
         {list.map((item) => (
           <Choice
             key={item.id}
@@ -590,21 +593,7 @@ function SearchStep({
             onClick={() => onPatch({ searchEngine: item.id })}
             title={item.name}
           >
-            <span className="flex items-center gap-2">
-              <span className="text-base font-medium">{item.name}</span>
-              {item.privacy === 'high' && (
-                <span
-                  className="rounded-pill px-1.5 py-0.5 text-2xs font-semibold"
-                  style={{
-                    background: 'color-mix(in srgb, var(--good) 20%, transparent)',
-                    color: 'var(--good)'
-                  }}
-                >
-                  приватный
-                </span>
-              )}
-            </span>
-            <span className="text-sm text-faint">{item.hint}</span>
+            <span className="truncate pr-5 text-base font-medium">{item.name}</span>
           </Choice>
         ))}
       </div>

@@ -52,6 +52,9 @@ export const DEFAULT_START_PAGE: StartPageSettings = {
   columns: 8,
   font: 'system',
   tiles: 'card',
+  shape: 'rounded',
+  tileLabels: true,
+  ink: '',
   layout: { ...DEFAULT_LAYOUT },
   place: { ...DEFAULT_PLACE }
 }
@@ -246,6 +249,10 @@ function sanitizeStartPage(v: unknown): StartPageSettings {
     columns: clamp(s.columns, 4, 12, d.columns),
     font: oneOf(s.font, ['system', 'rounded', 'serif', 'mono'] as const, d.font),
     tiles: oneOf(s.tiles, ['card', 'icon'] as const, d.tiles),
+    shape: oneOf(s.shape, ['rounded', 'soft', 'circle', 'square'] as const, d.shape),
+    tileLabels: bool(s.tileLabels, d.tileLabels),
+    // Empty means "follow the theme"; anything that is not a colour becomes that.
+    ink: /^#[0-9a-f]{6}$/i.test(String(s.ink)) ? String(s.ink) : '',
     layout: sanitizeLayout(s.layout),
     place: sanitizePlace(s.place)
   }
