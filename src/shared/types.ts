@@ -141,6 +141,13 @@ export interface StartPageSettings {
 }
 
 export interface Settings {
+  /**
+   * False until the welcome flow has been through once. It is the only setting
+   * the browser writes without being asked, and it is what keeps the flow from
+   * greeting the same person twice.
+   */
+  onboarded: boolean
+
   // ---- appearance
   theme: ThemeMode
   accent: string
