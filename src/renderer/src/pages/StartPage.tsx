@@ -14,6 +14,7 @@ import type {
 import { DEFAULT_LAYOUT, GRID_COLUMNS, GRID_GAP, GRID_ROW } from '../../../shared/startPage'
 import type { ClosedTab } from '../../../preload/index'
 import {
+  Check,
   Clock,
   Cross,
   Grip,
@@ -689,11 +690,21 @@ function EditBar({
           </button>
         </div>
       )}
+      {/* Just the pencil. The bar it opens explains itself, and a labelled
+          button sat in the corner of every new tab saying what it was. */}
       <button
-        className={cx('btn pointer-events-auto', editing && 'btn-primary')}
+        className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-pill"
         onClick={onToggle}
+        title={editing ? 'Готово' : 'Настроить главную'}
+        aria-label={editing ? 'Готово' : 'Настроить главную'}
+        style={{
+          background: editing ? 'var(--accent)' : 'var(--surface-solid)',
+          color: editing ? '#fff' : 'var(--ink)',
+          boxShadow: 'var(--shadow-md)',
+          transition: 'background var(--t-base) linear, color var(--t-base) linear'
+        }}
       >
-        {editing ? 'Готово' : <><Pencil width={13} height={13} /> Настроить</>}
+        {editing ? <Check width={16} height={16} /> : <Pencil width={15} height={15} />}
       </button>
     </div>
   )
