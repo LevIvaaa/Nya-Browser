@@ -299,17 +299,14 @@ export default function SettingsPage({
                 <Row title="Компактный режим" hint="Меньше высота панелей и вкладок">
                   <Toggle checked={settings.compact} onChange={(value) => onPatch({ compact: value })} />
                 </Row>
-                <Row title="Эффект стекла" hint="Размытие под панелями">
-                  <Toggle checked={settings.glass} onChange={(value) => onPatch({ glass: value })} />
-                </Row>
-                <Row title="Плотность подложки" hint="Насколько обои просвечивают сквозь панели и страницы">
+                <Row title="Эффект стекла" hint="Насколько плотные панели, вкладки и карточки — обои под ними остаются как есть">
                   <Slider
-                    value={settings.veil}
+                    value={settings.glass}
                     min={0}
                     max={100}
                     step={5}
                     format={(v) => `${v}%`}
-                    onChange={(value) => onPatch({ veil: value })}
+                    onChange={(value) => onPatch({ glass: value })}
                   />
                 </Row>
               </Section>

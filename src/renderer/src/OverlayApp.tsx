@@ -42,7 +42,9 @@ export default function OverlayApp() {
     root.style.setProperty('--radius', `${settings.radius}px`)
     root.style.setProperty('--speed', String(settings.reduceMotion ? 0.001 : settings.animationSpeed))
     root.dataset.motion = settings.reduceMotion ? 'reduced' : 'full'
-    root.dataset.glass = settings.glass ? 'on' : 'off'
+    root.style.setProperty('--panel', String(settings.glass / 100))
+    // Blurring what cannot be seen through costs frames for nothing.
+    root.dataset.glass = settings.glass >= 100 ? 'off' : 'on'
     document.body.style.background = 'transparent'
     return () => media.removeEventListener('change', apply)
   }, [settings])

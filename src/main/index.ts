@@ -92,7 +92,25 @@ function applyStartupSwitches() {
   app.commandLine.appendSwitch('force-webrtc-ip-handling-policy', webrtc)
 }
 
+// Every open window. IPC is registered once and answers whichever window the
+// message came from, so a second window is not a special case anywhere.
+const windows = new Set<BrowserWindow>()
 let browser: BrowserWindow | null = null
+
+/** Opens another window, wired the same way as the first. */
+function openWindow(): BrowserWindow {
+  const win = new BrowserWindow()
+  windows.add(win)
+  win.win.on('closed', () => {
+    windows.delete(win)
+    if (browser === win) browser = windows.values().next().value ?? null
+  })
+  win.win.on('focus', () => {
+    browser = win
+  })
+  browser = win
+  return win
+}
 
 /* ------------------------------------------------------------------------- */
 /* Single instance                                                            */
@@ -136,12 +154,12 @@ if (!app.requestSingleInstanceLock()) {
     // instant and offline; only a stale list actually hits the network.
     if (settings.get().filterLists) void loadFilters()
 
-    browser = new BrowserWindow()
-    registerIpc(browser)
-    buildMenu(browser)
+    const first = openWindow()
+    registerIpc()
+    buildMenu(first)
 
-    browser.chrome.webContents.once('did-finish-load', () => {
-      const b = browser!
+    first.chrome.webContents.once('did-finish-load', () => {
+      const b = first
       log('chrome ready, profile', profiles.active.name)
       b.sendWindowState()
       b.sendProfiles()
@@ -175,11 +193,10 @@ if (!app.requestSingleInstanceLock()) {
     })
 
     app.on('activate', () => {
-      if (!browser || browser.win.isDestroyed()) {
-        browser = new BrowserWindow()
-        registerIpc(browser)
-        buildMenu(browser)
-        browser.chrome.webContents.once('did-finish-load', () => browser!.newTab())
+      if (windows.size === 0) {
+        const win = openWindow()
+        buildMenu(win)
+        win.chrome.webContents.once('did-finish-load', () => win.newTab())
       }
     })
   })
@@ -190,74 +207,82 @@ if (!app.requestSingleInstanceLock()) {
 /* ------------------------------------------------------------------------- */
 let ipcRegistered = false
 
-function registerIpc(initial: BrowserWindow) {
+function registerIpc() {
   if (ipcRegistered) return
   ipcRegistered = true
-  const current = () => browser ?? initial
+
+  // The window that sent the message, falling back to the focused one: menu
+  // clicks and shortcuts both arrive from a window's own views.
+  const current = (event?: Electron.IpcMainInvokeEvent) => {
+    if (event) {
+      for (const win of windows) if (win.owns(event.sender)) return win
+    }
+    return browser ?? windows.values().next().value!
+  }
 
   const str = (value: unknown, max = 4096) => (typeof value === 'string' ? value.slice(0, max) : '')
   const num = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
   const flag = (value: unknown) => value === true
 
   /* ---- tabs ---- */
-  ipcMain.handle('tab:new', (_e, url?: unknown, background?: unknown) =>
-    current().newTab(str(url), flag(background))
+  ipcMain.handle('tab:new', (event, url?: unknown, background?: unknown) =>
+    current(event).newTab(str(url), flag(background))
   )
-  ipcMain.handle('tab:close', (_e, id: unknown) => current().closeTab(num(id)))
-  ipcMain.handle('tab:close-others', (_e, id: unknown) => current().closeOthers(num(id)))
-  ipcMain.handle('tab:close-right', (_e, id: unknown) => current().closeToRight(num(id)))
-  ipcMain.handle('tab:switch', (_e, id: unknown) => current().switchTab(num(id)))
-  ipcMain.handle('tab:move', (_e, id: unknown, index: unknown) => current().moveTab(num(id), num(index)))
-  ipcMain.handle('tab:duplicate', (_e, id: unknown) => current().duplicateTab(num(id)))
-  ipcMain.handle('tab:mute', (_e, id: unknown) => current().toggleMute(num(id)))
-  ipcMain.handle('tab:sleep', (_e, id: unknown) => current().sleepTab(num(id)))
-  ipcMain.handle('tab:reload', (_e, id: unknown) => current().reloadTab(num(id)))
-  ipcMain.handle('tab:menu', (_e, id: unknown) => current().showTabMenu(num(id)))
-  ipcMain.handle('tab:reopen', () => current().reopenClosed())
-  ipcMain.handle('tab:closed-list', () => current().recentlyClosed())
-  ipcMain.handle('tab:navigate', (_e, url: unknown, id?: unknown) =>
-    current().navigate(str(url), id === undefined ? undefined : num(id))
+  ipcMain.handle('tab:close', (event, id: unknown) => current(event).closeTab(num(id)))
+  ipcMain.handle('tab:close-others', (event, id: unknown) => current(event).closeOthers(num(id)))
+  ipcMain.handle('tab:close-right', (event, id: unknown) => current(event).closeToRight(num(id)))
+  ipcMain.handle('tab:switch', (event, id: unknown) => current(event).switchTab(num(id)))
+  ipcMain.handle('tab:move', (event, id: unknown, index: unknown) => current(event).moveTab(num(id), num(index)))
+  ipcMain.handle('tab:duplicate', (event, id: unknown) => current(event).duplicateTab(num(id)))
+  ipcMain.handle('tab:mute', (event, id: unknown) => current(event).toggleMute(num(id)))
+  ipcMain.handle('tab:sleep', (event, id: unknown) => current(event).sleepTab(num(id)))
+  ipcMain.handle('tab:reload', (event, id: unknown) => current(event).reloadTab(num(id)))
+  ipcMain.handle('tab:menu', (event, id: unknown) => current(event).showTabMenu(num(id)))
+  ipcMain.handle('tab:reopen', (event) => current(event).reopenClosed())
+  ipcMain.handle('tab:closed-list', (event) => current(event).recentlyClosed())
+  ipcMain.handle('tab:navigate', (event, url: unknown, id?: unknown) =>
+    current(event).navigate(str(url), id === undefined ? undefined : num(id))
   )
 
   /* ---- navigation ---- */
-  ipcMain.handle('nav:back', () => current().goBack())
-  ipcMain.handle('nav:forward', () => current().goForward())
-  ipcMain.handle('nav:reload', (_e, hard?: unknown) => current().reload(flag(hard)))
-  ipcMain.handle('nav:stop', () => current().stop())
-  ipcMain.handle('nav:home', () => current().goHome())
-  ipcMain.handle('nav:zoom', (_e, delta: unknown) => current().setZoom(delta === 'reset' ? 'reset' : num(delta)))
-  ipcMain.handle('nav:http-fallback', () => current().continueOverHttp())
-  ipcMain.handle('nav:print', () => current().print())
+  ipcMain.handle('nav:back', (event) => current(event).goBack())
+  ipcMain.handle('nav:forward', (event) => current(event).goForward())
+  ipcMain.handle('nav:reload', (event, hard?: unknown) => current(event).reload(flag(hard)))
+  ipcMain.handle('nav:stop', (event) => current(event).stop())
+  ipcMain.handle('nav:home', (event) => current(event).goHome())
+  ipcMain.handle('nav:zoom', (event, delta: unknown) => current(event).setZoom(delta === 'reset' ? 'reset' : num(delta)))
+  ipcMain.handle('nav:http-fallback', (event) => current(event).continueOverHttp())
+  ipcMain.handle('nav:print', (event) => current(event).print())
 
   /* ---- find ---- */
-  ipcMain.handle('find:query', (_e, text: unknown, forward?: unknown) =>
-    current().find(str(text, 256), forward !== false)
+  ipcMain.handle('find:query', (event, text: unknown, forward?: unknown) =>
+    current(event).find(str(text, 256), forward !== false)
   )
-  ipcMain.handle('find:stop', () => current().stopFind())
+  ipcMain.handle('find:stop', (event) => current(event).stopFind())
 
   /* ---- window ---- */
-  ipcMain.handle('win:minimize', () => current().win.minimize())
-  ipcMain.handle('win:maximize', () => {
-    const win = current().win
+  ipcMain.handle('win:minimize', (event) => current(event).win.minimize())
+  ipcMain.handle('win:maximize', (event) => {
+    const win = current(event).win
     win.isMaximized() ? win.unmaximize() : win.maximize()
   })
-  ipcMain.handle('win:close', () => current().win.close())
-  ipcMain.handle('win:fullscreen', () => {
-    const win = current().win
+  ipcMain.handle('win:close', (event) => current(event).win.close())
+  ipcMain.handle('win:fullscreen', (event) => {
+    const win = current(event).win
     win.setFullScreen(!win.isFullScreen())
   })
 
   /* ---- overlay layer (menus, popovers, command palette) ---- */
-  ipcMain.handle('ui:overlay', (_e, mode: unknown) =>
-    current().setOverlayMode(typeof mode === 'string' && mode ? mode.slice(0, 32) : null)
+  ipcMain.handle('ui:overlay', (event, mode: unknown) =>
+    current(event).setOverlayMode(typeof mode === 'string' && mode ? mode.slice(0, 32) : null)
   )
-  ipcMain.handle('ui:page', (_e, page: unknown) => current().openChromePage(str(page, 32)))
+  ipcMain.handle('ui:page', (event, page: unknown) => current(event).openChromePage(str(page, 32)))
 
   /* ---- chrome layout ---- */
-  ipcMain.handle('ui:layout', (_e, rect: unknown) => {
+  ipcMain.handle('ui:layout', (event, rect: unknown) => {
     const r = rect as { x: number; y: number; width: number; height: number; visible: boolean }
     if (!r || typeof r !== 'object') return
-    current().setLayout({
+    current(event).setLayout({
       x: num(r.x),
       y: num(r.y),
       width: num(r.width),
@@ -267,71 +292,71 @@ function registerIpc(initial: BrowserWindow) {
   })
 
   /* ---- settings ---- */
-  ipcMain.handle('settings:get', () => settings.get())
-  ipcMain.handle('settings:engines', () => SEARCH_ENGINES)
-  ipcMain.handle('settings:set', (_e, patch: unknown) => {
+  ipcMain.handle('settings:get', (event) => settings.get())
+  ipcMain.handle('settings:engines', (event) => SEARCH_ENGINES)
+  ipcMain.handle('settings:set', (event, patch: unknown) => {
     const next = settings.patch((patch ?? {}) as Partial<Settings>)
     nativeTheme.themeSource = next.theme
-    current().applySettings()
+    current(event).applySettings()
     if (next.filterLists && !engine.ready) void loadFilters()
     return next
   })
-  ipcMain.handle('settings:reset', () => {
+  ipcMain.handle('settings:reset', (event) => {
     const next = settings.reset()
     nativeTheme.themeSource = next.theme
-    current().applySettings()
+    current(event).applySettings()
     return next
   })
-  ipcMain.handle('settings:export', () => JSON.stringify(settings.get(), null, 2))
-  ipcMain.handle('settings:import', (_e, json: unknown) => {
+  ipcMain.handle('settings:export', (event) => JSON.stringify(settings.get(), null, 2))
+  ipcMain.handle('settings:import', (event, json: unknown) => {
     try {
       const parsed = JSON.parse(str(json, 200_000))
       const next = settings.patch(parsed as Partial<Settings>)
       nativeTheme.themeSource = next.theme
-      current().applySettings()
+      current(event).applySettings()
       return true
     } catch {
       return false
     }
   })
-  ipcMain.handle('settings:wallpaper', () => current().importWallpaper())
-  ipcMain.handle('settings:open-data', () => shell.openPath(app.getPath('userData')))
-  ipcMain.handle('settings:download-dir', async () => {
+  ipcMain.handle('settings:wallpaper', (event) => current(event).importWallpaper())
+  ipcMain.handle('settings:open-data', (event) => shell.openPath(app.getPath('userData')))
+  ipcMain.handle('settings:download-dir', async (event) => {
     const dir = await downloads.chooseFolder()
     if (dir) {
       settings.patch({ downloadDir: dir })
-      current().applySettings()
+      current(event).applySettings()
     }
     return dir
   })
 
   /* ---- profiles ---- */
-  ipcMain.handle('profiles:list', () => profiles.state)
-  ipcMain.handle('profiles:choices', () => ({ avatars: AVATAR_CHOICES, colors: COLOR_CHOICES }))
-  ipcMain.handle('profiles:create', (_e, name: unknown) => {
+  ipcMain.handle('profiles:list', (event) => profiles.state)
+  ipcMain.handle('profiles:choices', (event) => ({ avatars: AVATAR_CHOICES, colors: COLOR_CHOICES }))
+  ipcMain.handle('profiles:create', (event, name: unknown) => {
     const profile = profiles.create(str(name, 40) || 'Профиль')
-    current().sendProfiles()
+    current(event).sendProfiles()
     return profile
   })
-  ipcMain.handle('profiles:update', (_e, id: unknown, patch: unknown) => {
+  ipcMain.handle('profiles:update', (event, id: unknown, patch: unknown) => {
     const state = profiles.update(str(id, 64), (patch ?? {}) as Record<string, string>)
-    current().sendProfiles()
+    current(event).sendProfiles()
     return state
   })
-  ipcMain.handle('profiles:remove', (_e, id: unknown) => {
+  ipcMain.handle('profiles:remove', (event, id: unknown) => {
     const state = profiles.remove(str(id, 64))
-    current().sendProfiles()
+    current(event).sendProfiles()
     return state
   })
-  ipcMain.handle('profiles:switch', (_e, id: unknown) => {
-    current().switchProfile(str(id, 64))
+  ipcMain.handle('profiles:switch', (event, id: unknown) => {
+    current(event).switchProfile(str(id, 64))
     return profiles.state
   })
 
   /* ---- bookmarks ---- */
-  ipcMain.handle('bookmarks:list', () => bookmarks.all())
-  ipcMain.handle('bookmarks:folders', () => bookmarks.folders())
-  ipcMain.handle('bookmarks:add', (_e, input: unknown) => {
+  ipcMain.handle('bookmarks:list', (event) => bookmarks.all())
+  ipcMain.handle('bookmarks:folders', (event) => bookmarks.folders())
+  ipcMain.handle('bookmarks:add', (event, input: unknown) => {
     const data = (input ?? {}) as { title?: string; url?: string; folder?: string; pinned?: boolean }
     const result = bookmarks.add({
       title: str(data.title, 300),
@@ -341,105 +366,110 @@ function registerIpc(initial: BrowserWindow) {
     })
     return result
   })
-  ipcMain.handle('bookmarks:update', (_e, id: unknown, patch: unknown) =>
+  ipcMain.handle('bookmarks:update', (event, id: unknown, patch: unknown) =>
     bookmarks.update(str(id, 64), (patch ?? {}) as Record<string, never>)
   )
-  ipcMain.handle('bookmarks:remove', (_e, id: unknown) => bookmarks.remove(str(id, 64)))
-  ipcMain.handle('bookmarks:toggle-current', () => current().bookmarkCurrent())
+  ipcMain.handle('bookmarks:remove', (event, id: unknown) => bookmarks.remove(str(id, 64)))
+  ipcMain.handle('bookmarks:toggle-current', (event) => current(event).bookmarkCurrent())
 
   /* ---- history ---- */
-  ipcMain.handle('history:all', () => history.all())
-  ipcMain.handle('history:recent', (_e, limit?: unknown) => history.recent(num(limit) || 60))
-  ipcMain.handle('history:remove', (_e, url: unknown) => history.remove(str(url, 2048)))
-  ipcMain.handle('history:clear', () => history.clear())
+  ipcMain.handle('history:all', (event) => history.all())
+  ipcMain.handle('history:recent', (event, limit?: unknown) => history.recent(num(limit) || 60))
+  ipcMain.handle('history:remove', (event, url: unknown) => history.remove(str(url, 2048)))
+  ipcMain.handle('history:clear', (event) => history.clear())
 
   /* ---- passwords ---- */
-  ipcMain.handle('vault:state', () => ({
+  ipcMain.handle('vault:state', (event) => ({
     mode: vault.mode,
     locked: vault.locked,
     count: vault.count,
     osEncryption: vault.encryptionAvailable
   }))
-  ipcMain.handle('vault:list', () => vault.list())
-  ipcMain.handle('vault:unlock', (_e, password: unknown) => vault.unlock(str(password, 400)))
-  ipcMain.handle('vault:lock', () => vault.lock())
-  ipcMain.handle('vault:save', (_e, input: unknown) => {
+  ipcMain.handle('vault:list', (event) => vault.list())
+  ipcMain.handle('vault:unlock', (event, password: unknown) => vault.unlock(str(password, 400)))
+  ipcMain.handle('vault:lock', (event) => vault.lock())
+  ipcMain.handle('vault:save', (event, input: unknown) => {
     const data = (input ?? {}) as { origin?: string; username?: string; password?: string; note?: string }
     return vault.save(str(data.origin, 200), str(data.username, 200), str(data.password, 400), str(data.note, 200))
   })
-  ipcMain.handle('vault:reveal', (_e, id: unknown) => vault.reveal(str(id, 64)))
-  ipcMain.handle('vault:remove', (_e, id: unknown) => vault.remove(str(id, 64)))
-  ipcMain.handle('vault:generate', (_e, length?: unknown) => vault.generate(num(length) || 20))
-  ipcMain.handle('vault:set-master', (_e, currentPass: unknown, next: unknown) =>
+  ipcMain.handle('vault:reveal', (event, id: unknown) => vault.reveal(str(id, 64)))
+  ipcMain.handle('vault:remove', (event, id: unknown) => vault.remove(str(id, 64)))
+  ipcMain.handle('vault:generate', (event, length?: unknown) => vault.generate(num(length) || 20))
+  ipcMain.handle('vault:set-master', (event, currentPass: unknown, next: unknown) =>
     vault.setMasterPassword(currentPass === null ? null : str(currentPass, 400), str(next, 400))
   )
-  ipcMain.handle('vault:drop-master', (_e, currentPass: unknown) =>
+  ipcMain.handle('vault:drop-master', (event, currentPass: unknown) =>
     vault.removeMasterPassword(str(currentPass, 400))
   )
-  ipcMain.handle('vault:fill', (_e, id: unknown) => current().fillCredential(str(id, 64)))
-  ipcMain.handle('vault:confirm-save', (_e, save: unknown) => current().confirmSavePassword(flag(save)))
-  ipcMain.handle('vault:cipher-sample', () => vault.cipherSample())
+  ipcMain.handle('vault:fill', (event, id: unknown) => current(event).fillCredential(str(id, 64)))
+  ipcMain.handle('vault:confirm-save', (event, save: unknown) => current(event).confirmSavePassword(flag(save)))
+  ipcMain.handle('vault:cipher-sample', (event) => vault.cipherSample())
 
   /* ---- downloads ---- */
-  ipcMain.handle('downloads:list', () => downloads.list())
-  ipcMain.handle('downloads:pause', (_e, id: unknown) => downloads.pause(str(id, 64)))
-  ipcMain.handle('downloads:cancel', (_e, id: unknown) => downloads.cancel(str(id, 64)))
-  ipcMain.handle('downloads:open', (_e, id: unknown) => downloads.open(str(id, 64)))
-  ipcMain.handle('downloads:reveal', (_e, id: unknown) => downloads.reveal(str(id, 64)))
-  ipcMain.handle('downloads:remove', (_e, id: unknown) => downloads.remove(str(id, 64)))
-  ipcMain.handle('downloads:clear', () => downloads.clearFinished())
+  ipcMain.handle('downloads:list', (event) => downloads.list())
+  ipcMain.handle('downloads:pause', (event, id: unknown) => downloads.pause(str(id, 64)))
+  ipcMain.handle('downloads:cancel', (event, id: unknown) => downloads.cancel(str(id, 64)))
+  ipcMain.handle('downloads:open', (event, id: unknown) => downloads.open(str(id, 64)))
+  ipcMain.handle('downloads:reveal', (event, id: unknown) => downloads.reveal(str(id, 64)))
+  ipcMain.handle('downloads:remove', (event, id: unknown) => downloads.remove(str(id, 64)))
+  ipcMain.handle('downloads:clear', (event) => downloads.clearFinished())
 
   /* ---- permissions ---- */
-  ipcMain.handle('permission:answer', (_e, id: unknown, allow: unknown) =>
-    current().answerPermission(str(id, 64), flag(allow))
+  ipcMain.handle('permission:answer', (event, id: unknown, allow: unknown) =>
+    current(event).answerPermission(str(id, 64), flag(allow))
   )
 
   /* ---- suggestions & misc ---- */
-  ipcMain.handle('suggest:query', (_e, query: unknown) => current().suggestions(str(query, 512)))
-  ipcMain.handle('suggest:preconnect', (_e, query: unknown) => current().preconnect(str(query, 512)))
-  ipcMain.handle('privacy:stats', () => ({ ...stats }))
-  ipcMain.handle('privacy:reset-stats', () => resetStats())
-  ipcMain.handle('privacy:clear', () => current().clearData())
+  ipcMain.handle('suggest:query', (event, query: unknown) => current(event).suggestions(str(query, 512)))
+  ipcMain.handle('suggest:preconnect', (event, query: unknown) => current(event).preconnect(str(query, 512)))
+  ipcMain.handle('privacy:stats', (event) => ({ ...stats }))
+  ipcMain.handle('privacy:reset-stats', (event) => resetStats())
+  ipcMain.handle('privacy:clear', (event) => current(event).clearData())
   ipcMain.handle('privacy:clear-all-profiles', async () => {
     for (const profile of profiles.state.profiles) {
       await clearBrowsingData(session.fromPartition(profiles.partition(profile.id)))
     }
   })
   /* ---- updates ---- */
-  ipcMain.handle('drm:state', () => ({ ...widevineState(), needsRestart: needsRestart() }))
-  ipcMain.handle('updates:state', () => updateState())
-  ipcMain.handle('updates:check', () => checkUpdates())
-  ipcMain.handle('favicons:all', () => favicons.all())
-  ipcMain.handle('updates:download', () => downloadUpdate())
-  ipcMain.handle('updates:install', () => installNow())
+  ipcMain.handle('drm:state', (event) => ({ ...widevineState(), needsRestart: needsRestart() }))
+  ipcMain.handle('updates:state', (event) => updateState())
+  ipcMain.handle('updates:check', (event) => checkUpdates())
+  ipcMain.handle('window:new', () => {
+    const win = openWindow()
+    win.chrome.webContents.once('did-finish-load', () => win.newTab())
+    return true
+  })
+  ipcMain.handle('favicons:all', (event) => favicons.all())
+  ipcMain.handle('updates:download', (event) => downloadUpdate())
+  ipcMain.handle('updates:install', (event) => installNow())
 
   /* ---- extensions ---- */
-  ipcMain.handle('ext:list', () => listExtensions())
-  ipcMain.handle('ext:add', () => addExtension())
-  ipcMain.handle('ext:remove', (_e, path: unknown) => removeExtension(str(path, 600)))
-  ipcMain.handle('ext:reveal', (_e, path: unknown) => revealExtension(str(path, 600)))
+  ipcMain.handle('ext:list', (event) => listExtensions())
+  ipcMain.handle('ext:add', (event) => addExtension())
+  ipcMain.handle('ext:remove', (event, path: unknown) => removeExtension(str(path, 600)))
+  ipcMain.handle('ext:reveal', (event, path: unknown) => revealExtension(str(path, 600)))
 
   /* ---- filter lists ---- */
-  ipcMain.handle('filters:status', () => filterStatus())
-  ipcMain.handle('filters:refresh', () => loadFilters(true))
+  ipcMain.handle('filters:status', (event) => filterStatus())
+  ipcMain.handle('filters:refresh', (event) => loadFilters(true))
 
   /* ---- import from another browser ---- */
-  ipcMain.handle('import:sources', () => detectSources())
-  ipcMain.handle('import:bookmarks', (_e, id: unknown) => {
+  ipcMain.handle('import:sources', (event) => detectSources())
+  ipcMain.handle('import:bookmarks', (event, id: unknown) => {
     const result = importBookmarks(str(id, 512))
-    if (result.added > 0) current().sendBookmarks()
+    if (result.added > 0) current(event).sendBookmarks()
     return result
   })
-  ipcMain.handle('import:passwords', () => importPasswordsCsv())
+  ipcMain.handle('import:passwords', (event) => importPasswordsCsv())
 
-  ipcMain.handle('app:default-browser', () => defaultBrowserState())
-  ipcMain.handle('app:make-default', () => requestDefaultBrowser())
+  ipcMain.handle('app:default-browser', (event) => defaultBrowserState())
+  ipcMain.handle('app:make-default', (event) => requestDefaultBrowser())
   ipcMain.handle('app:drop-default', async () => {
     await unregisterAsBrowser()
     return defaultBrowserState()
   })
-  ipcMain.handle('dev:tools', () => current().openDevTools())
-  ipcMain.handle('shell:open', (_e, url: unknown) => current().openExternal(str(url)))
+  ipcMain.handle('dev:tools', (event) => current(event).openDevTools())
+  ipcMain.handle('shell:open', (event, url: unknown) => current(event).openExternal(str(url)))
   ipcMain.handle('app:info', (): AppInfo => ({
     version: app.getVersion(),
     electron: process.versions.electron,
@@ -457,11 +487,11 @@ function registerIpc(initial: BrowserWindow) {
   /* ---- autofill: page → main (send/on, not invoke) ---- */
   ipcMain.on('autofill:form', (event, payload: unknown) => {
     const data = (payload ?? {}) as { host?: string }
-    current().handleAutofillForm(event.sender.id, str(data.host, 200))
+    current(event).handleAutofillForm(event.sender.id, str(data.host, 200))
   })
-  ipcMain.on('autofill:submitted', (_event, payload: unknown) => {
+  ipcMain.on('autofill:submitted', (event, payload: unknown) => {
     const data = (payload ?? {}) as { host?: string; username?: string; password?: string }
-    current().handleAutofillSubmitted(str(data.host, 200), str(data.username, 200), str(data.password, 400))
+    current(event as unknown as Electron.IpcMainInvokeEvent).handleAutofillSubmitted(str(data.host, 200), str(data.username, 200), str(data.password, 400))
   })
 }
 

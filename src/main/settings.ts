@@ -57,9 +57,8 @@ export const DEFAULT_SETTINGS: Settings = {
   accent: '#7C6CFF',
   radius: 14,
   compact: false,
-  glass: true,
-  // A little by default: a photograph behind small text is unreadable at zero.
-  veil: 30,
+  // Enough of the wallpaper to see, enough panel to read small text on.
+  glass: 55,
   reduceMotion: false,
   animationSpeed: 1,
   background: { ...DEFAULT_BACKGROUND },
@@ -222,8 +221,7 @@ export function sanitize(input: Partial<Settings>): Settings {
     accent: /^#[0-9a-f]{6}$/i.test(String(input.accent)) ? String(input.accent) : d.accent,
     radius: clamp(input.radius, 0, 28, d.radius),
     compact: bool(input.compact, d.compact),
-    glass: bool(input.glass, d.glass),
-    veil: clamp(input.veil, 0, 100, d.veil),
+    glass: clamp(input.glass, 0, 100, d.glass),
     reduceMotion: bool(input.reduceMotion, d.reduceMotion),
     animationSpeed: clamp(input.animationSpeed, 0.4, 2, d.animationSpeed),
     background: sanitizeBackground(input.background),

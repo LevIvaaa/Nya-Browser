@@ -63,7 +63,9 @@ export default function App() {
     root.style.setProperty('--radius', `${settings.radius}px`)
     root.style.setProperty('--speed', String(settings.reduceMotion ? 0.001 : settings.animationSpeed))
     root.dataset.motion = settings.reduceMotion ? 'reduced' : 'full'
-    root.dataset.glass = settings.glass ? 'on' : 'off'
+    root.style.setProperty('--panel', String(settings.glass / 100))
+    // Blurring what cannot be seen through costs frames for nothing.
+    root.dataset.glass = settings.glass >= 100 ? 'off' : 'on'
 
     return () => media.removeEventListener('change', apply)
   }, [settings])
@@ -159,9 +161,17 @@ export default function App() {
 
   useEffect(() => {
     return window.browser.onShortcut((action) => {
+      // A page asking for a window arrives as "new-window:<url>".
+      if (action.startsWith('new-window:')) {
+        void window.browser.newWindow().then(() => window.browser.newTab(action.slice(11)))
+        return
+      }
       switch (action) {
         case 'focus-address':
           openPalette()
+          break
+        case 'new-window':
+          void window.browser.newWindow()
           break
         case 'settings':
           toggleView('settings')
@@ -236,20 +246,6 @@ export default function App() {
           accent={settings.accent}
           reduceMotion={settings.reduceMotion}
           browsing={showPage}
-        />
-      )}
-
-      {/* The wallpaper is behind the whole interface, and small text over a
-          photograph is hard to read. This is the dial for that: one scrim in
-          the window's own colour, from invisible to fully covering. */}
-      {overlayVisible && settings.veil > 0 && (
-        <div
-          className="pointer-events-none absolute inset-0 z-10"
-          style={{
-            background: 'var(--bg)',
-            opacity: settings.veil / 100,
-            transition: 'opacity var(--t-base) var(--ease-out)'
-          }}
         />
       )}
 

@@ -83,13 +83,12 @@ export interface Settings {
   accent: string
   radius: number
   compact: boolean
-  glass: boolean
   /**
-   * How much of the wallpaper is allowed through the interface, 0-100. The
-   * glass toggle decides whether panels blur what is behind them; this decides
-   * how much there is to see in the first place.
+   * How opaque the panels are, 0-100: the top bar, the cards on the start page
+   * and the ones in the settings. The wallpaper behind them is not affected —
+   * that is what the wallpaper settings are for.
    */
-  veil: number
+  glass: number
   reduceMotion: boolean
   animationSpeed: number
   background: BackgroundSettings

@@ -285,12 +285,22 @@ export class BrowserWindow {
   private edgeActive = false
   private confirmedClose = false
   private boundsFile = join(app.getPath('userData'), 'window.json')
+  private offsetFromFirst = false
   private pendingPermissions = new Map<string, (allow: boolean) => void>()
   private preloadId: string | null = null
   private overlayMode: string | null = null
 
+  /** How many windows are already up, so the next one is not stacked on them. */
+  private static open = 0
+
   constructor() {
     const saved = this.readBounds()
+    const offset = BrowserWindow.open++ * 32
+    this.offsetFromFirst = offset > 0
+    if (offset && typeof saved.x === 'number' && typeof saved.y === 'number') {
+      saved.x += offset
+      saved.y += offset
+    }
 
     // titleBarStyle is macOS-only on purpose: on Windows it makes
     // getContentBounds() disagree with the real window size, which painted a
@@ -492,7 +502,9 @@ export class BrowserWindow {
     this.send('state:bookmarks', bookmarks.all())
     this.send('state:downloads', downloads.list())
     this.send('state:closed', [])
-    if (!this.restoreSession()) this.newTab()
+    // The saved session belongs to the browser, not to every window of it: a
+    // second window starts empty rather than cloning the first.
+    if (this.offsetFromFirst || !this.restoreSession()) this.newTab()
     this.broadcast()
   }
 
@@ -524,6 +536,10 @@ export class BrowserWindow {
   }
 
   private saveBounds() {
+    // Two windows would otherwise take turns overwriting each other's idea of
+    // where a window belongs.
+    if (this.offsetFromFirst) return
+
     if (this.win.isDestroyed() || this.win.isMinimized()) return
     try {
       const bounds = this.win.isMaximized() ? this.win.getNormalBounds() : this.win.getBounds()
@@ -789,6 +805,12 @@ export class BrowserWindow {
         if (/^(mailto|tel):/i.test(url)) void shell.openExternal(url)
         return { action: 'deny' }
       }
+      // A page that asked for a window gets a window; everything else is a
+      // tab, which is what people mean by "open in new tab" anyway.
+      if (disposition === 'new-window') {
+        this.chrome.webContents.send('shortcut', `new-window:${url}`)
+        return { action: 'deny' }
+      }
       this.newTab(url, disposition === 'background-tab')
       return { action: 'deny' }
     })
@@ -849,6 +871,8 @@ export class BrowserWindow {
     }
 
     switch (key) {
+      case 'n':
+        return this.run(() => this.chrome.webContents.send('shortcut', 'new-window'))
       case 't':
         return this.run(() => this.newTab())
       case 'w':
@@ -1425,6 +1449,7 @@ export class BrowserWindow {
   }
 
   private persistSession() {
+    if (this.offsetFromFirst) return
     if (!settings.get().restoreSession) return
     try {
       const payload = {
@@ -1484,6 +1509,12 @@ export class BrowserWindow {
     history.clear()
     this.send('toast', 'Данные сайтов удалены')
     this.broadcast()
+  }
+
+  /** True when this window owns the view a message came from. */
+  owns(sender: WebContents): boolean {
+    if (this.chrome.webContents === sender || this.overlay.webContents === sender) return true
+    return this.tabs.some((tab) => tab.wc === sender)
   }
 
   dispose() {
