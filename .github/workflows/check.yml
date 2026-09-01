@@ -1,0 +1,31 @@
+# Types and tests on every push and pull request.
+#
+# Only the checks that run without a display: electron-vite builds and
+# electron-builder packaging need Windows and a lot of minutes, and the
+# installer is cut by hand from a tagged release rather than by CI.
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # The Electron binary is a ~100 MB download this job never runs, and on
+      # Linux it is the wrong one anyway.
+      - run: npm ci --ignore-scripts
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+
+      - run: npm run typecheck
+      - run: npm test
