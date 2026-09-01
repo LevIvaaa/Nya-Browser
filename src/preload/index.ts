@@ -11,6 +11,7 @@ import type {
   WidevineState,
   HistoryEntry,
   PermissionRequest,
+  Place,
   Profile,
   ProfilesState,
   SearchEngine,
@@ -18,6 +19,7 @@ import type {
   Settings,
   Suggestion,
   TabState,
+  Weather,
   WindowState
 } from '../shared/types'
 
@@ -135,6 +137,11 @@ const api = {
   pickWallpaper: (): Promise<string | null> => ipcRenderer.invoke('settings:wallpaper'),
   openDataFolder: () => ipcRenderer.invoke('settings:open-data'),
   pickDownloadDir: (): Promise<string | null> => ipcRenderer.invoke('settings:download-dir'),
+
+  /* ---- weather ---- */
+  searchPlaces: (query: string): Promise<Place[]> => ipcRenderer.invoke('weather:search', query),
+  weather: (lat: number, lon: number): Promise<Weather | null> =>
+    ipcRenderer.invoke('weather:current', lat, lon),
 
   /* ---- profiles ---- */
   profiles: (): Promise<ProfilesState> => ipcRenderer.invoke('profiles:list'),

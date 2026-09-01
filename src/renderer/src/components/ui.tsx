@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { Check, ChevronDown, Cross } from './Icons'
 import type { AvatarCrop } from '../../../shared/types'
 
@@ -365,7 +366,10 @@ export function Modal({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  return (
+  // Through a portal, because "fixed" is measured against the nearest
+  // transformed ancestor rather than the window — and a start-page widget
+  // drawn at a chosen scale is exactly such an ancestor.
+  return createPortal(
     <div
       className="animate-fade fixed inset-0 z-[60] flex items-center justify-center p-6"
       style={{ background: 'color-mix(in srgb, var(--bg) 55%, transparent)', backdropFilter: 'blur(6px)' }}
@@ -403,7 +407,8 @@ export function Modal({
           </footer>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
