@@ -4,6 +4,7 @@ import Wallpaper from './components/Wallpaper'
 import Toolbar from './components/Toolbar'
 import BookmarksBar from './components/BookmarksBar'
 import Toasts from './components/Toasts'
+import Welcome from './components/Welcome'
 import { AutofillBar, FindBar, PermissionBar, SavePasswordBar } from './components/Bars'
 import { TabRail, TabStrip } from './components/Tabs'
 import StartPage from './pages/StartPage'
@@ -76,7 +77,11 @@ export default function App() {
   const showPage = view === 'page' && !showStart && !hasError
   // Menus and the palette are drawn by the separate overlay view stacked above
   // the page, so they no longer force the page to be hidden.
-  const overlayVisible = !showPage
+  // Nothing has been chosen yet, so nothing has been written: the flag is
+  // false on a fresh profile and stays false until the flow finishes or is
+  // skipped, which is the only thing that turns it on.
+  const welcome = settings != null && !settings.onboarded
+  const overlayVisible = !showPage || welcome
   const chromeHidden = Boolean(
     settings?.tabAutoHide && !revealed && !findOpen && showPage && !overlay
   )
@@ -382,6 +387,17 @@ export default function App() {
       </div>
 
       <Toasts items={toasts} />
+
+      {welcome && (
+        <Welcome
+          settings={settings}
+          engines={engines}
+          profile={profile}
+          maximized={win.maximized}
+          onPatch={patch}
+          onDone={() => patch({ onboarded: true })}
+        />
+      )}
     </div>
   )
 }

@@ -263,6 +263,23 @@ button {
   100% { transform: translateX(400%); }
 }
 
+/* One step of the welcome flow arriving, and the light drifting behind it. */
+@keyframes step-in {
+  from { opacity: 0; transform: translate3d(26px, 0, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes step-in-back {
+  from { opacity: 0; transform: translate3d(-26px, 0, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes welcome-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  33% { transform: translate3d(6%, -5%, 0) scale(1.08); }
+  66% { transform: translate3d(-5%, 4%, 0) scale(0.95); }
+}
+
+.animate-step { animation: step-in var(--t-slow) var(--ease-snap) both; }
+.animate-step-back { animation: step-in-back var(--t-slow) var(--ease-snap) both; }
 .animate-fade { animation: fade-in var(--t-base) var(--ease-out) both; }
 .animate-fade-up { animation: fade-up var(--t-slow) var(--ease-out) both; }
 .animate-fade-down { animation: fade-down var(--t-base) var(--ease-out) both; }

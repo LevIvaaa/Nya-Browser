@@ -980,6 +980,21 @@ export default function SettingsPage({
               </Section>
 
               <Section
+                title="Первая настройка"
+                icon={<Sparkles width={15} height={15} />}
+                description="Тот же экран, что и при первом запуске"
+              >
+                <Row
+                  title="Пройти настройку заново"
+                  hint="Профиль, тема, прозрачность, обои, поиск и защита — по шагам"
+                >
+                  <button className="btn" onClick={() => onPatch({ onboarded: false })}>
+                    Открыть
+                  </button>
+                </Row>
+              </Section>
+
+              <Section
                 title="Браузер по умолчанию"
                 icon={<Monitor width={15} height={15} />}
                 description="Чтобы ссылки из Telegram, почты и редактора открывались здесь"

@@ -64,6 +64,7 @@ const fav = (title: string, url: string, icon?: string): Favorite => ({
 })
 
 export const DEFAULT_SETTINGS: Settings = {
+  onboarded: false,
   theme: 'system',
   accent: '#7C6CFF',
   radius: 14,
@@ -265,6 +266,7 @@ function sanitizeFavorites(v: unknown, fallback: Favorite[]): Favorite[] {
 export function sanitize(input: Partial<Settings>): Settings {
   const d = DEFAULT_SETTINGS
   return {
+    onboarded: bool(input.onboarded, d.onboarded),
     theme: oneOf(input.theme, ['light', 'dark', 'system'] as const, d.theme),
     accent: /^#[0-9a-f]{6}$/i.test(String(input.accent)) ? String(input.accent) : d.accent,
     radius: clamp(input.radius, 0, 28, d.radius),
