@@ -98,8 +98,8 @@ const windows = new Set<BrowserWindow>()
 let browser: BrowserWindow | null = null
 
 /** Opens another window, wired the same way as the first. */
-function openWindow(): BrowserWindow {
-  const win = new BrowserWindow()
+function openWindow(incognito = false): BrowserWindow {
+  const win = new BrowserWindow(incognito)
   windows.add(win)
   win.win.on('closed', () => {
     windows.delete(win)
@@ -434,8 +434,8 @@ function registerIpc() {
   ipcMain.handle('drm:state', (event) => ({ ...widevineState(), needsRestart: needsRestart() }))
   ipcMain.handle('updates:state', (event) => updateState())
   ipcMain.handle('updates:check', (event) => checkUpdates())
-  ipcMain.handle('window:new', () => {
-    const win = openWindow()
+  ipcMain.handle('window:new', (_event, incognito: unknown) => {
+    const win = openWindow(incognito === true)
     win.chrome.webContents.once('did-finish-load', () => win.newTab())
     return true
   })

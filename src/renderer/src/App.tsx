@@ -173,6 +173,9 @@ export default function App() {
         case 'new-window':
           void window.browser.newWindow()
           break
+        case 'new-private-window':
+          void window.browser.newWindow(true)
+          break
         case 'settings':
           toggleView('settings')
           break
@@ -264,6 +267,7 @@ export default function App() {
                 maximized={win.maximized}
                 bookmarked={bookmarked}
                 downloadCount={activeDownloads}
+                incognito={win.incognito}
                 update={update}
                 view={overlay ?? view}
                 onOpenAddress={openPalette}
@@ -328,6 +332,7 @@ export default function App() {
                 stats={stats}
                 closed={closed}
                 profileName={profile?.name ?? ''}
+                incognito={win.incognito}
                 onOpenAddress={openPalette}
                 onPatch={patch}
               />

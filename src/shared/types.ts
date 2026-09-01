@@ -213,6 +213,8 @@ export interface WindowState {
   fullscreen: boolean
   focused: boolean
   platform: NodeJS.Platform
+  /** a private window: nothing about this session reaches the disk */
+  incognito: boolean
 }
 
 export interface Suggestion {
