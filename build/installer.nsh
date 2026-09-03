@@ -77,6 +77,8 @@ Var nyaProgressDone
 Var nyaPathLabel
 Var nyaBoxDesktop
 Var nyaBoxDefault
+Var nyaLang           ; browser language code chosen in the pill; "" = system
+Var nyaLangLabel      ; the pill's STATIC with the language name
 Var nyaDesktop        ; "1"/"0", empty when the welcome page never ran
 Var nyaDefault
 Var nyaOldVersion
@@ -387,6 +389,18 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
     ${checkbox} $nyaBoxDefault $nyaDialog ART_WELCOME_BOX_DEFAULT \
       "welcome-box-default-on.bmp"
 
+    ; The language pill. The label is a native STATIC over the baked pill so
+    ; its text can change; the click zone covers the whole pill.
+    StrCpy $nyaLang ""
+    Call nyaSystemLangName
+    Pop $R0
+    ${control} $nyaLangLabel $nyaDialog ${NYA_PATH} \
+      ${ART_WELCOME_LANG_X} ${ART_WELCOME_LANG_Y} \
+      ${ART_WELCOME_LANG_W} ${ART_WELCOME_LANG_H} "$R0"
+    SendMessage $nyaLangLabel ${WM_SETFONT} $nyaFontSmall 1
+    SetCtlColors $nyaLangLabel ${NYA_DIM} transparent
+    ${hit} $nyaDialog ART_WELCOME_LANG_HIT nyaLangClicked
+
     ${hit} $nyaDialog ART_WELCOME_INSTALL nyaInstallClicked
     ${hit} $nyaDialog ART_WELCOME_BROWSE nyaBrowseClicked
     ${hit} $nyaDialog ART_WELCOME_ROW_DESKTOP nyaDesktopClicked
@@ -394,6 +408,156 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
     ${hit} $nyaDialog ART_WELCOME_CLOSE_X nyaCloseClicked
 
     nsDialogs::Show
+  FunctionEnd
+
+  ; What the pill says before anyone touches it: the language the system
+  ; already speaks. Only an explicit pick writes anything to the registry.
+  Function nyaSystemLangName
+    ${Switch} $LANGUAGE
+      ${Case} 1049
+        Push "Русский"
+        ${Break}
+      ${Case} 1031
+        Push "Deutsch"
+        ${Break}
+      ${Case} 1036
+        Push "Français"
+        ${Break}
+      ${Case} 1034
+      ${Case} 3082
+        Push "Español"
+        ${Break}
+      ${Case} 1040
+        Push "Italiano"
+        ${Break}
+      ${Case} 1046
+        Push "Português"
+        ${Break}
+      ${Case} 1045
+        Push "Polski"
+        ${Break}
+      ${Case} 1055
+        Push "Türkçe"
+        ${Break}
+      ${Case} 1041
+        Push "日本語"
+        ${Break}
+      ${Case} 1042
+        Push "한국어"
+        ${Break}
+      ${Case} 2052
+        Push "中文"
+        ${Break}
+      ${Case} 1025
+        Push "العربية"
+        ${Break}
+      ${Case} 1081
+        Push "हिन्दी"
+        ${Break}
+      ${Default}
+        Push "English"
+        ${Break}
+    ${EndSwitch}
+  FunctionEnd
+
+  ; A native popup with the language list. TPM_RETURNCMD hands the picked id
+  ; straight back instead of posting WM_COMMAND at a window we do not own.
+  Function nyaLangClicked
+    Pop $R9
+    System::Call 'user32::CreatePopupMenu() p .R0'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 1, w "Язык системы")'
+    System::Call 'user32::AppendMenu(p R0, i 0x800, i 0, w "")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 2, w "Русский")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 3, w "English")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 4, w "Deutsch")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 5, w "Français")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 6, w "Español")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 7, w "Italiano")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 8, w "Português")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 9, w "Polski")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 10, w "Türkçe")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 11, w "日本語")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 12, w "한국어")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 13, w "中文")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 14, w "العربية")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 15, w "हिन्दी")'
+
+    System::Call '*(i 0, i 0) p .R1'
+    System::Call 'user32::GetCursorPos(p R1)'
+    System::Call '*$R1(i .R2, i .R3)'
+    System::Free $R1
+    System::Call 'user32::TrackPopupMenu(p R0, i 0x0180, i R2, i R3, i 0, p $HWNDPARENT, p 0) i .R4'
+    System::Call 'user32::DestroyMenu(p R0)'
+
+    ${If} $R4 = 0
+      Return
+    ${EndIf}
+    ${Switch} $R4
+      ${Case} 1
+        StrCpy $nyaLang ""
+        Call nyaSystemLangName
+        Pop $R5
+        ${Break}
+      ${Case} 2
+        StrCpy $nyaLang "ru"
+        StrCpy $R5 "Русский"
+        ${Break}
+      ${Case} 3
+        StrCpy $nyaLang "en"
+        StrCpy $R5 "English"
+        ${Break}
+      ${Case} 4
+        StrCpy $nyaLang "de"
+        StrCpy $R5 "Deutsch"
+        ${Break}
+      ${Case} 5
+        StrCpy $nyaLang "fr"
+        StrCpy $R5 "Français"
+        ${Break}
+      ${Case} 6
+        StrCpy $nyaLang "es"
+        StrCpy $R5 "Español"
+        ${Break}
+      ${Case} 7
+        StrCpy $nyaLang "it"
+        StrCpy $R5 "Italiano"
+        ${Break}
+      ${Case} 8
+        StrCpy $nyaLang "pt-BR"
+        StrCpy $R5 "Português"
+        ${Break}
+      ${Case} 9
+        StrCpy $nyaLang "pl"
+        StrCpy $R5 "Polski"
+        ${Break}
+      ${Case} 10
+        StrCpy $nyaLang "tr"
+        StrCpy $R5 "Türkçe"
+        ${Break}
+      ${Case} 11
+        StrCpy $nyaLang "ja"
+        StrCpy $R5 "日本語"
+        ${Break}
+      ${Case} 12
+        StrCpy $nyaLang "ko"
+        StrCpy $R5 "한국어"
+        ${Break}
+      ${Case} 13
+        StrCpy $nyaLang "zh-CN"
+        StrCpy $R5 "中文"
+        ${Break}
+      ${Case} 14
+        StrCpy $nyaLang "ar"
+        StrCpy $R5 "العربية"
+        ${Break}
+      ${Case} 15
+        StrCpy $nyaLang "hi"
+        StrCpy $R5 "हिन्दी"
+        ${Break}
+      ${Default}
+        Return
+    ${EndSwitch}
+    SendMessage $nyaLangLabel ${WM_SETTEXT} 0 "STR:$R5"
   FunctionEnd
 
   Function nyaInstallClicked
@@ -703,6 +867,12 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
 
   ${If} $nyaDefault == "1"
     WriteRegStr HKCU "Software\Nya Browser" "SetDefaultOnFirstRun" "1"
+  ${EndIf}
+
+  ; The language pill. Only an explicit pick lands here; "язык системы" writes
+  ; nothing and leaves the browser to resolve the system locale itself.
+  ${If} $nyaLang != ""
+    WriteRegStr HKCU "Software\Nya Browser" "language" "$nyaLang"
   ${EndIf}
 
   ; An update replaces a browser the user was just looking at, so it puts it
