@@ -73,6 +73,13 @@ export interface ImportResult {
   error?: string
 }
 
+export interface BlockedEntry {
+  time: number
+  host: string
+  page: string
+  kind: 'ad' | 'tracker' | 'crypto' | 'param' | 'upgrade'
+}
+
 export interface ClosedTab {
   url: string
   title: string
@@ -209,6 +216,7 @@ const api = {
   suggest: (query: string): Promise<Suggestion[]> => ipcRenderer.invoke('suggest:query', query),
   preconnect: (query: string) => ipcRenderer.invoke('suggest:preconnect', query),
   securityStats: (): Promise<SecurityStats> => ipcRenderer.invoke('privacy:stats'),
+  blockedLog: (): Promise<BlockedEntry[]> => ipcRenderer.invoke('privacy:blocked-log'),
   resetStats: () => ipcRenderer.invoke('privacy:reset-stats'),
   clearBrowsingData: () => ipcRenderer.invoke('privacy:clear'),
   clearAllProfiles: () => ipcRenderer.invoke('privacy:clear-all-profiles'),

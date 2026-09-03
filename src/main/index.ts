@@ -10,9 +10,9 @@ import { downloads } from './downloads'
 import { initLog, log } from './log'
 import { flushAll, installExitHooks } from './store'
 import { registerProtocols, registerSchemes } from './protocol'
-import { BLOCKLIST_SIZE, clearBrowsingData, hardenApp, hardenSession, resetStats, stats } from './security'
+import { BLOCKLIST_SIZE, blockedLog, clearBrowsingData, hardenApp, hardenSession, resetStats, stats } from './security'
 import { detectSources, importBookmarks, importPasswordsCsv } from './import'
-import { engine, filterStatus, loadFilters } from './filters'
+import { engine, filterStatus, hideCss, loadFilters } from './filters'
 import { addExtension, listExtensions, removeExtension, revealExtension } from './extensions'
 import { favicons } from './favicons'
 import { currentWeather, searchPlaces } from './weather'
@@ -138,7 +138,7 @@ if (!app.requestSingleInstanceLock()) {
     if (url) browser.newTab(url)
   })
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     if (process.platform === 'win32') app.setAppUserModelId('com.nya.browser')
 
     initLog()
@@ -151,9 +151,28 @@ if (!app.requestSingleInstanceLock()) {
     hardenApp(app)
     hardenSession(session.defaultSession)
     nativeTheme.themeSource = settings.get().theme
-    // Served from the on-disk cache when it is fresh, so this is normally
-    // instant and offline; only a stale list actually hits the network.
-    if (settings.get().filterLists) void loadFilters()
+    // Awaited on purpose, and cheap: loadFilters resolves as soon as the
+    // engine is armed from the on-disk cache and refreshes stale lists in the
+    // background. This is what makes the first request of the first tab
+    // already go through the full blocker instead of slipping past it.
+    if (settings.get().filterLists) await loadFilters()
+
+    // Pages ask for their anti-flicker CSS synchronously at document-start, so
+    // the answer must never block: whatever the engine knows right now, or
+    // nothing. Registered before the first window exists.
+    ipcMain.on('cosmetic:boot', (event, host: unknown) => {
+      try {
+        const s = settings.get()
+        if (!s.filterLists || !s.cosmeticFiltering || !engine.ready) {
+          event.returnValue = ''
+          return
+        }
+        const hostname = String(host ?? '').slice(0, 253).toLowerCase()
+        event.returnValue = hostname ? hideCss(engine.cosmeticSelectors(hostname, [], [])) : ''
+      } catch {
+        event.returnValue = ''
+      }
+    })
 
     const first = openWindow()
     registerIpc()
@@ -471,6 +490,7 @@ function registerIpc() {
   ipcMain.handle('suggest:preconnect', (event, query: unknown) => current(event).preconnect(str(query, 512)))
   ipcMain.handle('privacy:stats', (event) => ({ ...stats }))
   ipcMain.handle('privacy:reset-stats', (event) => resetStats())
+  ipcMain.handle('privacy:blocked-log', () => blockedLog())
   ipcMain.handle('privacy:clear', (event) => current(event).clearData())
   ipcMain.handle('privacy:clear-all-profiles', async () => {
     for (const profile of profiles.state.profiles) {

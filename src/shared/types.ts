@@ -89,6 +89,11 @@ export interface WidgetBox {
   h: number
   /** text size multiplier, so one widget can shout and another whisper */
   scale: number
+  /**
+   * This widget's own text colour, on top of the page-wide one. The weather
+   * widget draws its clouds from it too. Empty or absent means "inherit".
+   */
+  ink?: string
 }
 
 export type StartPageFont = 'system' | 'rounded' | 'serif' | 'mono'

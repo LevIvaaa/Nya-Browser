@@ -187,7 +187,7 @@ function sanitizePermissions(v: unknown): PermissionSettings {
 function sanitizeBox(v: unknown, fallback: WidgetBox): WidgetBox {
   const b = (v ?? {}) as Partial<WidgetBox>
   const w = clamp(b.w, 2, GRID_COLUMNS, fallback.w)
-  return {
+  const box: WidgetBox = {
     w,
     h: clamp(b.h, 1, 40, fallback.h),
     // Clamped against its own width, so a widget can never start off the grid.
@@ -195,6 +195,8 @@ function sanitizeBox(v: unknown, fallback: WidgetBox): WidgetBox {
     y: clamp(b.y, 0, 80, fallback.y),
     scale: clamp(b.scale, 0.6, 2.2, fallback.scale)
   }
+  if (/^#[0-9a-f]{6}$/i.test(String(b.ink))) box.ink = String(b.ink)
+  return box
 }
 
 function sanitizeLayout(v: unknown): Record<WidgetId, WidgetBox> {

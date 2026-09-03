@@ -19,6 +19,32 @@ const builtinAllow = new DomainMatcher(ALLOW_LIST)
 
 export const BLOCKLIST_SIZE = ads.size + trackers.size + miners.size
 
+/**
+ * The last blocked requests, for the «Защита» widget's detail view. Memory
+ * only and capped: this is a window into the counters, not a second history —
+ * nothing of it touches the disk, and closing the browser forgets it.
+ */
+export interface BlockedEntry {
+  time: number
+  /** what was blocked (host of the request) */
+  host: string
+  /** the page it happened on */
+  page: string
+  kind: 'ad' | 'tracker' | 'crypto' | 'param' | 'upgrade'
+}
+
+const BLOCK_LOG_MAX = 400
+const blockLog: BlockedEntry[] = []
+
+function remember(kind: BlockedEntry['kind'], host: string, page: string) {
+  blockLog.push({ time: Date.now(), host, page, kind })
+  if (blockLog.length > BLOCK_LOG_MAX) blockLog.splice(0, blockLog.length - BLOCK_LOG_MAX)
+}
+
+export function blockedLog(): BlockedEntry[] {
+  return [...blockLog].reverse()
+}
+
 export const stats: SecurityStats = {
   ads: 0,
   trackers: 0,
@@ -112,6 +138,37 @@ export function applySpellChecker(ses: Session) {
   const available = new Set(ses.availableSpellCheckerLanguages)
   const wanted = s.spellcheckLanguages.filter((code) => available.has(code))
   if (wanted.length > 0) ses.setSpellCheckerLanguages(wanted)
+}
+
+/**
+ * Is this URL something the blocker would never let load? Used for popups: a
+ * page opening a window to an ad network is a popunder, and the right number
+ * of those is zero. Login popups live on their services' own domains, which no
+ * blocklist contains, so they keep working.
+ */
+export function isBlockedPopup(rawUrl: string, pageHost: string): boolean {
+  try {
+    const url = new URL(rawUrl)
+    const kind = classify(url.hostname, url.pathname)
+    if (kind) {
+      stats.ads++
+      remember('ad', url.hostname, pageHost)
+      return true
+    }
+    const s = settings.get()
+    if (s.filterLists && (s.blockAds || s.blockTrackers)) {
+      const hit = engine.match(rawUrl, pageHost, 'subFrame')
+      if (hit && (hit === 'ad' ? s.blockAds : s.blockTrackers)) {
+        if (hit === 'ad') stats.ads++
+        else stats.trackers++
+        remember(hit, url.hostname, pageHost)
+        return true
+      }
+    }
+  } catch {
+    /* an unparsable URL is not a popup problem */
+  }
+  return false
 }
 
 function classify(hostname: string, pathname: string): BlockKind | null {
@@ -211,6 +268,10 @@ export function hardenSession(ses: Session, onBlocked?: (webContentsId: number) 
       else if (kind === 'tracker') stats.trackers++
       else if (kind === 'crypto') stats.crypto++
       else stats.trackers++
+      const pageHost =
+        (details.webContentsId !== undefined ? documentHosts.get(details.webContentsId) : undefined) ??
+        hostOf(details.referrer || '')
+      remember(kind === 'custom' ? 'ad' : kind, url.hostname, pageHost || '')
       const id = details.webContentsId
       if (id !== undefined) {
         perTabBlocked.set(id, (perTabBlocked.get(id) ?? 0) + 1)
@@ -227,6 +288,7 @@ export function hardenSession(ses: Session, onBlocked?: (webContentsId: number) 
     ) {
       url.protocol = 'https:'
       stats.upgrades++
+      remember('upgrade', url.hostname, url.hostname)
       return callback({ redirectURL: url.toString() })
     }
 
@@ -234,6 +296,7 @@ export function hardenSession(ses: Session, onBlocked?: (webContentsId: number) 
       const cleaned = cleanUrl(details.url)
       if (cleaned) {
         stats.params++
+        remember('param', url.hostname, url.hostname)
         return callback({ redirectURL: cleaned })
       }
     }
@@ -379,6 +442,7 @@ export async function clearBrowsingData(ses: Session = session.defaultSession) {
 }
 
 export function resetStats() {
+  blockLog.length = 0
   stats.ads = 0
   stats.trackers = 0
   stats.crypto = 0

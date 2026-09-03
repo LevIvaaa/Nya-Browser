@@ -65,7 +65,9 @@ const temp = (value: number, fahrenheit: boolean) =>
  */
 function SkyArt({ sky, day, size = 64 }: { sky: Sky; day: boolean; size?: number }) {
   const sun = day ? '#FFC24B' : '#CBD5F5'
-  const cloud = 'color-mix(in srgb, var(--ink) 22%, transparent)'
+  // currentColor, not a theme token: the widget's own colour (or the page's)
+  // decides how the clouds look, so «хочу белые облака» is one colour pick.
+  const cloud = 'color-mix(in srgb, currentColor 45%, transparent)'
 
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden className="shrink-0">

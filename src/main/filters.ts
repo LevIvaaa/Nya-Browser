@@ -785,9 +785,53 @@ let loading: Promise<FilterStatus> | null = null
 
 export const filterStatus = () => lastStatus
 
+/** Reads one cached list from disk, or null when it is not there. */
+function readCached(id: string): string | null {
+  const file = cacheFile(id)
+  if (!existsSync(file)) return null
+  try {
+    return readFileSync(file, 'utf8')
+  } catch {
+    return null
+  }
+}
+
+/** Rebuilds the whole engine from the given list texts. */
+function build(texts: Map<string, string>, meta: Record<string, ListMeta>): FilterStatus {
+  engine.clear()
+  const entries: FilterStatus['lists'] = []
+  for (const list of FILTER_LISTS) {
+    const text = texts.get(list.id)
+    if (text == null) continue
+    engine.ingest(text, list.category)
+    entries.push({
+      id: list.id,
+      name: list.name,
+      bytes: meta[list.id]?.bytes ?? text.length,
+      updated: meta[list.id]?.updated ?? 0
+    })
+  }
+  engine.finish()
+  lastStatus = {
+    enabled: engine.ready,
+    rules: engine.ruleCount,
+    cosmetic: engine.cosmeticCount,
+    updated: Math.max(0, ...entries.map((e) => e.updated)),
+    lists: entries
+  }
+  log('filters:', lastStatus.rules, 'network rules,', lastStatus.cosmetic, 'cosmetic rules')
+  return lastStatus
+}
+
 /**
- * Loads every list from cache, downloading the ones that are missing or stale.
- * Concurrent callers share one run.
+ * Arms the blocker and resolves as soon as it is armed.
+ *
+ * The cache is ingested first, staleness be damned: a week-old EasyList blocks
+ * 99% of what today's does, while "downloading, please browse unprotected" is
+ * the wrong trade for the seconds after startup. Stale and missing lists are
+ * then refreshed in the background, and the engine is rebuilt when the fresh
+ * copies arrive. A forced refresh (the settings button) awaits the downloads,
+ * because its whole point is to report what the refresh fetched.
  */
 export function loadFilters(force = false): Promise<FilterStatus> {
   loading ??= run(force).finally(() => {
@@ -799,54 +843,43 @@ export function loadFilters(force = false): Promise<FilterStatus> {
 async function run(force: boolean): Promise<FilterStatus> {
   const meta = readMeta()
   const now = Date.now()
-  engine.clear()
 
-  const entries: FilterStatus['lists'] = []
+  // Phase one: whatever is on disk, right now.
+  const texts = new Map<string, string>()
   for (const list of FILTER_LISTS) {
-    const file = cacheFile(list.id)
-    const stale = force || !meta[list.id] || now - meta[list.id].updated > REFRESH_AFTER
-    let text: string | null = null
+    const cached = readCached(list.id)
+    if (cached !== null) texts.set(list.id, cached)
+  }
+  if (texts.size > 0 && !force) build(texts, meta)
 
-    if (!stale && existsSync(file)) {
-      try {
-        text = readFileSync(file, 'utf8')
-      } catch {
-        text = null
+  const refresh = FILTER_LISTS.filter(
+    (list) =>
+      force || !texts.has(list.id) || !meta[list.id] || now - meta[list.id].updated > REFRESH_AFTER
+  )
+  if (refresh.length === 0) return lastStatus
+
+  // Phase two: bring the stale ones up to date. Awaited only when forced.
+  const update = (async () => {
+    let changed = false
+    for (const list of refresh) {
+      const text = await download(list)
+      if (text !== null) {
+        texts.set(list.id, text)
+        meta[list.id] = { updated: Date.now(), bytes: text.length }
+        changed = true
       }
     }
-    if (text === null) {
-      text = await download(list)
-      if (text !== null) meta[list.id] = { updated: now, bytes: text.length }
-      else if (existsSync(file)) {
-        // Keep serving the stale copy rather than losing protection entirely.
-        try {
-          text = readFileSync(file, 'utf8')
-        } catch {
-          text = null
-        }
-      }
+    if (changed) {
+      build(texts, meta)
+      writeMeta(meta)
     }
-    if (text === null) continue
+    return lastStatus
+  })()
 
-    engine.ingest(text, list.category)
-    entries.push({
-      id: list.id,
-      name: list.name,
-      bytes: meta[list.id]?.bytes ?? text.length,
-      updated: meta[list.id]?.updated ?? 0
-    })
-  }
-
-  engine.finish()
-  writeMeta(meta)
-
-  lastStatus = {
-    enabled: engine.ready,
-    rules: engine.ruleCount,
-    cosmetic: engine.cosmeticCount,
-    updated: Math.max(0, ...entries.map((e) => e.updated)),
-    lists: entries
-  }
-  log('filters:', lastStatus.rules, 'network rules,', lastStatus.cosmetic, 'cosmetic rules')
+  // Only a forced refresh waits for the network: a cold first run with no
+  // cache is better served by an armed built-in blocklist now and full lists a
+  // few seconds later than by a window that will not open until they download.
+  if (force) return update
+  void update.catch((error) => log('filters: background refresh failed', String(error)))
   return lastStatus
 }
