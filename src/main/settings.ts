@@ -11,6 +11,7 @@ import type {
   WidgetId
 } from '../shared/types'
 import { DEFAULT_LAYOUT, GRID_COLUMNS } from '../shared/startPage'
+import { isKnownLanguage } from '../shared/i18n'
 
 /** Bump when the shape changes in a way sanitize() cannot infer. */
 export const SETTINGS_VERSION = 1
@@ -61,6 +62,7 @@ export const DEFAULT_START_PAGE: StartPageSettings = {
 
 export const DEFAULT_SETTINGS: Settings = {
   onboarded: false,
+  language: '',
   theme: 'system',
   accent: '#7C6CFF',
   radius: 14,
@@ -269,6 +271,7 @@ export function sanitize(input: Partial<Settings>): Settings {
   const d = DEFAULT_SETTINGS
   return {
     onboarded: bool(input.onboarded, d.onboarded),
+    language: isKnownLanguage(String(input.language)) ? String(input.language) : '',
     theme: oneOf(input.theme, ['light', 'dark', 'system'] as const, d.theme),
     accent: /^#[0-9a-f]{6}$/i.test(String(input.accent)) ? String(input.accent) : d.accent,
     radius: clamp(input.radius, 0, 28, d.radius),

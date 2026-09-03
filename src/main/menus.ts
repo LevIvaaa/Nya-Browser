@@ -1,3 +1,4 @@
+import { t } from './i18n'
 import { Menu, clipboard, shell, type MenuItemConstructorOptions, type WebContents } from 'electron'
 import type { BrowserWindow } from './browser'
 
@@ -12,27 +13,27 @@ export function pageContextMenu(
 
   if (has(params.linkURL)) {
     items.push(
-      { label: 'Открыть в новой вкладке', click: () => browser.newTab(params.linkURL, true) },
-      { label: 'Открыть в новой вкладке и перейти', click: () => browser.newTab(params.linkURL) },
-      { label: 'Копировать ссылку', click: () => clipboard.writeText(params.linkURL) },
-      { label: 'Открыть во внешнем браузере', click: () => void shell.openExternal(params.linkURL) },
+      { label: t('Открыть в новой вкладке'), click: () => browser.newTab(params.linkURL, true) },
+      { label: t('Открыть в новой вкладке и перейти'), click: () => browser.newTab(params.linkURL) },
+      { label: t('Копировать ссылку'), click: () => clipboard.writeText(params.linkURL) },
+      { label: t('Открыть во внешнем браузере'), click: () => void shell.openExternal(params.linkURL) },
       { type: 'separator' }
     )
   }
 
   if (params.mediaType === 'image' && has(params.srcURL)) {
     items.push(
-      { label: 'Открыть картинку в новой вкладке', click: () => browser.newTab(params.srcURL, true) },
-      { label: 'Копировать адрес картинки', click: () => clipboard.writeText(params.srcURL) },
-      { label: 'Сохранить картинку', click: () => wc.downloadURL(params.srcURL) },
+      { label: t('Открыть картинку в новой вкладке'), click: () => browser.newTab(params.srcURL, true) },
+      { label: t('Копировать адрес картинки'), click: () => clipboard.writeText(params.srcURL) },
+      { label: t('Сохранить картинку'), click: () => wc.downloadURL(params.srcURL) },
       { type: 'separator' }
     )
   }
 
   if (params.mediaType === 'video' || params.mediaType === 'audio') {
     items.push(
-      { label: 'Сохранить файл', click: () => wc.downloadURL(params.srcURL) },
-      { label: 'Копировать адрес файла', click: () => clipboard.writeText(params.srcURL) },
+      { label: t('Сохранить файл'), click: () => wc.downloadURL(params.srcURL) },
+      { label: t('Копировать адрес файла'), click: () => clipboard.writeText(params.srcURL) },
       { type: 'separator' }
     )
   }
@@ -41,7 +42,7 @@ export function pageContextMenu(
     if (params.misspelledWord) {
       const suggestions = params.dictionarySuggestions.slice(0, 5)
       if (suggestions.length === 0) {
-        items.push({ label: 'Вариантов нет', enabled: false })
+        items.push({ label: t('Вариантов нет'), enabled: false })
       } else {
         for (const word of suggestions) {
           items.push({ label: word, click: () => wc.replaceMisspelling(word) })
@@ -49,27 +50,27 @@ export function pageContextMenu(
       }
       items.push(
         {
-          label: 'Добавить в словарь',
+          label: t('Добавить в словарь'),
           click: () => wc.session.addWordToSpellCheckerDictionary(params.misspelledWord)
         },
         { type: 'separator' }
       )
     }
     items.push(
-      { role: 'undo', label: 'Отменить', enabled: params.editFlags.canUndo },
-      { role: 'redo', label: 'Повторить', enabled: params.editFlags.canRedo },
+      { role: 'undo', label: t('Отменить'), enabled: params.editFlags.canUndo },
+      { role: 'redo', label: t('Повторить'), enabled: params.editFlags.canRedo },
       { type: 'separator' },
-      { role: 'cut', label: 'Вырезать', enabled: params.editFlags.canCut },
-      { role: 'copy', label: 'Копировать', enabled: params.editFlags.canCopy },
-      { role: 'paste', label: 'Вставить', enabled: params.editFlags.canPaste },
-      { role: 'selectAll', label: 'Выделить всё' },
+      { role: 'cut', label: t('Вырезать'), enabled: params.editFlags.canCut },
+      { role: 'copy', label: t('Копировать'), enabled: params.editFlags.canCopy },
+      { role: 'paste', label: t('Вставить'), enabled: params.editFlags.canPaste },
+      { role: 'selectAll', label: t('Выделить всё') },
       { type: 'separator' }
     )
   } else if (has(params.selectionText)) {
     items.push(
-      { role: 'copy', label: 'Копировать' },
+      { role: 'copy', label: t('Копировать') },
       {
-        label: `Искать «${params.selectionText.slice(0, 24)}»`,
+        label: t('Искать «{q}»', { q: params.selectionText.slice(0, 24) }),
         click: () => browser.newTab(params.selectionText, false)
       },
       { type: 'separator' }
@@ -77,14 +78,14 @@ export function pageContextMenu(
   }
 
   items.push(
-    { label: 'Назад', enabled: wc.navigationHistory.canGoBack(), click: () => browser.goBack() },
-    { label: 'Вперёд', enabled: wc.navigationHistory.canGoForward(), click: () => browser.goForward() },
-    { label: 'Обновить', click: () => browser.reload() },
+    { label: t('Назад'), enabled: wc.navigationHistory.canGoBack(), click: () => browser.goBack() },
+    { label: t('Вперёд'), enabled: wc.navigationHistory.canGoForward(), click: () => browser.goForward() },
+    { label: t('Обновить'), click: () => browser.reload() },
     { type: 'separator' },
-    { label: 'Сохранить в закладки', click: () => browser.bookmarkCurrent() },
-    { label: 'Копировать адрес страницы', click: () => clipboard.writeText(wc.getURL()) },
+    { label: t('Сохранить в закладки'), click: () => browser.bookmarkCurrent() },
+    { label: t('Копировать адрес страницы'), click: () => clipboard.writeText(wc.getURL()) },
     { type: 'separator' },
-    { label: 'Инструменты разработчика', click: () => wc.inspectElement(params.x, params.y) }
+    { label: t('Инструменты разработчика'), click: () => wc.inspectElement(params.x, params.y) }
   )
 
   Menu.buildFromTemplate(items).popup()
@@ -107,23 +108,23 @@ export function uiContextMenu(wc: WebContents, params: Electron.ContextMenuParam
       }
       items.push(
         {
-          label: 'Добавить в словарь',
+          label: t('Добавить в словарь'),
           click: () => wc.session.addWordToSpellCheckerDictionary(params.misspelledWord)
         },
         { type: 'separator' }
       )
     }
     items.push(
-      { role: 'undo', label: 'Отменить', enabled: params.editFlags.canUndo },
-      { role: 'redo', label: 'Повторить', enabled: params.editFlags.canRedo },
+      { role: 'undo', label: t('Отменить'), enabled: params.editFlags.canUndo },
+      { role: 'redo', label: t('Повторить'), enabled: params.editFlags.canRedo },
       { type: 'separator' },
-      { role: 'cut', label: 'Вырезать', enabled: params.editFlags.canCut },
-      { role: 'copy', label: 'Копировать', enabled: params.editFlags.canCopy },
-      { role: 'paste', label: 'Вставить', enabled: params.editFlags.canPaste },
-      { role: 'selectAll', label: 'Выделить всё', enabled: params.editFlags.canSelectAll }
+      { role: 'cut', label: t('Вырезать'), enabled: params.editFlags.canCut },
+      { role: 'copy', label: t('Копировать'), enabled: params.editFlags.canCopy },
+      { role: 'paste', label: t('Вставить'), enabled: params.editFlags.canPaste },
+      { role: 'selectAll', label: t('Выделить всё'), enabled: params.editFlags.canSelectAll }
     )
   } else if (params.selectionText.trim()) {
-    items.push({ role: 'copy', label: 'Копировать' })
+    items.push({ role: 'copy', label: t('Копировать') })
   }
 
   if (items.length > 0) Menu.buildFromTemplate(items).popup()
@@ -136,22 +137,22 @@ export function tabContextMenu(browser: BrowserWindow, tabId: number) {
   const many = browser.tabs.length > 1
 
   Menu.buildFromTemplate([
-    { label: 'Обновить', click: () => browser.reloadTab(tabId) },
-    { label: 'Дублировать', click: () => browser.duplicateTab(tabId) },
+    { label: t('Обновить'), click: () => browser.reloadTab(tabId) },
+    { label: t('Дублировать'), click: () => browser.duplicateTab(tabId) },
     {
-      label: tab.muted ? 'Включить звук' : 'Выключить звук',
+      label: tab.muted ? t('Включить звук') : t('Выключить звук'),
       click: () => browser.toggleMute(tabId)
     },
     {
-      label: 'Усыпить вкладку',
+      label: t('Усыпить вкладку'),
       enabled: tab.hasContent && tabId !== browser.activeId,
       click: () => browser.sleepTab(tabId)
     },
     { type: 'separator' },
-    { label: 'В закладки', enabled: tab.hasContent, click: () => browser.bookmarkTab(tabId) },
+    { label: t('В закладки'), enabled: tab.hasContent, click: () => browser.bookmarkTab(tabId) },
     { type: 'separator' },
-    { label: 'Закрыть', click: () => browser.closeTab(tabId) },
-    { label: 'Закрыть остальные', enabled: many, click: () => browser.closeOthers(tabId) },
-    { label: 'Закрыть справа', enabled: many, click: () => browser.closeToRight(tabId) }
+    { label: t('Закрыть'), click: () => browser.closeTab(tabId) },
+    { label: t('Закрыть остальные'), enabled: many, click: () => browser.closeOthers(tabId) },
+    { label: t('Закрыть справа'), enabled: many, click: () => browser.closeToRight(tabId) }
   ]).popup()
 }

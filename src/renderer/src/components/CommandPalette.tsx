@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { SearchEngine, Suggestion } from '../../../shared/types'
 import { Clock, Globe, Search, Star } from './Icons'
@@ -81,7 +82,7 @@ export default function CommandPalette({
   }
 
   const hint = useMemo(
-    () => (value.trim() ? `Enter — открыть · ${engine.name}` : 'Введите адрес или запрос'),
+    () => (value.trim() ? t('Enter — открыть · {engine}', { engine: engine.name }) : t('Введите адрес или запрос')),
     [value, engine.name]
   )
 
@@ -110,7 +111,7 @@ export default function CommandPalette({
             value={value}
             spellCheck={false}
             autoComplete="off"
-            placeholder="Поиск или адрес сайта"
+            placeholder={t('Поиск или адрес сайта')}
             onChange={(event) => setValue(event.target.value)}
             onKeyDown={onKeyDown}
             className="min-w-0 flex-1 bg-transparent text-[16px] outline-none placeholder:text-faint"
@@ -151,7 +152,7 @@ export default function CommandPalette({
           style={{ borderColor: 'var(--line)' }}
         >
           <span>{hint}</span>
-          <span>Подсказки только из локального профиля</span>
+          <span>{t('Подсказки только из локального профиля')}</span>
         </div>
       </div>
     </div>

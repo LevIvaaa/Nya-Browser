@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
 import type { PermissionRequest } from '../../../shared/types'
 import type { AutofillOffer, SavePasswordOffer } from '../../../preload/index'
@@ -30,7 +31,7 @@ function Bar({
       </span>
       <div className="flex min-w-0 flex-1 items-center gap-3">{children}</div>
       {onClose && (
-        <button className="icon-btn h-6 w-6 shrink-0" onClick={onClose} aria-label="Закрыть">
+        <button className="icon-btn h-6 w-6 shrink-0" onClick={onClose} aria-label={t('Закрыть')}>
           <Cross width={13} height={13} />
         </button>
       )}
@@ -63,7 +64,7 @@ export function FindBar({ onClose }: { onClose: () => void }) {
           ref={input}
           value={query}
           spellCheck={false}
-          placeholder="Найти на странице"
+          placeholder={t('Найти на странице')}
           className="w-[220px] bg-transparent text-sm outline-none placeholder:text-faint"
           onChange={(event) => {
             setQuery(event.target.value)
@@ -75,13 +76,13 @@ export function FindBar({ onClose }: { onClose: () => void }) {
             if (event.key === 'Escape') onClose()
           }}
         />
-        <button className="icon-btn h-6 w-6" title="Назад" onClick={() => run(false)}>
+        <button className="icon-btn h-6 w-6" title={t('Назад')} onClick={() => run(false)}>
           <ArrowLeft width={13} height={13} />
         </button>
-        <button className="icon-btn h-6 w-6" title="Далее" onClick={() => run(true)}>
+        <button className="icon-btn h-6 w-6" title={t('Далее')} onClick={() => run(true)}>
           <ArrowRight width={13} height={13} />
         </button>
-        <button className="icon-btn h-6 w-6" title="Закрыть" onClick={onClose}>
+        <button className="icon-btn h-6 w-6" title={t('Закрыть')} onClick={onClose}>
           <Cross width={13} height={13} />
         </button>
       </div>
@@ -112,14 +113,14 @@ export function PermissionBar({
   return (
     <Bar icon={<Shield width={16} height={16} />} tone="warn" onClose={() => onAnswer(false)}>
       <span className="min-w-0 flex-1 truncate text-sm">
-        <b className="font-semibold">{request.origin || 'Сайт'}</b> просит{' '}
-        {PERMISSION_LABEL[request.permission] ?? 'дополнительный доступ'}
+        <b className="font-semibold">{request.origin || t('Сайт')}</b> просит{' '}
+        {t(PERMISSION_LABEL[request.permission] ?? 'дополнительный доступ')}
       </span>
       <button className="btn h-[28px] px-3 text-sm" onClick={() => onAnswer(false)}>
-        Запретить
+        {t('Запретить')}
       </button>
       <button className="btn btn-primary h-[28px] px-3 text-sm" onClick={() => onAnswer(true)}>
-        Разрешить
+        {t('Разрешить')}
       </button>
     </Bar>
   )
@@ -136,15 +137,15 @@ export function SavePasswordBar({
   return (
     <Bar icon={<Key width={16} height={16} />} onClose={() => onAnswer(false)}>
       <span className="min-w-0 flex-1 truncate text-sm">
-        {offer.known ? 'Обновить пароль для ' : 'Сохранить пароль для '}
+        {offer.known ? t('Обновить пароль для') : t('Сохранить пароль для')}{' '}
         <b className="font-semibold">{offer.host}</b>
         {offer.username ? ` · ${offer.username}` : ''}
       </span>
       <button className="btn h-[28px] px-3 text-sm" onClick={() => onAnswer(false)}>
-        Не сейчас
+        {t('Не сейчас')}
       </button>
       <button className="btn btn-primary h-[28px] px-3 text-sm" onClick={() => onAnswer(true)}>
-        Сохранить
+        {t('Сохранить')}
       </button>
     </Bar>
   )
@@ -167,7 +168,7 @@ export function AutofillBar({
           Есть сохранённые пароли для <b className="font-semibold">{offer.host}</b> — хранилище заблокировано
         </span>
         <button className="btn btn-primary h-[28px] px-3 text-sm" onClick={onUnlock}>
-          Разблокировать
+          {t('Разблокировать')}
         </button>
       </Bar>
     )
@@ -175,7 +176,7 @@ export function AutofillBar({
 
   return (
     <Bar icon={<Key width={16} height={16} />} onClose={onClose}>
-      <span className="shrink-0 text-sm text-dim">Подставить пароль:</span>
+      <span className="shrink-0 text-sm text-dim">{t('Подставить пароль:')}</span>
       <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
         {offer.entries.map((entry) => (
           <button
@@ -186,7 +187,7 @@ export function AutofillBar({
               onClose()
             }}
           >
-            {entry.username || 'без имени'}
+            {entry.username || t('без имени')}
           </button>
         ))}
       </div>

@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
 import type { Profile, SearchEngine, Settings } from '../../../shared/types'
 import logoUrl from '../assets/logo.png'
@@ -113,7 +114,7 @@ export default function Welcome({
           <button
             key={item.id}
             onClick={() => i <= index && go(i)}
-            title={item.title}
+            title={t(item.title)}
             className="h-1.5 rounded-pill"
             style={{
               width: i === index ? 34 : 16,
@@ -152,19 +153,19 @@ export default function Welcome({
           onClick={() => go(index - 1)}
           style={{ visibility: index === 0 ? 'hidden' : 'visible' }}
         >
-          Назад
+          {t('Назад')}
         </button>
         <div className="flex items-center gap-2">
           {index > 0 && index < STEPS.length - 1 && (
             <button className="btn" onClick={onDone}>
-              Пропустить настройку
+              {t('Пропустить настройку')}
             </button>
           )}
           <button
             className="btn btn-primary px-6"
             onClick={() => (index === STEPS.length - 1 ? onDone() : go(index + 1))}
           >
-            {index === 0 ? 'Начать' : index === STEPS.length - 1 ? 'Открыть браузер' : 'Дальше'}
+            {index === 0 ? t('Начать') : index === STEPS.length - 1 ? t('Открыть браузер') : t('Дальше')}
           </button>
         </div>
       </div>
@@ -262,9 +263,9 @@ function Choice({
 
 function Hello() {
   const badges = [
-    { icon: <Shield width={13} height={13} />, text: 'Блокировщик рекламы и трекеров' },
-    { icon: <Sparkles width={13} height={13} />, text: 'Живые обои и своя главная' },
-    { icon: <Zap width={13} height={13} />, text: 'Профили с отдельными данными' }
+    { icon: <Shield width={13} height={13} />, text: t('Блокировщик рекламы и трекеров') },
+    { icon: <Sparkles width={13} height={13} />, text: t('Живые обои и своя главная') },
+    { icon: <Zap width={13} height={13} />, text: t('Профили с отдельными данными') }
   ]
   return (
     <div className="flex flex-col items-center text-center">
@@ -275,11 +276,10 @@ function Hello() {
         style={{ filter: 'drop-shadow(0 12px 28px rgba(0,0,0,0.22))' }}
       />
       <h1 className="text-[38px] font-semibold leading-tight tracking-[-0.035em]">
-        Добро пожаловать в Nya Browser
+        {t('Добро пожаловать в Nya Browser')}
       </h1>
       <p className="mt-3 max-w-[440px] text-base text-dim">
-        Несколько шагов — и браузер будет выглядеть и вести себя так, как нужно вам. Всё, что
-        выберете, можно поменять потом в настройках.
+        {t('Несколько шагов — и браузер будет выглядеть и вести себя так, как нужно вам. Всё, что выберете, можно поменять потом в настройках.')}
       </p>
       <div className="mt-7 flex flex-wrap items-center justify-center gap-2">
         {badges.map((item) => (
@@ -309,7 +309,7 @@ function ProfileStep({ profile }: { profile: Profile | null }) {
   useEffect(() => {
     if (!id) return
     const timer = setTimeout(() => {
-      const next = { name: name.trim() || 'Профиль', avatar, color }
+      const next = { name: name.trim() || t('Профиль'), avatar, color }
       if (JSON.stringify(next) === JSON.stringify(saved.current)) return
       saved.current = next
       void window.browser.updateProfile(id, next)
@@ -320,22 +320,22 @@ function ProfileStep({ profile }: { profile: Profile | null }) {
   return (
     <div>
       <Title
-        title="Как вас зовут?"
-        hint="Имя и значок профиля видно только вам, на этом компьютере"
+        title={t('Как вас зовут?')}
+        hint={t('Имя и значок профиля видно только вам, на этом компьютере')}
       />
 
       <div className="flex items-center gap-4 rounded-card p-4" style={{ background: 'var(--surface)' }}>
         <Avatar avatar={avatar} crop={profile?.crop} color={color} size={64} />
         <div className="flex-1">
-          <TextField value={name} onChange={setName} placeholder="Имя профиля" width="100%" autoFocus />
+          <TextField value={name} onChange={setName} placeholder={t('Имя профиля')} width="100%" autoFocus />
           <p className="mt-1.5 text-sm text-faint">
-            Позже сюда можно поставить свою картинку или анимацию.
+            {t('Позже сюда можно поставить свою картинку или анимацию.')}
           </p>
         </div>
       </div>
 
       <div className="mt-4 flex flex-col gap-2">
-        <span className="text-sm text-dim">Значок</span>
+        <span className="text-sm text-dim">{t('Значок')}</span>
         <div className="flex flex-wrap gap-1.5">
           {AVATARS.map((value) => (
             <button
@@ -357,7 +357,7 @@ function ProfileStep({ profile }: { profile: Profile | null }) {
       </div>
 
       <div className="mt-4 flex flex-col gap-2">
-        <span className="text-sm text-dim">Цвет профиля</span>
+        <span className="text-sm text-dim">{t('Цвет профиля')}</span>
         <div className="flex flex-wrap gap-2">
           {ACCENTS.map((value) => (
             <button
@@ -385,19 +385,19 @@ function LookStep({
   onPatch: (patch: Partial<Settings>) => void
 }) {
   const themes = [
-    { value: 'light', title: 'Светлая', hint: 'Днём', swatch: '#F6F7FB' },
-    { value: 'dark', title: 'Тёмная', hint: 'Вечером', swatch: '#15161B' },
+    { value: 'light', title: t('Светлая'), hint: t('Днём'), swatch: '#F6F7FB' },
+    { value: 'dark', title: t('Тёмная'), hint: t('Вечером'), swatch: '#15161B' },
     {
       value: 'system',
-      title: 'Как в системе',
-      hint: 'Переключается сама',
+      title: t('Как в системе'),
+      hint: t('Переключается сама'),
       swatch: 'linear-gradient(105deg, #F6F7FB 50%, #15161B 50%)'
     }
   ] as const
 
   return (
     <div>
-      <Title title="Тема и цвет" hint="Меняется сразу — смотрите, как отзывается окно вокруг" />
+      <Title title={t('Тема и цвет')} hint={t('Меняется сразу — смотрите, как отзывается окно вокруг')} />
 
       <div className="grid grid-cols-3 gap-2.5">
         {themes.map((item) => (
@@ -418,7 +418,7 @@ function LookStep({
       </div>
 
       <div className="mt-5 flex flex-col gap-2">
-        <span className="text-sm text-dim">Акцент</span>
+        <span className="text-sm text-dim">{t('Акцент')}</span>
         <div className="flex flex-wrap gap-2.5">
           {ACCENTS.map((color) => (
             <button
@@ -435,7 +435,7 @@ function LookStep({
           <label
             className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-pill"
             style={{ background: 'var(--field-idle)' }}
-            title="Свой цвет"
+            title={t('Свой цвет')}
           >
             <Palette width={15} height={15} />
             <input
@@ -449,7 +449,7 @@ function LookStep({
       </div>
 
       <div className="mt-5 flex items-center justify-between gap-4">
-        <span className="text-sm text-dim">Скругление углов</span>
+        <span className="text-sm text-dim">{t('Скругление углов')}</span>
         <Slider
           value={settings.radius}
           min={0}
@@ -473,13 +473,13 @@ function GlassStep({
   return (
     <div>
       <Title
-        title="Насколько прозрачны панели"
-        hint="Это про панели и карточки — обои под ними остаются как есть"
+        title={t('Насколько прозрачны панели')}
+        hint={t('Это про панели и карточки — обои под ними остаются как есть')}
       />
 
       <div className="rounded-card p-5" style={{ background: 'var(--surface)' }}>
         <div className="mb-4 flex flex-col gap-2">
-          {['Верхняя панель', 'Карточка на главной'].map((label, i) => (
+          {[t('Верхняя панель'), t('Карточка на главной')].map((label, i) => (
             <div
               key={label}
               className="flex items-center rounded-[12px] border px-3.5"
@@ -497,7 +497,7 @@ function GlassStep({
 
         <div className="flex items-center justify-between gap-4">
           <span className="text-sm text-dim">
-            {settings.glass >= 95 ? 'Сплошные' : settings.glass <= 30 ? 'Почти стекло' : 'Стекло'}
+            {settings.glass >= 95 ? t('Сплошные') : settings.glass <= 30 ? t('Почти стекло') : t('Стекло')}
           </span>
           <Slider
             value={settings.glass}
@@ -522,15 +522,15 @@ function WallpaperStep({
 }) {
   const bg = settings.background
   const kinds = [
-    { value: 'aurora', title: 'Аврора', hint: 'Плывущие пятна', icon: <Sparkles width={14} height={14} /> },
-    { value: 'mesh', title: 'Меш', hint: 'Градиентная сетка', icon: <Palette width={14} height={14} /> },
-    { value: 'waves', title: 'Волны', hint: 'Мягкие переливы', icon: <Zap width={14} height={14} /> },
-    { value: 'off', title: 'Без фона', hint: 'Ровный цвет', icon: <Cross width={14} height={14} /> }
+    { value: 'aurora', title: t('Аврора'), hint: t('Плывущие пятна'), icon: <Sparkles width={14} height={14} /> },
+    { value: 'mesh', title: t('Меш'), hint: t('Градиентная сетка'), icon: <Palette width={14} height={14} /> },
+    { value: 'waves', title: t('Волны'), hint: t('Мягкие переливы'), icon: <Zap width={14} height={14} /> },
+    { value: 'off', title: t('Без фона'), hint: t('Ровный цвет'), icon: <Cross width={14} height={14} /> }
   ] as const
 
   return (
     <div>
-      <Title title="Обои" hint="Живой фон или своя картинка — видно прямо за этим окном" />
+      <Title title={t('Обои')} hint={t('Живой фон или своя картинка — видно прямо за этим окном')} />
 
       <div className="grid grid-cols-4 gap-2.5">
         {kinds.map((item) => (
@@ -548,8 +548,8 @@ function WallpaperStep({
       <div className="mt-3 grid grid-cols-2 gap-2.5">
         {(
           [
-            { kind: 'image', icon: <Image width={16} height={16} />, title: 'Своя картинка', hint: 'PNG, JPG, WebP, GIF' },
-            { kind: 'video', icon: <Film width={16} height={16} />, title: 'Видео-обои', hint: 'MP4, WebM, MOV' }
+            { kind: 'image', icon: <Image width={16} height={16} />, title: t('Своя картинка'), hint: 'PNG, JPG, WebP, GIF' },
+            { kind: 'video', icon: <Film width={16} height={16} />, title: t('Видео-обои'), hint: 'MP4, WebM, MOV' }
           ] as const
         ).map((item) => (
           <Choice
@@ -590,7 +590,7 @@ function SearchStep({
   const list = engines.filter((item) => item.id !== 'custom')
   return (
     <div>
-      <Title title="Чем искать" hint="Поменять можно в любой момент в настройках" />
+      <Title title={t('Чем искать')} hint={t('Поменять можно в любой момент в настройках')} />
       {/* No max-height and no scroller here: with just the names the list fits,
           and a container that can scroll grows a scrollbar the moment a card
           lifts on hover. */}
@@ -620,29 +620,29 @@ function PrivacyStep({
   const rows = [
     {
       key: 'blockAds' as const,
-      title: 'Блокировать рекламу',
-      hint: 'Меньше запросов — страницы открываются быстрее'
+      title: t('Блокировать рекламу'),
+      hint: t('Меньше запросов — страницы открываются быстрее')
     },
     {
       key: 'blockTrackers' as const,
-      title: 'Блокировать трекеры',
-      hint: 'Счётчики и пиксели, которые следят за вами между сайтами'
+      title: t('Блокировать трекеры'),
+      hint: t('Счётчики и пиксели, которые следят за вами между сайтами')
     },
     {
       key: 'blockCrypto' as const,
-      title: 'Блокировать майнеры',
-      hint: 'Скрипты, которые считают чужую криптовалюту вашим процессором'
+      title: t('Блокировать майнеры'),
+      hint: t('Скрипты, которые считают чужую криптовалюту вашим процессором')
     },
     {
       key: 'historySuggestions' as const,
-      title: 'Подсказки из истории',
-      hint: 'В адресной строке. История хранится только у вас на диске'
+      title: t('Подсказки из истории'),
+      hint: t('В адресной строке. История хранится только у вас на диске')
     }
   ]
 
   return (
     <div>
-      <Title title="Защита" hint="Включено по умолчанию — выключить можно в любой момент" />
+      <Title title={t('Защита')} hint={t('Включено по умолчанию — выключить можно в любой момент')} />
       <div className="flex flex-col gap-2">
         {rows.map((row) => (
           <label
@@ -673,13 +673,13 @@ function Done({
 }) {
   const engine = engines.find((item) => item.id === settings.searchEngine)
   const theme =
-    settings.theme === 'dark' ? 'Тёмная' : settings.theme === 'light' ? 'Светлая' : 'Как в системе'
+    settings.theme === 'dark' ? t('Тёмная') : settings.theme === 'light' ? t('Светлая') : t('Как в системе')
 
   const summary = [
-    { label: 'Профиль', value: profile?.name || 'Профиль' },
-    { label: 'Тема', value: theme },
-    { label: 'Прозрачность панелей', value: `${settings.glass}%` },
-    { label: 'Поиск', value: engine?.name ?? '—' }
+    { label: t('Профиль'), value: profile?.name || t('Профиль') },
+    { label: t('Тема'), value: theme },
+    { label: t('Прозрачность панелей'), value: `${settings.glass}%` },
+    { label: t('Поиск'), value: engine?.name ?? '—' }
   ]
 
   return (
@@ -690,9 +690,9 @@ function Done({
       >
         <Check width={36} height={36} />
       </span>
-      <h1 className="text-[30px] font-semibold tracking-[-0.03em]">Всё готово</h1>
+      <h1 className="text-[30px] font-semibold tracking-[-0.03em]">{t('Всё готово')}</h1>
       <p className="mt-1.5 text-base text-dim">
-        Настройки уже применены. Поменять их можно в любой момент — Ctrl+, откроет настройки.
+        {t('Настройки уже применены. Поменять их можно в любой момент — Ctrl+, откроет настройки.')}
       </p>
 
       <div className="mt-6 grid grid-cols-2 gap-2.5 text-left">

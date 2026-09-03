@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useRef, useState } from 'react'
 import type { InternalPage, Settings, TabState } from '../../../shared/types'
 import { Clock, Cross, Download, Gear, Globe, Key, Plus, Sleep, Star, Volume, VolumeOff } from './Icons'
@@ -83,7 +84,7 @@ function TabItem({ tab, settings, vertical, index, dropIndex, onDragStart, onDra
   const [hover, setHover] = useState(false)
   const height = settings.compact ? 30 : 34
   const audio = tab.audible || tab.muted
-  const title = tab.title || tab.origin || 'Новая вкладка'
+  const title = tab.title || tab.origin || t('Новая вкладка')
   const showClose =
     settings.closeButton === 'always' || (settings.closeButton === 'hover' && (hover || tab.active)) ||
     (settings.closeButton === 'active' && tab.active)
@@ -148,7 +149,7 @@ function TabItem({ tab, settings, vertical, index, dropIndex, onDragStart, onDra
       {audio && (
         <button
           className="no-drag shrink-0 rounded-[6px] p-[3px] text-dim hover:bg-[var(--field-idle)] hover:text-ink"
-          title={tab.muted ? 'Включить звук' : 'Выключить звук'}
+          title={tab.muted ? t('Включить звук') : t('Выключить звук')}
           onClick={(event) => {
             event.stopPropagation()
             window.browser.toggleMute(tab.id)
@@ -160,7 +161,7 @@ function TabItem({ tab, settings, vertical, index, dropIndex, onDragStart, onDra
       )}
 
       <button
-        aria-label="Закрыть вкладку"
+        aria-label={t('Закрыть вкладку')}
         onClick={(event) => {
           event.stopPropagation()
           window.browser.closeTab(tab.id)
@@ -228,7 +229,7 @@ export function TabStrip({ tabs, settings }: { tabs: TabState[]; settings: Setti
           />
         ))}
       </div>
-      <button className="icon-btn shrink-0" title="Новая вкладка · Ctrl+T" onClick={() => window.browser.newTab()}>
+      <button className="icon-btn shrink-0" title={t('Новая вкладка · Ctrl+T')} onClick={() => window.browser.newTab()}>
         <Plus />
       </button>
       <div className="flex-1" />
@@ -262,7 +263,7 @@ export function TabRail({
         <span className="text-2xs font-semibold uppercase tracking-wider text-faint">
           Вкладки · {tabs.length}
         </span>
-        <button className="icon-btn h-6 w-6" title="Новая вкладка · Ctrl+T" onClick={() => window.browser.newTab()}>
+        <button className="icon-btn h-6 w-6" title={t('Новая вкладка · Ctrl+T')} onClick={() => window.browser.newTab()}>
           <Plus width={14} height={14} />
         </button>
       </div>

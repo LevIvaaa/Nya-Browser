@@ -5,6 +5,7 @@ import Toolbar from './components/Toolbar'
 import BookmarksBar from './components/BookmarksBar'
 import Toasts from './components/Toasts'
 import Welcome from './components/Welcome'
+import { applyLanguage, onLanguageChange } from './i18n'
 import { AutofillBar, FindBar, PermissionBar, SavePasswordBar } from './components/Bars'
 import { TabRail, TabStrip } from './components/Tabs'
 import StartPage from './pages/StartPage'
@@ -37,6 +38,14 @@ export default function App() {
   // Which part of the settings page to open at, when asked for one.
   const [section, setSection] = useState('')
   const [findOpen, setFindOpen] = useState(false)
+  // Language: load the dictionary the settings name, and re-render the whole
+  // tree when it lands or changes. t() reads the active dictionary at render
+  // time, so one state bump repaints every label.
+  const [, setLangVersion] = useState(0)
+  useEffect(() => onLanguageChange(() => setLangVersion((v) => v + 1)), [])
+  useEffect(() => {
+    if (settings) void applyLanguage(settings.language)
+  }, [settings?.language])
   const [revealed, setRevealed] = useState(false)
 
   useEffect(() => {

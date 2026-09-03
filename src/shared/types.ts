@@ -163,6 +163,8 @@ export interface Settings {
    * greeting the same person twice.
    */
   onboarded: boolean
+  /** interface language code from shared/i18n, '' = follow the system */
+  language: string
 
   // ---- appearance
   theme: ThemeMode

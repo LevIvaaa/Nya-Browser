@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, ChevronDown, Cross } from './Icons'
 import type { AvatarCrop } from '../../../shared/types'
+import { currentLanguage, t } from '../i18n'
 
 export const cx = (...parts: Array<string | false | null | undefined>) => parts.filter(Boolean).join(' ')
 
@@ -555,7 +556,7 @@ export const formatBytes = (bytes: number) => {
   if (!bytes) return '0 Б'
   const units = ['Б', 'КБ', 'МБ', 'ГБ']
   const index = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)))
-  return `${(bytes / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`
+  return `${(bytes / 1024 ** index).toFixed(index ? 1 : 0)} ${t(units[index])}`
 }
 
 export const formatDate = (ms: number) => {
@@ -563,6 +564,9 @@ export const formatDate = (ms: number) => {
   const today = new Date()
   const sameDay = date.toDateString() === today.toDateString()
   return sameDay
-    ? date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
-    : date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+    ? date.toLocaleTimeString(currentLanguage() || undefined, {
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    : date.toLocaleDateString(currentLanguage() || undefined, { day: 'numeric', month: 'short' })
 }

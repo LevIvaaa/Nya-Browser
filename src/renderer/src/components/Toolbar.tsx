@@ -1,4 +1,5 @@
 import type { Profile, Settings, TabState, UpdateState } from '../../../shared/types'
+import { t } from '../i18n'
 import {
   ArrowLeft,
   ArrowRight,
@@ -62,25 +63,25 @@ export default function Toolbar({
   const updateBadge =
     update?.stage === 'available' || downloadingUpdate || update?.stage === 'ready'
   const updateLabel = downloadingUpdate
-    ? `Загружаем обновление — ${update?.percent}%`
+    ? t('Загружаем обновление — {p}%', { p: update?.percent ?? 0 })
     : update?.stage === 'ready'
-      ? 'Обновление готово к установке'
-      : 'Доступно обновление'
+      ? t('Обновление готово к установке')
+      : t('Доступно обновление')
 
   return (
     <div className="drag flex items-center gap-1 pl-2 pr-0" style={{ height }}>
       <div className="no-drag flex items-center gap-0.5">
-        <Tooltip label="Назад · Alt+←">
+        <Tooltip label={t('Назад · Alt+←')}>
           <button className="icon-btn" disabled={!tab?.canGoBack} onClick={() => window.browser.back()}>
             <ArrowLeft />
           </button>
         </Tooltip>
-        <Tooltip label="Вперёд · Alt+→">
+        <Tooltip label={t('Вперёд · Alt+→')}>
           <button className="icon-btn" disabled={!tab?.canGoForward} onClick={() => window.browser.forward()}>
             <ArrowRight />
           </button>
         </Tooltip>
-        <Tooltip label={loading ? 'Остановить · Esc' : 'Обновить · Ctrl+R'}>
+        <Tooltip label={loading ? t('Остановить · Esc') : t('Обновить · Ctrl+R')}>
           <button
             className="icon-btn"
             disabled={!hasContent}
@@ -89,7 +90,7 @@ export default function Toolbar({
             {loading ? <Cross /> : <Reload />}
           </button>
         </Tooltip>
-        <Tooltip label="Стартовая страница">
+        <Tooltip label={t('Стартовая страница')}>
           <button className="icon-btn" onClick={() => window.browser.home()}>
             <Home />
           </button>
@@ -132,7 +133,7 @@ export default function Toolbar({
                 <span className="text-faint">{tab.displayUrl.slice(tab.origin.length)}</span>
               </>
             ) : (
-              <span className="text-faint">Поиск или адрес сайта</span>
+              <span className="text-faint">{t('Поиск или адрес сайта')}</span>
             )}
           </span>
 
@@ -145,7 +146,7 @@ export default function Toolbar({
           {blocked > 0 && (
             <span
               className="animate-pop flex shrink-0 items-center gap-1 rounded-pill px-1.5 py-[1px] text-2xs font-semibold"
-              title={`Заблокировано на этой странице: ${blocked}`}
+              title={t('Заблокировано на этой странице: {n}', { n: blocked })}
               style={{ background: 'color-mix(in srgb, var(--good) 16%, transparent)', color: 'var(--good)' }}
             >
               <Shield width={10} height={10} />
@@ -168,19 +169,19 @@ export default function Toolbar({
 
       {/* actions */}
       {incognito && (
-        <Tooltip label="Приватное окно · история, кэш и cookie исчезнут вместе с ним">
+        <Tooltip label={t('Приватное окно · история, кэш и cookie исчезнут вместе с ним')}>
           <span
             className="mr-1 flex h-[26px] shrink-0 items-center gap-1.5 rounded-pill px-2.5 text-2xs font-semibold"
             style={{ background: 'color-mix(in srgb, var(--accent) 22%, transparent)', color: 'var(--accent)' }}
           >
             <Incognito width={14} height={14} />
-            Приватно
+            {t('Приватно')}
           </span>
         </Tooltip>
       )}
 
       <div className="no-drag flex items-center gap-0.5 pr-1">
-        <Tooltip label={bookmarked ? 'Убрать из закладок · Ctrl+D' : 'В закладки · Ctrl+D'}>
+        <Tooltip label={bookmarked ? t('Убрать из закладок · Ctrl+D') : t('В закладки · Ctrl+D')}>
           <button
             className="icon-btn"
             disabled={!canBookmark}
@@ -232,7 +233,7 @@ export default function Toolbar({
           </Tooltip>
         )}
 
-        <Tooltip label="Загрузки · Ctrl+J">
+        <Tooltip label={t('Загрузки · Ctrl+J')}>
           <button
             className="icon-btn relative"
             onClick={() => onToggleView('downloads')}
@@ -248,14 +249,14 @@ export default function Toolbar({
           </button>
         </Tooltip>
 
-        <Tooltip label="Новая вкладка · Ctrl+T">
+        <Tooltip label={t('Новая вкладка · Ctrl+T')}>
           <button className="icon-btn" onClick={() => window.browser.newTab()}>
             <Plus />
           </button>
         </Tooltip>
 
         {profile && (
-          <Tooltip label={`Профиль: ${profile.name}`}>
+          <Tooltip label={t('Профиль: {name}', { name: profile.name })}>
             <button
               className="icon-btn"
               onMouseDown={(event) => event.stopPropagation()}
@@ -267,7 +268,7 @@ export default function Toolbar({
           </Tooltip>
         )}
 
-        <Tooltip label="Настройки · Ctrl+,">
+        <Tooltip label={t('Настройки · Ctrl+,')}>
           <button
             className="icon-btn"
             onClick={() => onToggleView('settings')}
@@ -277,7 +278,7 @@ export default function Toolbar({
           </button>
         </Tooltip>
 
-        <Tooltip label="Меню">
+        <Tooltip label={t('Меню')}>
           <button
             className={cx('icon-btn')}
             onMouseDown={(event) => event.stopPropagation()}

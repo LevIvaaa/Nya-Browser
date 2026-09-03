@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { applyLanguage, onLanguageChange } from './i18n'
 import { useBrowser } from './state/useBrowser'
 import CommandPalette from './components/CommandPalette'
 import { AppMenu, ProfileMenu } from './components/Menus'
@@ -17,6 +18,11 @@ export default function OverlayApp() {
   const { settings, profiles, active, engine } = useBrowser()
   const [mode, setMode] = useState<string | null>(null)
   const [update, setUpdate] = useState<UpdateState | null>(null)
+  const [, setLangVersion] = useState(0)
+  useEffect(() => onLanguageChange(() => setLangVersion((v) => v + 1)), [])
+  useEffect(() => {
+    if (settings) void applyLanguage(settings.language)
+  }, [settings?.language])
 
   useEffect(() => window.browser.onOverlay(setMode), [])
 

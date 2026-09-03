@@ -1,3 +1,4 @@
+import { t } from './i18n'
 /**
  * The security self-test page (nya://security).
  *
@@ -11,7 +12,7 @@ export function securityPage(): string {
 <html lang="ru">
 <head>
 <meta charset="utf-8" />
-<title>Проверка безопасности — Nya Browser</title>
+<title>${t('Проверка безопасности — Nya Browser')}</title>
 <style>
   :root {
     --bg: #0c0d12; --card: rgba(255,255,255,.05); --line: rgba(255,255,255,.09);
@@ -61,26 +62,23 @@ export function securityPage(): string {
 </head>
 <body>
 <div class="wrap">
-  <h1>Проверка безопасности</h1>
+  <h1>${t('Проверка безопасности')}</h1>
   <p class="lead">
-    Эта страница выполняется как обычный сайт — без привилегий, в песочнице, с теми же
-    правилами, что и любая вкладка. Поэтому результаты ниже — не обещание браузера, а
-    измерение из кода страницы.
+    ${t('Эта страница выполняется как обычный сайт — без привилегий, в песочнице, с теми же правилами, что и любая вкладка. Поэтому результаты ниже — не обещание браузера, а измерение из кода страницы.')}
   </p>
 
   <div class="summary">
-    <div class="tile"><b id="s-pass">0</b><span>пройдено</span></div>
-    <div class="tile"><b id="s-warn">0</b><span>предупреждений</span></div>
-    <div class="tile"><b id="s-fail">0</b><span>провалено</span></div>
-    <div class="tile"><b id="s-total">0</b><span>всего проверок</span></div>
+    <div class="tile"><b id="s-pass">0</b><span>${t('пройдено')}</span></div>
+    <div class="tile"><b id="s-warn">0</b><span>${t('предупреждений')}</span></div>
+    <div class="tile"><b id="s-fail">0</b><span>${t('провалено')}</span></div>
+    <div class="tile"><b id="s-total">0</b><span>${t('всего проверок')}</span></div>
   </div>
 
   <div id="groups"></div>
 
-  <p><button id="copy">Скопировать отчёт</button> <button id="again">Проверить снова</button></p>
+  <p><button id="copy">${t('Скопировать отчёт')}</button> <button id="again">${t('Проверить снова')}</button></p>
   <footer>
-    Проверки с сетевыми запросами требуют интернета: без него они показываются как
-    предупреждение, а не как провал.
+    ${t('Проверки с сетевыми запросами требуют интернета: без него они показываются как предупреждение, а не как провал.')}
   </footer>
 </div>
 

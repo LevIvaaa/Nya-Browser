@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useMemo, useState } from 'react'
 import type { Bookmark } from '../../../preload/index'
 import { Cross, Folder, Pencil, Search, Star, StarFilled } from '../components/Icons'
@@ -22,12 +23,12 @@ export default function BookmarksPage({
   const groups = useMemo(() => {
     const map = new Map<string, Bookmark[]>()
     for (const item of filtered) {
-      const key = item.folder || 'Без папки'
+      const key = item.folder || t('Без папки')
       const list = map.get(key) ?? []
       list.push(item)
       map.set(key, list)
     }
-    return [...map.entries()].sort((a, b) => (a[0] === 'Без папки' ? 1 : a[0].localeCompare(b[0])))
+    return [...map.entries()].sort((a, b) => (a[0] === t('Без папки') ? 1 : a[0].localeCompare(b[0])))
   }, [filtered])
 
   return (
@@ -35,7 +36,7 @@ export default function BookmarksPage({
       <div className="mx-auto w-full max-w-[820px] px-6 py-8">
         <header className="animate-fade-up mb-5 flex flex-wrap items-center gap-3">
           <div className="mr-auto">
-            <h1 className="text-[22px] font-semibold tracking-[-0.02em]">Закладки</h1>
+            <h1 className="text-[22px] font-semibold tracking-[-0.02em]">{t('Закладки')}</h1>
             <p className="text-sm text-dim">{items.length} сохранённых страниц</p>
           </div>
           <div className="relative">
@@ -43,7 +44,7 @@ export default function BookmarksPage({
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Поиск по закладкам"
+              placeholder={t('Поиск по закладкам')}
               className="field focus-ring pl-8"
               style={{ width: 260 }}
             />
@@ -53,8 +54,8 @@ export default function BookmarksPage({
         {groups.length === 0 ? (
           <EmptyState
             icon={<Star width={26} height={26} />}
-            title="Закладок пока нет"
-            hint="Нажмите звёздочку в адресной строке или Ctrl+D, чтобы сохранить страницу."
+            title={t('Закладок пока нет')}
+            hint={t('Нажмите звёздочку в адресной строке или Ctrl+D, чтобы сохранить страницу.')}
           />
         ) : (
           groups.map(([folder, list]) => (
@@ -83,12 +84,12 @@ export default function BookmarksPage({
                       <span className="block truncate text-base">{item.title}</span>
                       <span className="block truncate text-sm text-faint">{item.url}</span>
                     </button>
-                    <button className="icon-btn h-7 w-7 opacity-0 group-hover:opacity-100" title="Изменить" onClick={() => setEditing(item)}>
+                    <button className="icon-btn h-7 w-7 opacity-0 group-hover:opacity-100" title={t('Изменить')} onClick={() => setEditing(item)}>
                       <Pencil width={13} height={13} />
                     </button>
                     <button
                       className="icon-btn h-7 w-7 opacity-0 group-hover:opacity-100"
-                      title="Удалить"
+                      title={t('Удалить')}
                       onClick={async () => {
                         await window.browser.removeBookmark(item.id)
                         onRefresh()
@@ -134,12 +135,12 @@ function BookmarkDialog({
 
   return (
     <Modal
-      title="Изменить закладку"
+      title={t('Изменить закладку')}
       onClose={onClose}
       footer={
         <>
           <button className="btn" onClick={onClose}>
-            Отмена
+            {t('Отмена')}
           </button>
           <button
             className="btn btn-primary"
@@ -148,26 +149,26 @@ function BookmarkDialog({
               onSaved()
             }}
           >
-            Сохранить
+            {t('Сохранить')}
           </button>
         </>
       }
     >
       <div className="flex flex-col gap-3">
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm text-dim">Название</span>
+          <span className="text-sm text-dim">{t('Название')}</span>
           <TextField value={title} onChange={setTitle} width="100%" autoFocus />
         </label>
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm text-dim">Адрес</span>
+          <span className="text-sm text-dim">{t('Адрес')}</span>
           <TextField value={url} onChange={setUrl} width="100%" />
         </label>
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm text-dim">Папка</span>
-          <TextField value={folder} onChange={setFolder} placeholder="Например, Работа" width="100%" />
+          <span className="text-sm text-dim">{t('Папка')}</span>
+          <TextField value={folder} onChange={setFolder} placeholder={t('Например, Работа')} width="100%" />
         </label>
         <div className="flex items-center justify-between">
-          <span className="text-sm text-dim">Показывать на панели закладок</span>
+          <span className="text-sm text-dim">{t('Показывать на панели закладок')}</span>
           <Toggle checked={pinned} onChange={setPinned} />
         </div>
       </div>

@@ -23,6 +23,7 @@ import { downloads } from './downloads'
 import { attachLog } from './log'
 import { WALLPAPER_EXTENSIONS, registerProtocols } from './protocol'
 import { pageContextMenu, tabContextMenu, uiContextMenu } from './menus'
+import { acceptLanguages, t } from './i18n'
 import {
   allowHttpFallback,
   clearBrowsingData,
@@ -105,7 +106,7 @@ class Tab {
   view: WebContentsView | null = null
   /** set for a tab that holds one of the browser's own pages */
   internal: InternalPage | null = null
-  title = 'Новая вкладка'
+  title = t('Новая вкладка')
   url = START_URL
   favicon: string | null = null
   loading = false
@@ -161,7 +162,7 @@ class Tab {
         // instead of opening, which is unusable day to day.
         plugins: true,
         safeDialogs: true,
-        safeDialogsMessage: 'Страница показывает диалоги слишком часто',
+        safeDialogsMessage: t('Страница показывает диалоги слишком часто'),
         backgroundThrottling: true,
         autoplayPolicy: 'document-user-activation-required',
         v8CacheOptions: 'code',
@@ -230,7 +231,7 @@ class Tab {
     return {
       id: this.id,
       internal: this.internal,
-      title: this.title || origin || 'Новая вкладка',
+      title: this.title || origin || t('Новая вкладка'),
       // Our own pages leave the address bar empty: it is a place to type, and
       // "nya://settings" is not an address anyone needs to see or return to.
       url: this.url === START_URL || this.internal ? '' : this.url,
@@ -385,7 +386,7 @@ export class BrowserWindow {
     this.overlay.webContents.on('context-menu', (_e, params) => uiContextMenu(this.overlay.webContents, params))
 
     this.overlay.webContents.on('before-input-event', (event, input) => {
-      if (this.handleInput(input, true)) event.preventDefault()
+      if (this.handleInput(input, true, this.overlay.webContents)) event.preventDefault()
     })
 
     this.chrome.webContents.once('did-finish-load', () => {
@@ -399,7 +400,7 @@ export class BrowserWindow {
     })
 
     this.chrome.webContents.on('before-input-event', (event, input) => {
-      if (this.handleInput(input, true)) event.preventDefault()
+      if (this.handleInput(input, true, this.chrome.webContents)) event.preventDefault()
     })
 
     // The chrome UI must never navigate away from itself.
@@ -441,12 +442,12 @@ export class BrowserWindow {
         const loaded = this.tabs.filter((t) => t.hasContent).length
         const choice = dialog.showMessageBoxSync(this.win, {
           type: 'question',
-          buttons: ['Закрыть все', 'Отмена'],
+          buttons: [t('Закрыть все'), t('Отмена')],
           defaultId: 1,
           cancelId: 1,
-          title: 'Закрыть Nya Browser',
-          message: `Открыто вкладок: ${loaded}`,
-          detail: 'Закрыть браузер вместе со всеми вкладками?'
+          title: t('Закрыть Nya Browser'),
+          message: t('Открыто вкладок: {n}', { n: loaded }),
+          detail: t('Закрыть браузер вместе со всеми вкладками?')
         })
         if (choice === 1) {
           event.preventDefault()
@@ -488,6 +489,7 @@ export class BrowserWindow {
       ? session.fromPartition(`nya-private-${++BrowserWindow.privateSeq}`)
       : session.fromPartition(profiles.partition())
     registerProtocols(this.ses)
+    this.applyAcceptLanguage()
     hardenSession(this.ses, (id) => {
       if (this.getActive()?.wc?.id === id) this.broadcast()
     })
@@ -649,7 +651,7 @@ export class BrowserWindow {
     } else {
       const tab = new Tab(++this.seq, this.ses)
       tab.internal = internal
-      tab.title = INTERNAL_PAGES[internal]
+      tab.title = t(INTERNAL_PAGES[internal])
       tab.url = `nya://${internal}`
       const insertAt = this.tabs.findIndex((t) => t.id === this.activeId) + 1
       this.tabs.splice(insertAt > 0 ? insertAt : this.tabs.length, 0, tab)
@@ -704,6 +706,29 @@ export class BrowserWindow {
       this.send('state:tabs', this.tabs.map((t) => t.serialize(this.activeId)))
       this.send('state:security', { ...stats })
     }, 16)
+  }
+
+  /**
+   * Tells sites which language this browser speaks. YouTube greeting you in
+   * the language you picked in the installer is this header.
+   */
+  applyAcceptLanguage() {
+    const wanted = settings.get().language
+    if (!wanted) return
+    try {
+      this.ses.setUserAgent(this.ses.getUserAgent(), acceptLanguages(wanted, app.getLocale()))
+    } catch {
+      /* before ready, the default stands */
+    }
+  }
+
+  /** Re-titles the browser's own tabs after a language switch. */
+  retitleInternalTabs() {
+    for (const tab of this.tabs) {
+      if (tab.internal) tab.title = t(INTERNAL_PAGES[tab.internal])
+      else if (!tab.hasContent && tab.url === START_URL) tab.title = t('Новая вкладка')
+    }
+    this.broadcast()
   }
 
   sendWindowState() {
@@ -813,7 +838,7 @@ export class BrowserWindow {
         tab.loading = false
         tab.error = {
           code,
-          description: description || 'Сайт не отвечает по HTTPS',
+          description: description || t('Сайт не отвечает по HTTPS'),
           url,
           httpsFallbackAvailable: url.startsWith('https://')
         }
@@ -821,14 +846,14 @@ export class BrowserWindow {
         return
       }
       tab.loading = false
-      tab.error = { code, description: description || 'Не удалось загрузить страницу', url }
+      tab.error = { code, description: description || t('Не удалось загрузить страницу'), url }
       this.broadcast()
     })
     wc.on('render-process-gone', (_e, details) => {
       tab.loading = false
       tab.error = {
         code: -1,
-        description: `Страница неожиданно завершила работу (${details.reason})`,
+        description: t('Страница неожиданно завершила работу ({reason})', { reason: details.reason }),
         url: tab.url
       }
       this.broadcast()
@@ -898,11 +923,35 @@ export class BrowserWindow {
   }
 
   /* ------------------------------------------------------------ shortcuts */
-  handleInput(input: Electron.Input, fromChrome: boolean): boolean {
+  handleInput(input: Electron.Input, fromChrome: boolean, wc?: Electron.WebContents): boolean {
     if (input.type !== 'keyDown') return false
     if (process.platform === 'darwin' && input.meta) return false
     const mod = process.platform === 'darwin' ? input.meta : input.control
     const key = input.key.length === 1 ? input.key.toLowerCase() : input.key
+
+    // Без нативного меню Windows не даёт полям браузера стандартных клавиш
+    // редактирования — Ctrl+V в палитре просто молчал. Только для своих
+    // поверхностей: страницам сайтов эти клавиши нужны сырыми.
+    if (fromChrome && wc && mod && !input.alt) {
+      if (input.shift) {
+        if (key === 'z') return this.run(() => wc.redo())
+      } else {
+        switch (key) {
+          case 'c':
+            return this.run(() => wc.copy())
+          case 'x':
+            return this.run(() => wc.cut())
+          case 'v':
+            return this.run(() => wc.paste())
+          case 'a':
+            return this.run(() => wc.selectAll())
+          case 'z':
+            return this.run(() => wc.undo())
+          case 'y':
+            return this.run(() => wc.redo())
+        }
+      }
+    }
 
     if (key === 'F5') return this.run(() => this.reload(input.shift))
     if (key === 'F11') return this.run(() => this.win.setFullScreen(!this.win.isFullScreen()))
@@ -1210,7 +1259,7 @@ export class BrowserWindow {
     tab.destroy(this.win)
     tab.hasContent = false
     tab.url = START_URL
-    tab.title = 'Новая вкладка'
+    tab.title = t('Новая вкладка')
     tab.favicon = null
     tab.error = null
     tab.ensureView(this.wire)
@@ -1256,7 +1305,7 @@ export class BrowserWindow {
     if (!tab?.hasContent || !/^https?:/i.test(tab.url)) return
     const result = bookmarks.toggle({ title: tab.title, url: tab.url })
     this.send('state:bookmarks', bookmarks.all())
-    this.send('toast', result.added ? 'Добавлено в закладки' : 'Убрано из закладок')
+    this.send('toast', result.added ? t('Добавлено в закладки') : t('Убрано из закладок'))
   }
 
   bookmarkTab(id: number) {
@@ -1264,7 +1313,7 @@ export class BrowserWindow {
     if (!tab?.hasContent || !/^https?:/i.test(tab.url)) return
     bookmarks.add({ title: tab.title, url: tab.url })
     this.send('state:bookmarks', bookmarks.all())
-    this.send('toast', 'Добавлено в закладки')
+    this.send('toast', t('Добавлено в закладки'))
   }
 
   /**
@@ -1325,12 +1374,12 @@ export class BrowserWindow {
 
     for (const fav of s.favorites) {
       if (fav.title.toLowerCase().includes(lower) || fav.url.toLowerCase().includes(lower)) {
-        out.push({ kind: 'favorite', title: fav.title, url: fav.url, subtitle: 'Избранное' })
+        out.push({ kind: 'favorite', title: fav.title, url: fav.url, subtitle: t('Избранное') })
       }
     }
     for (const mark of bookmarks.all()) {
       if (mark.title.toLowerCase().includes(lower) || mark.url.toLowerCase().includes(lower)) {
-        out.push({ kind: 'favorite', title: mark.title, url: mark.url, subtitle: 'Закладка' })
+        out.push({ kind: 'favorite', title: mark.title, url: mark.url, subtitle: t('Закладка') })
       }
       if (out.length > 6) break
     }
@@ -1338,9 +1387,9 @@ export class BrowserWindow {
 
     const direct = normalizeInput(q, s)
     if (!/^https?:\/\/(duckduckgo|www\.google|www\.bing|search|yandex|www\.startpage|www\.mojeek|www\.ecosia|searx)/i.test(direct)) {
-      out.unshift({ kind: 'url', title: q, url: direct, subtitle: 'Открыть сайт' })
+      out.unshift({ kind: 'url', title: q, url: direct, subtitle: t('Открыть сайт') })
     }
-    out.push({ kind: 'search', title: q, url: normalizeInput(`${q} `, s), subtitle: 'Поиск' })
+    out.push({ kind: 'search', title: q, url: normalizeInput(`${q} `, s), subtitle: t('Поиск') })
 
     const seen = new Set<string>()
     return out.filter((item) => !seen.has(item.url) && seen.add(item.url)).slice(0, 9)
@@ -1428,7 +1477,7 @@ export class BrowserWindow {
     this.pendingCredential = null
     if (!save || !pending) return false
     const ok = vault.save(pending.host, pending.username, pending.password)
-    this.send('toast', ok ? 'Пароль сохранён' : 'Хранилище паролей заблокировано')
+    this.send('toast', ok ? t('Пароль сохранён') : t('Хранилище паролей заблокировано'))
     return ok
   }
 
@@ -1457,11 +1506,11 @@ export class BrowserWindow {
   /* ----------------------------------------------------------- wallpapers */
   async importWallpaper(): Promise<string | null> {
     const result = await dialog.showOpenDialog(this.win, {
-      title: 'Выберите обои',
+      title: t('Выберите обои'),
       properties: ['openFile'],
       filters: [
-        { name: 'Изображения и видео', extensions: WALLPAPER_EXTENSIONS },
-        { name: 'Все файлы', extensions: ['*'] }
+        { name: t('Изображения и видео'), extensions: WALLPAPER_EXTENSIONS },
+        { name: t('Все файлы'), extensions: ['*'] }
       ]
     })
     if (result.canceled || !result.filePaths[0]) return null
@@ -1604,7 +1653,7 @@ export class BrowserWindow {
   async clearData() {
     await clearBrowsingData(this.ses)
     history.clear()
-    this.send('toast', 'Данные сайтов удалены')
+    this.send('toast', t('Данные сайтов удалены'))
     this.broadcast()
   }
 

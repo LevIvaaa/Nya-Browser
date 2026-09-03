@@ -54,6 +54,31 @@ if (isTop && httpOrigin) {
   }
 }
 
+/* ------------------------------------------------------ editing keys */
+// Chromium inside a WebContentsView never runs its own accelerator table, so
+// Ctrl+C/V/X/A/Z/Y arrive at the page as plain keydowns and then die. The
+// listener sits on window in the bubble phase — a page that handled the key
+// itself (its own undo stack, its own paste) sets defaultPrevented and we
+// stay out of its way; otherwise main performs the editing command natively.
+const EDIT_COMMANDS: Record<string, string> = {
+  c: 'copy',
+  x: 'cut',
+  v: 'paste',
+  a: 'selectAll',
+  z: 'undo',
+  y: 'redo'
+}
+
+const isMac = process.platform === 'darwin'
+window.addEventListener('keydown', (event) => {
+  const mod = isMac ? event.metaKey : event.ctrlKey
+  const other = isMac ? event.ctrlKey : event.metaKey
+  if (!mod || other || event.altKey || event.defaultPrevented) return
+  const key = event.key.toLowerCase()
+  const command = event.shiftKey ? (key === 'z' ? 'redo' : '') : (EDIT_COMMANDS[key] ?? '')
+  if (command) ipcRenderer.send('edit:command', command)
+})
+
 if (isTop && httpOrigin) {
   const PASSWORD = 'input[type="password"]:not([disabled]):not([readonly])'
   const USERNAME_HINTS = /user|login|email|mail|phone|tel|account|логин|почта|телефон/i

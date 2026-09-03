@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useEffect, useMemo, useState } from 'react'
 import type { Credential, VaultState } from '../../../preload/index'
 import { Copy, Cross, Eye, EyeOff, Key, Lock, LockOpen, Plus, Search, Shield, Wand } from '../components/Icons'
@@ -34,10 +35,10 @@ export default function PasswordsPage() {
       <div className="mx-auto w-full max-w-[820px] px-6 py-8">
         <header className="animate-fade-up mb-5 flex flex-wrap items-center gap-3">
           <div className="mr-auto">
-            <h1 className="text-[22px] font-semibold tracking-[-0.02em]">Пароли</h1>
+            <h1 className="text-[22px] font-semibold tracking-[-0.02em]">{t('Пароли')}</h1>
             <p className="text-sm text-dim">
               {items.length} записей ·{' '}
-              {state?.mode === 'password' ? 'защищено мастер-паролем' : 'защищено ключом Windows'}
+              {state?.mode === 'password' ? t('защищено мастер-паролем') : t('защищено ключом Windows')}
             </p>
           </div>
           <div className="relative">
@@ -45,14 +46,14 @@ export default function PasswordsPage() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Поиск по сайтам"
+              placeholder={t('Поиск по сайтам')}
               className="field focus-ring pl-8"
               style={{ width: 220 }}
             />
           </div>
           <button className="btn" onClick={() => setAddOpen(true)}>
             <Plus width={15} height={15} />
-            Добавить
+            {t('Добавить')}
           </button>
         </header>
 
@@ -66,14 +67,14 @@ export default function PasswordsPage() {
           </span>
           <div className="mr-auto min-w-0">
             <div className="text-base font-medium">
-              {locked ? 'Хранилище заблокировано' : 'Хранилище разблокировано'}
+              {locked ? t('Хранилище заблокировано') : t('Хранилище разблокировано')}
             </div>
             <div className="text-sm text-dim">
               {state?.mode === 'password'
-                ? 'Ключ выводится из мастер-пароля (scrypt) и живёт только в памяти.'
+                ? t('Ключ выводится из мастер-пароля (scrypt) и живёт только в памяти.')
                 : state?.osEncryption
-                  ? 'Ключ запечатан средствами Windows (DPAPI) — файл нельзя открыть на другом компьютере.'
-                  : 'Системное шифрование недоступно — задайте мастер-пароль.'}
+                  ? t('Ключ запечатан средствами Windows (DPAPI) — файл нельзя открыть на другом компьютере.')
+                  : t('Системное шифрование недоступно — задайте мастер-пароль.')}
             </div>
           </div>
           {state?.mode === 'password' && !locked && (
@@ -85,25 +86,25 @@ export default function PasswordsPage() {
                 void refresh()
               }}
             >
-              Заблокировать
+              {t('Заблокировать')}
             </button>
           )}
           {locked && (
             <button className="btn btn-primary" onClick={() => setUnlockOpen(true)}>
-              Разблокировать
+              {t('Разблокировать')}
             </button>
           )}
           <button className="btn" onClick={() => setMasterOpen(true)}>
             <Shield width={15} height={15} />
-            {state?.mode === 'password' ? 'Сменить мастер-пароль' : 'Задать мастер-пароль'}
+            {state?.mode === 'password' ? t('Сменить мастер-пароль') : t('Задать мастер-пароль')}
           </button>
         </div>
 
         {items.length === 0 ? (
           <EmptyState
             icon={<Key width={26} height={26} />}
-            title="Сохранённых паролей нет"
-            hint="Войдите на сайт — браузер предложит сохранить пароль. Или добавьте запись вручную."
+            title={t('Сохранённых паролей нет')}
+            hint={t('Войдите на сайт — браузер предложит сохранить пароль. Или добавьте запись вручную.')}
           />
         ) : (
           <div className="card overflow-hidden">
@@ -121,7 +122,7 @@ export default function PasswordsPage() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-base font-medium">{item.origin}</div>
-                  <div className="truncate text-sm text-dim">{item.username || 'без имени'}</div>
+                  <div className="truncate text-sm text-dim">{item.username || t('без имени')}</div>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -133,7 +134,7 @@ export default function PasswordsPage() {
                   </code>
                   <button
                     className="icon-btn"
-                    title={revealed[item.id] ? 'Скрыть' : 'Показать'}
+                    title={revealed[item.id] ? t('Скрыть') : t('Показать')}
                     onClick={async () => {
                       if (revealed[item.id]) {
                         setRevealed(({ [item.id]: _drop, ...rest }) => rest)
@@ -141,14 +142,14 @@ export default function PasswordsPage() {
                       }
                       const value = await window.browser.vaultReveal(item.id)
                       if (value) setRevealed((prev) => ({ ...prev, [item.id]: value }))
-                      else setError('Хранилище заблокировано')
+                      else setError(t('Хранилище заблокировано'))
                     }}
                   >
                     {revealed[item.id] ? <EyeOff width={14} height={14} /> : <Eye width={14} height={14} />}
                   </button>
                   <button
                     className="icon-btn"
-                    title="Копировать пароль"
+                    title={t('Копировать пароль')}
                     onClick={async () => {
                       const value = await window.browser.vaultReveal(item.id)
                       if (value) await navigator.clipboard.writeText(value)
@@ -158,7 +159,7 @@ export default function PasswordsPage() {
                   </button>
                   <button
                     className="icon-btn"
-                    title="Удалить"
+                    title={t('Удалить')}
                     onClick={async () => {
                       await window.browser.vaultRemove(item.id)
                       void refresh()
@@ -178,8 +179,7 @@ export default function PasswordsPage() {
 
         <p className="mt-4 flex items-center gap-2 text-sm text-faint">
           <Shield width={14} height={14} />
-          Пароли шифруются по отдельности (AES-256-GCM); сайт и имя пользователя входят в
-          аутентифицируемые данные, поэтому запись нельзя подставить другому сайту.
+          {t('Пароли шифруются по отдельности (AES-256-GCM); сайт и имя пользователя входят в аутентифицируемые данные, поэтому запись нельзя подставить другому сайту.')}
         </p>
         {error && <p className="mt-2 text-sm" style={{ color: 'var(--warn)' }}>{error}</p>}
       </div>
@@ -224,20 +224,20 @@ function UnlockDialog({ onClose, onDone }: { onClose: () => void; onDone: () => 
   const submit = async () => {
     const ok = await window.browser.vaultUnlock(password)
     if (ok) onDone()
-    else setError('Неверный мастер-пароль')
+    else setError(t('Неверный мастер-пароль'))
   }
 
   return (
     <Modal
-      title="Разблокировать хранилище"
+      title={t('Разблокировать хранилище')}
       onClose={onClose}
       footer={
         <>
           <button className="btn" onClick={onClose}>
-            Отмена
+            {t('Отмена')}
           </button>
           <button className="btn btn-primary" onClick={submit}>
-            Разблокировать
+            {t('Разблокировать')}
           </button>
         </>
       }
@@ -247,7 +247,7 @@ function UnlockDialog({ onClose, onDone }: { onClose: () => void; onDone: () => 
           value={password}
           onChange={setPassword}
           type="password"
-          placeholder="Мастер-пароль"
+          placeholder={t('Мастер-пароль')}
           width="100%"
           autoFocus
           onEnter={submit}
@@ -273,16 +273,16 @@ function MasterDialog({
   const [error, setError] = useState('')
 
   const submit = async () => {
-    if (next.length < 8) return setError('Минимум 8 символов')
-    if (next !== repeat) return setError('Пароли не совпадают')
+    if (next.length < 8) return setError(t('Минимум 8 символов'))
+    if (next !== repeat) return setError(t('Пароли не совпадают'))
     const ok = await window.browser.vaultSetMaster(mode === 'password' ? current : null, next)
     if (ok) onDone()
-    else setError('Не удалось сменить пароль — проверьте текущий')
+    else setError(t('Не удалось сменить пароль — проверьте текущий'))
   }
 
   return (
     <Modal
-      title={mode === 'password' ? 'Сменить мастер-пароль' : 'Задать мастер-пароль'}
+      title={mode === 'password' ? t('Сменить мастер-пароль') : t('Задать мастер-пароль')}
       onClose={onClose}
       footer={
         <>
@@ -292,17 +292,17 @@ function MasterDialog({
               onClick={async () => {
                 const ok = await window.browser.vaultDropMaster(current)
                 if (ok) onDone()
-                else setError('Неверный текущий пароль')
+                else setError(t('Неверный текущий пароль'))
               }}
             >
-              Убрать мастер-пароль
+              {t('Убрать мастер-пароль')}
             </button>
           )}
           <button className="btn" onClick={onClose}>
-            Отмена
+            {t('Отмена')}
           </button>
           <button className="btn btn-primary" onClick={submit}>
-            Сохранить
+            {t('Сохранить')}
           </button>
         </>
       }
@@ -310,13 +310,13 @@ function MasterDialog({
       <div className="flex flex-col gap-3">
         <p className="text-sm text-dim">
           С мастер-паролем ключ шифрования выводится из него функцией scrypt и нигде не хранится:
-          без пароля записи невозможно расшифровать даже на этом компьютере.
+          {t('без пароля записи невозможно расшифровать даже на этом компьютере.')}
         </p>
         {mode === 'password' && (
-          <TextField value={current} onChange={setCurrent} type="password" placeholder="Текущий пароль" width="100%" />
+          <TextField value={current} onChange={setCurrent} type="password" placeholder={t('Текущий пароль')} width="100%" />
         )}
-        <TextField value={next} onChange={setNext} type="password" placeholder="Новый пароль" width="100%" autoFocus />
-        <TextField value={repeat} onChange={setRepeat} type="password" placeholder="Повторите пароль" width="100%" onEnter={submit} />
+        <TextField value={next} onChange={setNext} type="password" placeholder={t('Новый пароль')} width="100%" autoFocus />
+        <TextField value={repeat} onChange={setRepeat} type="password" placeholder={t('Повторите пароль')} width="100%" onEnter={submit} />
         {error && <span className="text-sm" style={{ color: 'var(--bad)' }}>{error}</span>}
       </div>
     </Modal>
@@ -331,12 +331,12 @@ function AddDialog({ onClose, onDone }: { onClose: () => void; onDone: () => voi
 
   return (
     <Modal
-      title="Новая запись"
+      title={t('Новая запись')}
       onClose={onClose}
       footer={
         <>
           <button className="btn" onClick={onClose}>
-            Отмена
+            {t('Отмена')}
           </button>
           <button
             className="btn btn-primary"
@@ -347,22 +347,22 @@ function AddDialog({ onClose, onDone }: { onClose: () => void; onDone: () => voi
                 password
               })
               if (ok) onDone()
-              else setError('Хранилище заблокировано')
+              else setError(t('Хранилище заблокировано'))
             }}
           >
-            Сохранить
+            {t('Сохранить')}
           </button>
         </>
       }
     >
       <div className="flex flex-col gap-3">
-        <TextField value={origin} onChange={setOrigin} placeholder="Сайт, например github.com" width="100%" autoFocus />
-        <TextField value={username} onChange={setUsername} placeholder="Логин или почта" width="100%" />
+        <TextField value={origin} onChange={setOrigin} placeholder={t('Сайт, например github.com')} width="100%" autoFocus />
+        <TextField value={username} onChange={setUsername} placeholder={t('Логин или почта')} width="100%" />
         <div className="flex gap-2">
-          <TextField value={password} onChange={setPassword} type="password" placeholder="Пароль" width="100%" />
+          <TextField value={password} onChange={setPassword} type="password" placeholder={t('Пароль')} width="100%" />
           <button
             className="btn shrink-0"
-            title="Сгенерировать надёжный пароль"
+            title={t('Сгенерировать надёжный пароль')}
             onClick={async () => setPassword(await window.browser.vaultGenerate(20))}
           >
             <Wand width={15} height={15} />

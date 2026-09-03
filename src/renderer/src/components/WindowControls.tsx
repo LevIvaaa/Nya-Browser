@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useState } from 'react'
 import { WinClose, WinMaximize, WinMinimize, WinRestore } from './Icons'
 
@@ -37,14 +38,14 @@ export default function WindowControls({ maximized }: { maximized: boolean }) {
 
   return (
     <div className="no-drag flex items-stretch self-start overflow-hidden">
-      {button('min', 'Свернуть', <WinMinimize />, () => window.browser.minimize())}
+      {button('min', t('Свернуть'), <WinMinimize />, () => window.browser.minimize())}
       {button(
         'max',
-        maximized ? 'Восстановить' : 'Развернуть',
+        maximized ? t('Восстановить') : t('Развернуть'),
         maximized ? <WinRestore /> : <WinMaximize />,
         () => window.browser.maximize()
       )}
-      {button('close', 'Закрыть', <WinClose />, () => window.browser.close())}
+      {button('close', t('Закрыть'), <WinClose />, () => window.browser.close())}
     </div>
   )
 }
