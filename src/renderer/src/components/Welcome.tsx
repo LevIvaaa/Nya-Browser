@@ -50,8 +50,15 @@ export default function Welcome({
   // side it came from instead of always from the right.
   const [back, setBack] = useState(false)
   const step = STEPS[index]
+  const lastMove = useRef(0)
 
+  // One move per beat. A double-click on «Дальше» or a held-down Enter would
+  // otherwise walk through steps faster than they can be seen — which reads
+  // as the flow skipping parts of the setup.
   const go = (to: number) => {
+    const now = Date.now()
+    if (now - lastMove.current < 300) return
+    lastMove.current = now
     setBack(to < index)
     setIndex(Math.min(STEPS.length - 1, Math.max(0, to)))
   }
@@ -60,6 +67,8 @@ export default function Welcome({
   // back rather than dropping someone halfway through with no way out.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      // Autorepeat is never "next, next, next" on purpose.
+      if (event.repeat) return
       const inField = Boolean((event.target as HTMLElement | null)?.closest('input'))
       if (event.key === 'Enter' && !inField) {
         event.preventDefault()

@@ -90,6 +90,45 @@ export function pageContextMenu(
   Menu.buildFromTemplate(items).popup()
 }
 
+/**
+ * Right-click inside the browser's own UI — the command palette, the settings
+ * fields, the find bar. Only what a text field can answer for: paste into the
+ * search box was the whole request, and a page-style menu with "Назад" and
+ * developer tools would be nonsense here. Empty click points get no menu at
+ * all rather than a stub.
+ */
+export function uiContextMenu(wc: WebContents, params: Electron.ContextMenuParams) {
+  const items: MenuItemConstructorOptions[] = []
+
+  if (params.isEditable) {
+    if (params.misspelledWord) {
+      for (const word of params.dictionarySuggestions.slice(0, 5)) {
+        items.push({ label: word, click: () => wc.replaceMisspelling(word) })
+      }
+      items.push(
+        {
+          label: 'Добавить в словарь',
+          click: () => wc.session.addWordToSpellCheckerDictionary(params.misspelledWord)
+        },
+        { type: 'separator' }
+      )
+    }
+    items.push(
+      { role: 'undo', label: 'Отменить', enabled: params.editFlags.canUndo },
+      { role: 'redo', label: 'Повторить', enabled: params.editFlags.canRedo },
+      { type: 'separator' },
+      { role: 'cut', label: 'Вырезать', enabled: params.editFlags.canCut },
+      { role: 'copy', label: 'Копировать', enabled: params.editFlags.canCopy },
+      { role: 'paste', label: 'Вставить', enabled: params.editFlags.canPaste },
+      { role: 'selectAll', label: 'Выделить всё', enabled: params.editFlags.canSelectAll }
+    )
+  } else if (params.selectionText.trim()) {
+    items.push({ role: 'copy', label: 'Копировать' })
+  }
+
+  if (items.length > 0) Menu.buildFromTemplate(items).popup()
+}
+
 /** Right-click menu on a tab in the strip or rail. */
 export function tabContextMenu(browser: BrowserWindow, tabId: number) {
   const tab = browser.tabs.find((t) => t.id === tabId)
