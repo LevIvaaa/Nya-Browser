@@ -1,3 +1,4 @@
+import { currentLanguage, t } from '../i18n'
 import { useEffect, useMemo, useState } from 'react'
 import type { HistoryEntry } from '../../../shared/types'
 import { Clock, Cross, Search, Trash } from '../components/Icons'
@@ -21,7 +22,7 @@ export default function HistoryPage() {
   const groups = useMemo(() => {
     const map = new Map<string, HistoryEntry[]>()
     for (const entry of filtered) {
-      const key = new Date(entry.last).toLocaleDateString('ru-RU', {
+      const key = new Date(entry.last).toLocaleDateString(currentLanguage() || undefined, {
         weekday: 'long',
         day: 'numeric',
         month: 'long'
@@ -38,7 +39,7 @@ export default function HistoryPage() {
       <div className="mx-auto w-full max-w-[820px] px-6 py-8">
         <header className="animate-fade-up mb-5 flex flex-wrap items-center gap-3">
           <div className="mr-auto">
-            <h1 className="text-[22px] font-semibold tracking-[-0.02em]">История</h1>
+            <h1 className="text-[22px] font-semibold tracking-[-0.02em]">{t('История')}</h1>
             <p className="text-sm text-dim">{entries.length} записей в этом профиле</p>
           </div>
           <div className="relative">
@@ -46,7 +47,7 @@ export default function HistoryPage() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Поиск по истории"
+              placeholder={t('Поиск по истории')}
               className="field focus-ring pl-8"
               style={{ width: 260 }}
             />
@@ -59,12 +60,12 @@ export default function HistoryPage() {
             }}
           >
             <Trash width={15} height={15} />
-            Очистить
+            {t('Очистить')}
           </button>
         </header>
 
         {groups.length === 0 ? (
-          <EmptyState icon={<Clock width={26} height={26} />} title="Пока ничего нет" hint="Посещённые страницы появятся здесь." />
+          <EmptyState icon={<Clock width={26} height={26} />} title={t('Пока ничего нет')} hint={t('Посещённые страницы появятся здесь.')} />
         ) : (
           groups.map(([day, list]) => (
             <section key={day} className="animate-fade-up mb-6">
@@ -90,7 +91,7 @@ export default function HistoryPage() {
                     {entry.visits > 1 && <span className="shrink-0 text-2xs text-faint">{entry.visits}×</span>}
                     <button
                       className="icon-btn h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100"
-                      title="Удалить запись"
+                      title={t('Удалить запись')}
                       onClick={async () => {
                         await window.browser.removeHistory(entry.url)
                         load()

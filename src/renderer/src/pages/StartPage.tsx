@@ -1,3 +1,4 @@
+import { currentLanguage, t } from '../i18n'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type {
   Favorite,
@@ -233,25 +234,34 @@ export default function StartPage({
 
   const content = (id: WidgetId): ReactNode => {
     switch (id) {
-      case 'clock':
+      case 'clock': {
+        const time = now.toLocaleTimeString(currentLanguage() || undefined, {
+          hour: '2-digit',
+          minute: '2-digit'
+        })
         return (
-          <div className="flex h-full items-center justify-center text-[44px] font-semibold leading-none tracking-[-0.03em] tabular-nums">
-            {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+          <div
+            className={`flex h-full items-center justify-center whitespace-nowrap font-semibold leading-none tracking-[-0.03em] tabular-nums ${
+              time.length > 5 ? 'text-[32px]' : 'text-[44px]'
+            }`}
+          >
+            {time}
           </div>
         )
+      }
 
       case 'greeting':
         return (
           <div className="flex h-full flex-col items-center justify-center text-center">
             <h1 className="text-[19px] font-medium tracking-[-0.03em]">
-              {incognito ? 'Приватное окно' : `${hello}${profileName ? `, ${profileName}` : ''}`}
+              {incognito ? t('Приватное окно') : `${t(hello)}${profileName ? `, ${profileName}` : ''}`}
             </h1>
             <p className="mt-1 text-base opacity-70">
               {incognito
-                ? 'История, кэш и cookie этого окна исчезнут, когда вы его закроете'
+                ? t('История, кэш и cookie этого окна исчезнут, когда вы его закроете')
                 : blockedTotal > 0
-                  ? `Заблокировано ${blockedTotal} трекеров и рекламных запросов`
-                  : 'Быстрый и приватный старт'}
+                  ? t('Заблокировано {n} трекеров и рекламных запросов', { n: blockedTotal })
+                  : t('Быстрый и приватный старт')}
             </p>
           </div>
         )
@@ -270,7 +280,7 @@ export default function StartPage({
             }}
           >
             <Search width={19} height={19} className="opacity-45" />
-            <span className="flex-1 text-[15px] opacity-45">Поиск или адрес сайта</span>
+            <span className="flex-1 text-[15px] opacity-45">{t('Поиск или адрес сайта')}</span>
             <span
               className="rounded-pill px-2.5 py-1 text-2xs font-medium opacity-70"
               style={{ background: 'var(--field-idle)' }}
@@ -322,15 +332,15 @@ export default function StartPage({
           <button
             className="lift block h-full w-full text-left"
             onClick={() => !editing && setBlockedOpen(true)}
-            title="Что именно заблокировано"
+            title={t('Что именно заблокировано')}
           >
-            <Card icon={<Shield width={13} height={13} />} title="Защита" shape={page.shape}>
+            <Card icon={<Shield width={13} height={13} />} title={t('Защита')} shape={page.shape}>
               <div className="grid grid-cols-4 gap-2">
                 {[
-                  { label: 'Реклама', value: stats.ads },
-                  { label: 'Трекеры', value: stats.trackers },
+                  { label: t('Реклама'), value: stats.ads },
+                  { label: t('Трекеры'), value: stats.trackers },
                   { label: 'HTTPS', value: stats.upgrades },
-                  { label: 'Метки', value: stats.params }
+                  { label: t('Метки'), value: stats.params }
                 ].map((item) => (
                   <div key={item.label}>
                     <div className="text-[22px] font-semibold tabular-nums tracking-[-0.02em]">{item.value}</div>
@@ -344,7 +354,7 @@ export default function StartPage({
 
       case 'closed':
         return (
-          <Card icon={<Star width={13} height={13} />} title="Недавно закрытые" shape={page.shape}>
+          <Card icon={<Star width={13} height={13} />} title={t('Недавно закрытые')} shape={page.shape}>
             <div className="flex flex-col">
               {closed.slice(0, 5).map((tab) => (
                 <button
@@ -363,9 +373,9 @@ export default function StartPage({
 
       case 'recent':
         return (
-          <Card icon={<Clock width={13} height={13} />} title="Недавнее" shape={page.shape}>
+          <Card icon={<Clock width={13} height={13} />} title={t('Недавнее')} shape={page.shape}>
             {recent.length === 0 ? (
-              <p className="text-sm opacity-55">История пуста</p>
+              <p className="text-sm opacity-55">{t('История пуста')}</p>
             ) : (
               <div className="flex flex-col">
                 {recent.slice(0, 6).map((item) => (
@@ -564,18 +574,18 @@ function Widget({
                 })
               }}
               onPointerUp={() => (gesture.current = null)}
-              title="Перетащить"
+              title={t('Перетащить')}
             >
               <Grip width={11} height={11} />
-              {TITLES[id]}
+              {t(TITLES[id])}
             </span>
-            <button className="icon-btn h-6 w-6" onClick={() => scaleBy(-0.1)} title="Мельче">
+            <button className="icon-btn h-6 w-6" onClick={() => scaleBy(-0.1)} title={t('Мельче')}>
               <Minus width={12} height={12} />
             </button>
-            <button className="icon-btn h-6 w-6" onClick={() => scaleBy(0.1)} title="Крупнее">
+            <button className="icon-btn h-6 w-6" onClick={() => scaleBy(0.1)} title={t('Крупнее')}>
               <Plus width={12} height={12} />
             </button>
-            <span className="flex h-6 w-6 items-center justify-center" title="Цвет этого виджета">
+            <span className="flex h-6 w-6 items-center justify-center" title={t('Цвет этого виджета')}>
               <input
                 type="color"
                 className="h-[16px] w-[16px] cursor-pointer border-0 bg-transparent p-0"
@@ -590,12 +600,12 @@ function Widget({
                   const { ink: _dropped, ...rest } = box
                   onChange(rest)
                 }}
-                title="Цвет как у страницы"
+                title={t('Цвет как у страницы')}
               >
                 <Eraser width={12} height={12} />
               </button>
             )}
-            <button className="icon-btn h-6 w-6" onClick={onHide} title="Убрать с главной">
+            <button className="icon-btn h-6 w-6" onClick={onHide} title={t('Убрать с главной')}>
               <Cross width={12} height={12} />
             </button>
           </div>
@@ -614,7 +624,7 @@ function Widget({
               })
             }}
             onPointerUp={() => (gesture.current = null)}
-            title="Размер"
+            title={t('Размер')}
           />
         </>
       )}
@@ -652,7 +662,7 @@ function EditBar({
               className="btn h-7 px-2.5 text-2xs"
               onClick={() => onPatch({ [SWITCH[id]]: true } as Partial<StartPageSettings>)}
             >
-              <Plus width={11} height={11} /> {TITLES[id]}
+              <Plus width={11} height={11} /> {t(TITLES[id])}
             </button>
           ))}
           <select
@@ -661,10 +671,10 @@ function EditBar({
             value={page.font}
             onChange={(event) => onPatch({ font: event.target.value as StartPageFont })}
           >
-            <option value="system">Шрифт системы</option>
-            <option value="rounded">Округлый</option>
-            <option value="serif">С засечками</option>
-            <option value="mono">Моноширинный</option>
+            <option value="system">{t('Шрифт системы')}</option>
+            <option value="rounded">{t('Округлый')}</option>
+            <option value="serif">{t('С засечками')}</option>
+            <option value="mono">{t('Моноширинный')}</option>
           </select>
           <select
             className="h-7 rounded-pill px-2 text-2xs"
@@ -672,8 +682,8 @@ function EditBar({
             value={page.tiles}
             onChange={(event) => onPatch({ tiles: event.target.value as StartPageSettings['tiles'] })}
           >
-            <option value="card">Плитки карточками</option>
-            <option value="icon">Плитки значками</option>
+            <option value="card">{t('Плитки карточками')}</option>
+            <option value="icon">{t('Плитки значками')}</option>
           </select>
           <select
             className="h-7 rounded-pill px-2 text-2xs"
@@ -683,7 +693,7 @@ function EditBar({
           >
             {SHAPES.map((item) => (
               <option key={item.value} value={item.value}>
-                Форма: {item.label.toLowerCase()}
+                {t('Форма')}: {t(item.label).toLowerCase()}
               </option>
             ))}
           </select>
@@ -691,7 +701,7 @@ function EditBar({
             className="btn h-7 px-2.5 text-2xs"
             onClick={() => onPatch({ tileLabels: !page.tileLabels })}
           >
-            {page.tileLabels ? 'Скрыть подписи' : 'Показать подписи'}
+            {page.tileLabels ? t('Скрыть подписи') : t('Показать подписи')}
           </button>
 
           {/* Text colour. Over a wallpaper the theme's ink is often the wrong
@@ -708,20 +718,20 @@ function EditBar({
               className="h-[18px] w-[18px] cursor-pointer border-0 bg-transparent p-0"
               value={page.ink || '#ffffff'}
               onChange={(event) => onPatch({ ink: event.target.value })}
-              title="Цвет текста главной"
+              title={t('Цвет текста главной')}
             />
-            Цвет текста
+            {t('Цвет текста')}
           </span>
           <button
             className="btn h-7 px-2.5 text-2xs"
             onClick={() => onPatch({ ink: '' })}
             disabled={!page.ink}
           >
-            По теме
+            {t('По теме')}
           </button>
 
           <button className="btn h-7 px-2.5 text-2xs" onClick={onReset}>
-            Сбросить расположение
+            {t('Сбросить расположение')}
           </button>
         </div>
       )}
@@ -730,8 +740,8 @@ function EditBar({
       <button
         className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-pill"
         onClick={onToggle}
-        title={editing ? 'Готово' : 'Настроить главную'}
-        aria-label={editing ? 'Готово' : 'Настроить главную'}
+        title={editing ? t('Готово') : t('Настроить главную')}
+        aria-label={editing ? t('Готово') : t('Настроить главную')}
         style={{
           background: editing ? 'var(--accent)' : 'var(--surface-solid)',
           color: editing ? '#fff' : 'var(--ink)',
@@ -899,7 +909,7 @@ function Tile({
             className="flex h-5 w-5 items-center justify-center rounded-pill text-white"
             style={{ background: 'var(--accent)' }}
             onClick={onEdit}
-            title="Изменить"
+            title={t('Изменить')}
           >
             <Pencil width={10} height={10} />
           </button>
@@ -907,7 +917,7 @@ function Tile({
             className="flex h-5 w-5 items-center justify-center rounded-pill text-white"
             style={{ background: 'var(--bad)' }}
             onClick={onRemove}
-            title="Удалить"
+            title={t('Удалить')}
           >
             <Cross width={10} height={10} />
           </button>
@@ -945,7 +955,7 @@ function AddTile({
       }}
     >
       <Plus width={19} height={19} />
-      {labels && <span className="text-sm">Добавить</span>}
+      {labels && <span className="text-sm">{t('Добавить')}</span>}
     </button>
   )
 }
@@ -1000,23 +1010,23 @@ function BlockedLogDialog({ stats, onClose }: { stats: SecurityStats; onClose: (
   )
 
   return (
-    <Modal title="Что заблокировано" onClose={onClose} width={560}>
+    <Modal title={t('Что заблокировано')} onClose={onClose} width={560}>
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap gap-1.5">
-          {chip('all', 'Всё')}
-          {chip('ad', 'Реклама', stats.ads)}
-          {chip('tracker', 'Трекеры', stats.trackers)}
-          {chip('crypto', 'Майнеры', stats.crypto)}
+          {chip('all', t('Всё'))}
+          {chip('ad', t('Реклама'), stats.ads)}
+          {chip('tracker', t('Трекеры'), stats.trackers)}
+          {chip('crypto', t('Майнеры'), stats.crypto)}
           {chip('upgrade', 'HTTPS', stats.upgrades)}
-          {chip('param', 'Метки', stats.params)}
+          {chip('param', t('Метки'), stats.params)}
         </div>
 
         <div className="flex max-h-[46vh] min-h-[160px] flex-col overflow-y-auto">
           {shown.length === 0 ? (
             <p className="px-1 py-6 text-center text-sm text-faint">
               {entries.length === 0
-                ? 'С запуска браузера ничего не блокировалось — счётчики начнут заполняться по мере просмотра'
-                : 'В этой категории пока пусто'}
+                ? t('С запуска браузера ничего не блокировалось — счётчики начнут заполняться по мере просмотра')
+                : t('В этой категории пока пусто')}
             </p>
           ) : (
             shown.slice(0, 200).map((entry, index) => (
@@ -1029,16 +1039,21 @@ function BlockedLogDialog({ stats, onClose }: { stats: SecurityStats; onClose: (
                   className="w-[68px] shrink-0 rounded-pill px-1.5 py-0.5 text-center text-2xs font-semibold text-white"
                   style={{ background: KIND_TONE[entry.kind] }}
                 >
-                  {KIND_LABEL[entry.kind]}
+                  {t(KIND_LABEL[entry.kind])}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm">{entry.host}</span>
                   {entry.page && entry.page !== entry.host && (
-                    <span className="block truncate text-2xs text-faint">на {entry.page}</span>
+                    <span className="block truncate text-2xs text-faint">
+                      {t('на {page}', { page: entry.page })}
+                    </span>
                   )}
                 </span>
                 <span className="shrink-0 text-2xs tabular-nums text-faint">
-                  {new Date(entry.time).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                  {new Date(entry.time).toLocaleTimeString(currentLanguage() || undefined, {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}
                 </span>
               </div>
             ))
@@ -1046,7 +1061,12 @@ function BlockedLogDialog({ stats, onClose }: { stats: SecurityStats; onClose: (
         </div>
 
         <p className="text-2xs text-faint">
-          Список живёт в памяти и очищается при закрытии браузера. Счётчики — с {new Date(stats.since).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}.
+          {t('Список живёт в памяти и очищается при закрытии браузера. Счётчики — с {time}.', {
+            time: new Date(stats.since).toLocaleTimeString(currentLanguage() || undefined, {
+              hour: '2-digit',
+              minute: '2-digit'
+            })
+          })}
         </p>
       </div>
     </Modal>
@@ -1073,32 +1093,32 @@ function FavoriteDialog({
 
   return (
     <Modal
-      title={mode === 'add' ? 'Новая плитка' : 'Изменить плитку'}
+      title={mode === 'add' ? t('Новая плитка') : t('Изменить плитку')}
       onClose={onClose}
       footer={
         <>
           {onDelete && (
             <button className="btn btn-danger mr-auto" onClick={onDelete}>
-              Удалить
+              {t('Удалить')}
             </button>
           )}
           <button className="btn" onClick={onClose}>
-            Отмена
+            {t('Отмена')}
           </button>
           <button className="btn btn-primary" onClick={() => onSave({ ...item, title, url })}>
-            Сохранить
+            {t('Сохранить')}
           </button>
         </>
       }
     >
       <div className="flex flex-col gap-3">
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm text-dim">Адрес</span>
+          <span className="text-sm text-dim">{t('Адрес')}</span>
           <TextField value={url} onChange={setUrl} placeholder="example.com" width="100%" autoFocus />
         </label>
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm text-dim">Название</span>
-          <TextField value={title} onChange={setTitle} placeholder="Как подписать плитку" width="100%" />
+          <span className="text-sm text-dim">{t('Название')}</span>
+          <TextField value={title} onChange={setTitle} placeholder={t('Как подписать плитку')} width="100%" />
         </label>
       </div>
     </Modal>

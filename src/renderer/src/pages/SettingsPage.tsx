@@ -1,3 +1,4 @@
+import { availableLanguages, currentLanguage, t } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
 import type {
   AppInfo,
@@ -19,6 +20,7 @@ import type {
   WidevineState
 } from '../../../shared/types'
 import { DEFAULT_LAYOUT } from '../../../shared/startPage'
+import { LANGUAGES } from '../../../shared/i18n'
 import type { ImportSource, VaultState } from '../../../preload/index'
 import logoUrl from '../assets/logo.png'
 import {
@@ -28,6 +30,7 @@ import {
   Eraser,
   Film,
   Gear,
+  Globe,
   Grid,
   Image,
   Key,
@@ -113,37 +116,37 @@ const PERMISSION_ROWS: Array<{ key: keyof PermissionSettings; title: string; hin
 
 /** One line describing what DRM can and cannot do right now. */
 function drmHint(state: (WidevineState & { needsRestart: boolean }) | null, wanted: boolean): string {
-  if (!state) return 'Проверяем состояние…'
-  if (!state.supported) return state.error || 'Эта сборка без поддержки Widevine'
+  if (!state) return t('Проверяем состояние…')
+  if (!state.supported) return state.error || t('Эта сборка без поддержки Widevine')
   if (!wanted) {
-    return 'Выключено. При включении Chromium один раз скачает модуль Widevine с серверов Google — это единственная причина, по которой пункт не включён сразу'
+    return t('Выключено. При включении Chromium один раз скачает модуль Widevine с серверов Google — это единственная причина, по которой пункт не включён сразу')
   }
-  if (state.error) return `Не удалось установить модуль: ${state.error}`
-  if (state.ready) return `Модуль Widevine ${state.version} готов`
-  return 'Модуль скачивается — это около минуты. Если видео не пошло, обновите страницу'
+  if (state.error) return t('Не удалось установить модуль: {e}', { e: state.error })
+  if (state.ready) return t('Модуль Widevine {v} готов', { v: state.version })
+  return t('Модуль скачивается — это около минуты. Если видео не пошло, обновите страницу')
 }
 
 /** One line describing where the updater has got to. */
 function updateHint(state: UpdateState | null): string {
-  if (!state) return 'Проверяем состояние…'
+  if (!state) return t('Проверяем состояние…')
   if (!state.supported) {
-    return state.error || 'Обновляться умеет только установленная версия, не портативная'
+    return state.error || t('Обновляться умеет только установленная версия, не портативная')
   }
   switch (state.stage) {
     case 'checking':
-      return 'Спрашиваем GitHub…'
+      return t('Спрашиваем GitHub…')
     case 'available':
-      return `Доступна версия ${state.available} — загрузить?`
+      return t('Доступна версия {v} — загрузить?', { v: state.available ?? '' })
     case 'downloading':
-      return `Скачиваем ${state.available ?? ''} — ${state.percent}%`
+      return t('Скачиваем {v} — {p}%', { v: state.available ?? '', p: state.percent })
     case 'ready':
-      return `Версия ${state.available} загружена и установится при перезапуске`
+      return t('Версия {v} загружена и установится при перезапуске', { v: state.available ?? '' })
     case 'current':
-      return 'Установлена последняя версия'
+      return t('Установлена последняя версия')
     case 'error':
-      return `Не получилось: ${state.error}`
+      return t('Не получилось: {e}', { e: state.error ?? '' })
     default:
-      return 'Проверка выполняется автоматически раз в 6 часов'
+      return t('Проверка выполняется автоматически раз в 6 часов')
   }
 }
 
@@ -219,7 +222,7 @@ export default function SettingsPage({
       {/* nav */}
       <nav className="contain flex w-[218px] shrink-0 flex-col gap-1 overflow-y-auto p-3" style={{ borderRight: '1px solid var(--line)' }}>
         <div className="px-2 pb-3 pt-1">
-          <div className="text-[17px] font-semibold tracking-[-0.02em]">Настройки</div>
+          <div className="text-[17px] font-semibold tracking-[-0.02em]">{t('Настройки')}</div>
           <div className="text-sm text-dim">Nya Browser</div>
         </div>
         {TABS.map((item) => (
@@ -236,7 +239,7 @@ export default function SettingsPage({
             }}
           >
             <span style={{ color: tab === item.id ? 'var(--accent)' : 'inherit' }}>{item.icon}</span>
-            {item.label}
+            {t(item.label)}
           </button>
         ))}
         <div className="flex-1" />
@@ -245,7 +248,7 @@ export default function SettingsPage({
           className="rounded-[10px] px-2.5 py-2 text-left text-sm text-dim hover:bg-[var(--surface-hover)]"
           style={{ transition: 'background var(--t-fast) linear' }}
         >
-          Сбросить настройки
+          {t('Сбросить настройки')}
         </button>
       </nav>
 
@@ -253,7 +256,7 @@ export default function SettingsPage({
       <div className="min-w-0 flex-1 overflow-y-auto">
         <div className="sticky top-0 z-10 flex items-center justify-end gap-3 p-3">
           {notice && <span className="animate-fade text-sm" style={{ color: 'var(--good)' }}>{notice}</span>}
-          <button className="icon-btn" title="Закрыть · Esc" onClick={onClose}>
+          <button className="icon-btn" title={t('Закрыть · Esc')} onClick={onClose}>
             <Cross />
           </button>
         </div>
@@ -262,19 +265,41 @@ export default function SettingsPage({
           {/* ---------------------------------------------------------- look */}
           {tab === 'look' && (
             <>
-              <Section title="Тема" icon={<Sun width={15} height={15} />} description="Как выглядит браузер">
-                <Row title="Оформление">
+              <Section
+                title={t('Язык браузера')}
+                icon={<Globe width={15} height={15} />}
+                description={t('Интерфейс, меню и язык, который сообщается сайтам')}
+              >
+                <Row
+                  title={t('Язык')}
+                  hint={t('Интерфейс переключается сразу; сайты и системные надписи — после перезапуска')}
+                >
+                  <Select
+                    value={settings.language}
+                    options={[
+                      { value: '', label: t('Как в системе') },
+                      ...LANGUAGES.filter((item) => availableLanguages().has(item.code)).map(
+                        (item) => ({ value: item.code, label: item.name })
+                      )
+                    ]}
+                    onChange={(value) => onPatch({ language: value })}
+                  />
+                </Row>
+              </Section>
+
+              <Section title={t('Тема')} icon={<Sun width={15} height={15} />} description={t('Как выглядит браузер')}>
+                <Row title={t('Оформление')}>
                   <Segmented
                     value={settings.theme}
                     onChange={(value) => onPatch({ theme: value })}
                     options={[
-                      { value: 'light', label: 'Светлая', icon: <Sun width={13} height={13} /> },
-                      { value: 'dark', label: 'Тёмная', icon: <Moon width={13} height={13} /> },
-                      { value: 'system', label: 'Система', icon: <Monitor width={13} height={13} /> }
+                      { value: 'light', label: t('Светлая'), icon: <Sun width={13} height={13} /> },
+                      { value: 'dark', label: t('Тёмная'), icon: <Moon width={13} height={13} /> },
+                      { value: 'system', label: t('Система'), icon: <Monitor width={13} height={13} /> }
                     ]}
                   />
                 </Row>
-                <Row title="Акцентный цвет" hint="Подсветка, активные элементы и процедурный фон">
+                <Row title={t('Акцентный цвет')} hint={t('Подсветка, активные элементы и процедурный фон')}>
                   <div className="flex items-center gap-1.5">
                     {ACCENTS.map((color) => (
                       <button
@@ -296,17 +321,17 @@ export default function SettingsPage({
                       value={settings.accent}
                       onChange={(event) => onPatch({ accent: event.target.value })}
                       className="ml-1 h-[24px] w-[30px] cursor-pointer rounded-[7px] border-0 bg-transparent p-0"
-                      title="Свой цвет"
+                      title={t('Свой цвет')}
                     />
                   </div>
                 </Row>
-                <Row title="Скругление углов" hint="Вкладки, панели и окно страницы">
+                <Row title={t('Скругление углов')} hint={t('Вкладки, панели и окно страницы')}>
                   <Slider value={settings.radius} min={0} max={24} onChange={(value) => onPatch({ radius: value })} format={(v) => `${v}px`} />
                 </Row>
-                <Row title="Компактный режим" hint="Меньше высота панелей и вкладок">
+                <Row title={t('Компактный режим')} hint={t('Меньше высота панелей и вкладок')}>
                   <Toggle checked={settings.compact} onChange={(value) => onPatch({ compact: value })} />
                 </Row>
-                <Row title="Эффект стекла" hint="Насколько плотные панели, вкладки и карточки — обои под ними остаются как есть">
+                <Row title={t('Эффект стекла')} hint={t('Насколько плотные панели, вкладки и карточки — обои под ними остаются как есть')}>
                   <Slider
                     value={settings.glass}
                     min={0}
@@ -318,8 +343,8 @@ export default function SettingsPage({
                 </Row>
               </Section>
 
-              <Section title="Движение" icon={<Sparkles width={15} height={15} />} description="Скорость и плавность анимаций">
-                <Row title="Скорость анимаций" hint="1× — как задумано, меньше — быстрее и резче">
+              <Section title={t('Движение')} icon={<Sparkles width={15} height={15} />} description={t('Скорость и плавность анимаций')}>
+                <Row title={t('Скорость анимаций')} hint={t('1× — как задумано, меньше — быстрее и резче')}>
                   <Slider
                     value={settings.animationSpeed}
                     min={0.4}
@@ -329,7 +354,7 @@ export default function SettingsPage({
                     format={(v) => `${v.toFixed(1)}×`}
                   />
                 </Row>
-                <Row title="Меньше движения" hint="Полностью отключает анимации интерфейса">
+                <Row title={t('Меньше движения')} hint={t('Полностью отключает анимации интерфейса')}>
                   <Toggle checked={settings.reduceMotion} onChange={(value) => onPatch({ reduceMotion: value })} />
                 </Row>
               </Section>
@@ -339,53 +364,53 @@ export default function SettingsPage({
           {/* ----------------------------------------------------- wallpaper */}
           {tab === 'wallpaper' && (
             <>
-              <Section title="Тип фона" icon={<Image width={15} height={15} />} description="Живая анимация или ваши обои">
+              <Section title={t('Тип фона')} icon={<Image width={15} height={15} />} description={t('Живая анимация или ваши обои')}>
                 <div className="grid grid-cols-3 gap-2 p-3">
-                  <ChoiceCard value="off" current={bg.kind} onSelect={(kind) => onPatch({ background: { ...bg, kind } })} icon={<Cross width={14} height={14} />} title="Выкл" hint="Ровный фон" />
-                  <ChoiceCard value="aurora" current={bg.kind} onSelect={(kind) => onPatch({ background: { ...bg, kind } })} icon={<Sparkles width={14} height={14} />} title="Аврора" hint="Плывущие пятна" />
-                  <ChoiceCard value="mesh" current={bg.kind} onSelect={(kind) => onPatch({ background: { ...bg, kind } })} icon={<Palette width={14} height={14} />} title="Меш" hint="Градиентная сетка" />
-                  <ChoiceCard value="waves" current={bg.kind} onSelect={(kind) => onPatch({ background: { ...bg, kind } })} icon={<Zap width={14} height={14} />} title="Волны" hint="Мягкие переливы" />
-                  <ChoiceCard value="image" current={bg.kind} onSelect={(kind) => onPatch({ background: { ...bg, kind } })} icon={<Image width={14} height={14} />} title="Картинка" hint="PNG, JPG, WebP, GIF" />
-                  <ChoiceCard value="video" current={bg.kind} onSelect={(kind) => onPatch({ background: { ...bg, kind } })} icon={<Film width={14} height={14} />} title="Видео" hint="MP4, WebM, MOV" />
+                  <ChoiceCard value="off" current={bg.kind} onSelect={(kind) => onPatch({ background: { ...bg, kind } })} icon={<Cross width={14} height={14} />} title={t('Выкл')} hint={t('Ровный фон')} />
+                  <ChoiceCard value="aurora" current={bg.kind} onSelect={(kind) => onPatch({ background: { ...bg, kind } })} icon={<Sparkles width={14} height={14} />} title={t('Аврора')} hint={t('Плывущие пятна')} />
+                  <ChoiceCard value="mesh" current={bg.kind} onSelect={(kind) => onPatch({ background: { ...bg, kind } })} icon={<Palette width={14} height={14} />} title={t('Меш')} hint={t('Градиентная сетка')} />
+                  <ChoiceCard value="waves" current={bg.kind} onSelect={(kind) => onPatch({ background: { ...bg, kind } })} icon={<Zap width={14} height={14} />} title={t('Волны')} hint={t('Мягкие переливы')} />
+                  <ChoiceCard value="image" current={bg.kind} onSelect={(kind) => onPatch({ background: { ...bg, kind } })} icon={<Image width={14} height={14} />} title={t('Картинка')} hint="PNG, JPG, WebP, GIF" />
+                  <ChoiceCard value="video" current={bg.kind} onSelect={(kind) => onPatch({ background: { ...bg, kind } })} icon={<Film width={14} height={14} />} title={t('Видео')} hint="MP4, WebM, MOV" />
                 </div>
 
                 {(bg.kind === 'image' || bg.kind === 'video') && (
                   <>
-                    <Row title="Файл обоев" hint={bg.file || 'Файл ещё не выбран'}>
+                    <Row title={t('Файл обоев')} hint={bg.file || t('Файл ещё не выбран')}>
                       <div className="flex gap-2">
                         {bg.file && (
                           <button className="btn" onClick={() => onPatch({ background: { ...bg, file: '' } })}>
-                            Убрать
+                            {t('Убрать')}
                           </button>
                         )}
                         <button
                           className="btn btn-primary"
                           onClick={async () => {
                             const file = await window.browser.pickWallpaper()
-                            if (file) flash('Обои обновлены')
+                            if (file) flash(t('Обои обновлены'))
                           }}
                         >
-                          Выбрать файл
+                          {t('Выбрать файл')}
                         </button>
                       </div>
                     </Row>
-                    <Row title="Заполнение">
+                    <Row title={t('Заполнение')}>
                       <Segmented
                         value={bg.fit}
                         onChange={(fit) => onPatch({ background: { ...bg, fit } })}
                         options={[
-                          { value: 'cover', label: 'Заполнить' },
-                          { value: 'contain', label: 'Вписать' },
-                          { value: 'center', label: 'По центру' },
-                          { value: 'tile', label: 'Плитка' }
+                          { value: 'cover', label: t('Заполнить') },
+                          { value: 'contain', label: t('Вписать') },
+                          { value: 'center', label: t('По центру') },
+                          { value: 'tile', label: t('Плитка') }
                         ]}
                         size="sm"
                       />
                     </Row>
-                    <Row title="Размытие" hint="Чтобы текст поверх обоев читался лучше">
+                    <Row title={t('Размытие')} hint={t('Чтобы текст поверх обоев читался лучше')}>
                       <Slider value={bg.blur} min={0} max={40} onChange={(blur) => onPatch({ background: { ...bg, blur } })} format={(v) => `${v}px`} />
                     </Row>
-                    <Row title="Затемнение">
+                    <Row title={t('Затемнение')}>
                       <Slider value={bg.dim} min={0} max={85} onChange={(dim) => onPatch({ background: { ...bg, dim } })} format={(v) => `${v}%`} />
                     </Row>
                   </>
@@ -393,27 +418,27 @@ export default function SettingsPage({
 
                 {bg.kind === 'video' && (
                   <>
-                    <Row title="Скорость видео">
+                    <Row title={t('Скорость видео')}>
                       <Slider value={bg.speed} min={0.25} max={2} step={0.05} onChange={(speed) => onPatch({ background: { ...bg, speed } })} format={(v) => `${v.toFixed(2)}×`} />
                     </Row>
-                    <Row title="Без звука" hint="Видеообои почти всегда лучше без звука">
+                    <Row title={t('Без звука')} hint={t('Видеообои почти всегда лучше без звука')}>
                       <Toggle checked={bg.muted} onChange={(muted) => onPatch({ background: { ...bg, muted } })} />
                     </Row>
-                    <Row title="Пауза при просмотре сайта" hint="Экономит заряд и процессор, пока обои не видно">
+                    <Row title={t('Пауза при просмотре сайта')} hint={t('Экономит заряд и процессор, пока обои не видно')}>
                       <Toggle checked={bg.pauseWhenBrowsing} onChange={(pauseWhenBrowsing) => onPatch({ background: { ...bg, pauseWhenBrowsing } })} />
                     </Row>
                   </>
                 )}
 
                 {['aurora', 'mesh', 'waves'].includes(bg.kind) && (
-                  <Row title="Интенсивность">
+                  <Row title={t('Интенсивность')}>
                     <Segmented
                       value={bg.intensity}
                       onChange={(intensity) => onPatch({ background: { ...bg, intensity } })}
                       options={[
-                        { value: 'subtle', label: 'Тихо' },
-                        { value: 'medium', label: 'Средне' },
-                        { value: 'vivid', label: 'Ярко' }
+                        { value: 'subtle', label: t('Тихо') },
+                        { value: 'medium', label: t('Средне') },
+                        { value: 'vivid', label: t('Ярко') }
                       ]}
                     />
                   </Row>
@@ -425,46 +450,46 @@ export default function SettingsPage({
           {/* ---------------------------------------------------------- tabs */}
           {tab === 'tabs' && (
             <>
-              <Section title="Расположение" icon={<LayoutTop width={15} height={15} />} description="Сверху или вертикально сбоку">
+              <Section title={t('Расположение')} icon={<LayoutTop width={15} height={15} />} description={t('Сверху или вертикально сбоку')}>
                 <div className="flex gap-2 p-3">
-                  <ChoiceCard value="top" current={settings.tabPosition} onSelect={(value) => onPatch({ tabPosition: value })} icon={<LayoutTop width={15} height={15} />} title="Сверху" hint="Классическая полоса" />
-                  <ChoiceCard value="left" current={settings.tabPosition} onSelect={(value) => onPatch({ tabPosition: value })} icon={<LayoutLeft width={15} height={15} />} title="Слева" hint="Вертикальный список" />
-                  <ChoiceCard value="right" current={settings.tabPosition} onSelect={(value) => onPatch({ tabPosition: value })} icon={<LayoutRight width={15} height={15} />} title="Справа" hint="У правого края" />
+                  <ChoiceCard value="top" current={settings.tabPosition} onSelect={(value) => onPatch({ tabPosition: value })} icon={<LayoutTop width={15} height={15} />} title={t('Сверху')} hint={t('Классическая полоса')} />
+                  <ChoiceCard value="left" current={settings.tabPosition} onSelect={(value) => onPatch({ tabPosition: value })} icon={<LayoutLeft width={15} height={15} />} title={t('Слева')} hint={t('Вертикальный список')} />
+                  <ChoiceCard value="right" current={settings.tabPosition} onSelect={(value) => onPatch({ tabPosition: value })} icon={<LayoutRight width={15} height={15} />} title={t('Справа')} hint={t('У правого края')} />
                 </div>
                 {settings.tabPosition !== 'top' ? (
-                  <Row title="Ширина панели">
+                  <Row title={t('Ширина панели')}>
                     <Slider value={settings.railWidth} min={168} max={420} step={4} onChange={(value) => onPatch({ railWidth: value })} format={(v) => `${v}px`} />
                   </Row>
                 ) : (
-                  <Row title="Максимальная ширина вкладки">
+                  <Row title={t('Максимальная ширина вкладки')}>
                     <Slider value={settings.tabMaxWidth} min={120} max={420} step={10} onChange={(value) => onPatch({ tabMaxWidth: value })} format={(v) => `${v}px`} />
                   </Row>
                 )}
-                <Row title="Кнопка закрытия">
+                <Row title={t('Кнопка закрытия')}>
                   <Segmented
                     value={settings.closeButton}
                     onChange={(value) => onPatch({ closeButton: value })}
                     options={[
-                      { value: 'always', label: 'Всегда' },
-                      { value: 'hover', label: 'При наведении' },
-                      { value: 'active', label: 'Только активная' }
+                      { value: 'always', label: t('Всегда') },
+                      { value: 'hover', label: t('При наведении') },
+                      { value: 'active', label: t('Только активная') }
                     ]}
                     size="sm"
                   />
                 </Row>
               </Section>
 
-              <Section title="Поведение" icon={<LayoutHidden width={15} height={15} />}>
-                <Row title="Автоскрытие интерфейса" hint="Остаётся только страница; вернуть — курсор к краю или Ctrl+Shift+B">
+              <Section title={t('Поведение')} icon={<LayoutHidden width={15} height={15} />}>
+                <Row title={t('Автоскрытие интерфейса')} hint={t('Остаётся только страница; вернуть — курсор к краю или Ctrl+Shift+B')}>
                   <Toggle checked={settings.tabAutoHide} onChange={(value) => onPatch({ tabAutoHide: value })} />
                 </Row>
-                <Row title="Новая вкладка рядом с текущей">
+                <Row title={t('Новая вкладка рядом с текущей')}>
                   <Toggle checked={settings.newTabAfterCurrent} onChange={(value) => onPatch({ newTabAfterCurrent: value })} />
                 </Row>
-                <Row title="Закрывать средней кнопкой мыши">
+                <Row title={t('Закрывать средней кнопкой мыши')}>
                   <Toggle checked={settings.middleClickClose} onChange={(value) => onPatch({ middleClickClose: value })} />
                 </Row>
-                <Row title="Подтверждать закрытие нескольких вкладок">
+                <Row title={t('Подтверждать закрытие нескольких вкладок')}>
                   <Toggle checked={settings.confirmCloseMultiple} onChange={(value) => onPatch({ confirmCloseMultiple: value })} />
                 </Row>
               </Section>
@@ -473,60 +498,60 @@ export default function SettingsPage({
 
           {/* --------------------------------------------------------- start */}
           {tab === 'start' && (
-            <Section title="Главная страница" icon={<Sparkles width={15} height={15} />} description="Что показывать на стартовом экране">
-              <Row title="Приветствие"><Toggle checked={settings.startPage.greeting} onChange={(v) => onPatch({ startPage: { ...settings.startPage, greeting: v } })} /></Row>
-              <Row title="Часы"><Toggle checked={settings.startPage.clock} onChange={(v) => onPatch({ startPage: { ...settings.startPage, clock: v } })} /></Row>
-              <Row title="Плитки избранного"><Toggle checked={settings.startPage.favorites} onChange={(v) => onPatch({ startPage: { ...settings.startPage, favorites: v } })} /></Row>
-              <Row title="Колонок в избранном">
+            <Section title={t('Главная страница')} icon={<Sparkles width={15} height={15} />} description={t('Что показывать на стартовом экране')}>
+              <Row title={t('Приветствие')}><Toggle checked={settings.startPage.greeting} onChange={(v) => onPatch({ startPage: { ...settings.startPage, greeting: v } })} /></Row>
+              <Row title={t('Часы')}><Toggle checked={settings.startPage.clock} onChange={(v) => onPatch({ startPage: { ...settings.startPage, clock: v } })} /></Row>
+              <Row title={t('Плитки избранного')}><Toggle checked={settings.startPage.favorites} onChange={(v) => onPatch({ startPage: { ...settings.startPage, favorites: v } })} /></Row>
+              <Row title={t('Колонок в избранном')}>
                 <Slider value={settings.startPage.columns} min={4} max={12} onChange={(v) => onPatch({ startPage: { ...settings.startPage, columns: v } })} width={120} />
               </Row>
-              <Row title="Недавние страницы"><Toggle checked={settings.startPage.recent} onChange={(v) => onPatch({ startPage: { ...settings.startPage, recent: v } })} /></Row>
-              <Row title="Недавно закрытые вкладки"><Toggle checked={settings.startPage.closed} onChange={(v) => onPatch({ startPage: { ...settings.startPage, closed: v } })} /></Row>
-              <Row title="Счётчик защиты"><Toggle checked={settings.startPage.stats} onChange={(v) => onPatch({ startPage: { ...settings.startPage, stats: v } })} /></Row>
-              <Row title="Погода" hint="Город выбирается в самом виджете; без него никуда ничего не уходит">
+              <Row title={t('Недавние страницы')}><Toggle checked={settings.startPage.recent} onChange={(v) => onPatch({ startPage: { ...settings.startPage, recent: v } })} /></Row>
+              <Row title={t('Недавно закрытые вкладки')}><Toggle checked={settings.startPage.closed} onChange={(v) => onPatch({ startPage: { ...settings.startPage, closed: v } })} /></Row>
+              <Row title={t('Счётчик защиты')}><Toggle checked={settings.startPage.stats} onChange={(v) => onPatch({ startPage: { ...settings.startPage, stats: v } })} /></Row>
+              <Row title={t('Погода')} hint={t('Город выбирается в самом виджете; без него никуда ничего не уходит')}>
                 <Toggle checked={settings.startPage.weather} onChange={(v) => onPatch({ startPage: { ...settings.startPage, weather: v } })} />
               </Row>
-              <Row title="Шрифт главной">
+              <Row title={t('Шрифт главной')}>
                 <Select
                   value={settings.startPage.font}
                   options={[
-                    { value: 'system', label: 'Системный' },
-                    { value: 'rounded', label: 'Округлый' },
-                    { value: 'serif', label: 'С засечками' },
-                    { value: 'mono', label: 'Моноширинный' }
+                    { value: 'system', label: t('Системный') },
+                    { value: 'rounded', label: t('Округлый') },
+                    { value: 'serif', label: t('С засечками') },
+                    { value: 'mono', label: t('Моноширинный') }
                   ]}
                   onChange={(v) => onPatch({ startPage: { ...settings.startPage, font: v as StartPageFont } })}
                 />
               </Row>
-              <Row title="Вид плиток">
+              <Row title={t('Вид плиток')}>
                 <Segmented
                   value={settings.startPage.tiles}
                   options={[
-                    { value: 'card', label: 'Карточки' },
-                    { value: 'icon', label: 'Значки' }
+                    { value: 'card', label: t('Карточки') },
+                    { value: 'icon', label: t('Значки') }
                   ]}
                   onChange={(v) => onPatch({ startPage: { ...settings.startPage, tiles: v as TileStyle } })}
                 />
               </Row>
-              <Row title="Форма плиток и карточек">
+              <Row title={t('Форма плиток и карточек')}>
                 <Select
                   value={settings.startPage.shape}
                   options={[
-                    { value: 'rounded', label: 'Скруглённые' },
-                    { value: 'soft', label: 'Мягкие' },
-                    { value: 'circle', label: 'Круглые' },
-                    { value: 'square', label: 'Прямые' }
+                    { value: 'rounded', label: t('Скруглённые') },
+                    { value: 'soft', label: t('Мягкие') },
+                    { value: 'circle', label: t('Круглые') },
+                    { value: 'square', label: t('Прямые') }
                   ]}
                   onChange={(v) => onPatch({ startPage: { ...settings.startPage, shape: v as TileShape } })}
                 />
               </Row>
-              <Row title="Подписи под значками" hint="Выключите, чтобы на плитке остался только логотип сайта">
+              <Row title={t('Подписи под значками')} hint={t('Выключите, чтобы на плитке остался только логотип сайта')}>
                 <Toggle
                   checked={settings.startPage.tileLabels}
                   onChange={(v) => onPatch({ startPage: { ...settings.startPage, tileLabels: v } })}
                 />
               </Row>
-              <Row title="Цвет текста" hint={settings.startPage.ink || 'По теме — тёмный на светлой, светлый на тёмной'}>
+              <Row title={t('Цвет текста')} hint={settings.startPage.ink || t('По теме — тёмный на светлой, светлый на тёмной')}>
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
@@ -541,17 +566,17 @@ export default function SettingsPage({
                       className="btn"
                       onClick={() => onPatch({ startPage: { ...settings.startPage, ink: '' } })}
                     >
-                      По теме
+                      {t('По теме')}
                     </button>
                   )}
                 </div>
               </Row>
-              <Row title="Расположение виджетов" hint="Двигать и менять размер можно прямо на главной — кнопка «Настроить» в углу">
+              <Row title={t('Расположение виджетов')} hint={t('Двигать и менять размер можно прямо на главной — кнопка «Настроить» в углу')}>
                 <button
                   className="btn"
                   onClick={() => onPatch({ startPage: { ...settings.startPage, layout: { ...DEFAULT_LAYOUT } } })}
                 >
-                  Сбросить
+                  {t('Сбросить')}
                 </button>
               </Row>
             </Section>
@@ -560,7 +585,7 @@ export default function SettingsPage({
           {/* -------------------------------------------------------- search */}
           {tab === 'search' && (
             <>
-              <Section title="Поисковая система" icon={<Search width={15} height={15} />} description="Используется для запросов из адресной строки">
+              <Section title={t('Поисковая система')} icon={<Search width={15} height={15} />} description={t('Используется для запросов из адресной строки')}>
                 {engines.map((item) => (
                   <button
                     key={item.id}
@@ -582,7 +607,7 @@ export default function SettingsPage({
                       <span className="flex items-center gap-2 text-base font-medium">
                         {item.name}
                         <Pill tone={item.privacy === 'high' ? 'good' : item.privacy === 'medium' ? 'warn' : 'bad'}>
-                          {item.privacy === 'high' ? 'приватный' : item.privacy === 'medium' ? 'средне' : 'трекинг'}
+                          {item.privacy === 'high' ? t('приватный') : item.privacy === 'medium' ? t('средне') : t('трекинг')}
                         </Pill>
                       </span>
                       <span className="block truncate text-sm text-dim">{item.hint}</span>
@@ -590,20 +615,20 @@ export default function SettingsPage({
                   </button>
                 ))}
                 {settings.searchEngine === 'custom' && (
-                  <Row title="Адрес поиска" hint="%s подставляется вместо запроса">
+                  <Row title={t('Адрес поиска')} hint={t('%s подставляется вместо запроса')}>
                     <TextField value={settings.customSearchUrl} onChange={(v) => onPatch({ customSearchUrl: v })} width={300} mono />
                   </Row>
                 )}
               </Section>
 
-              <Section title="Адресная строка" icon={<Search width={15} height={15} />}>
-                <Row title="Подсказки из истории" hint="Подсказки строятся локально и никуда не отправляются">
+              <Section title={t('Адресная строка')} icon={<Search width={15} height={15} />}>
+                <Row title={t('Подсказки из истории')} hint={t('Подсказки строятся локально и никуда не отправляются')}>
                   <Toggle checked={settings.historySuggestions} onChange={(v) => onPatch({ historySuggestions: v })} />
                 </Row>
-                <Row title="Домашняя страница" hint="Открывается по кнопке «домой»; пусто — стартовый экран">
+                <Row title={t('Домашняя страница')} hint={t('Открывается по кнопке «домой»; пусто — стартовый экран')}>
                   <TextField value={settings.homepage} onChange={(v) => onPatch({ homepage: v })} placeholder="https://" width={260} />
                 </Row>
-                <Row title="Текущий движок">
+                <Row title={t('Текущий движок')}>
                   <span className="text-sm text-dim">{engine?.name}</span>
                 </Row>
               </Section>
@@ -613,19 +638,19 @@ export default function SettingsPage({
           {/* ------------------------------------------------------ profiles */}
           {tab === 'profiles' && profiles && (
             <Section
-              title="Профили"
+              title={t('Профили')}
               icon={<Users width={15} height={15} />}
-              description="У каждого профиля свои cookies, история, закладки, пароли и настройки"
+              description={t('У каждого профиля свои cookies, история, закладки, пароли и настройки')}
               action={
                 <button
                   className="btn"
                   onClick={async () => {
-                    const profile = await window.browser.createProfile('Новый профиль')
+                    const profile = await window.browser.createProfile(t('Новый профиль'))
                     setEditProfile(profile)
                   }}
                 >
                   <Plus width={15} height={15} />
-                  Добавить
+                  {t('Добавить')}
                 </button>
               }
             >
@@ -635,27 +660,31 @@ export default function SettingsPage({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 text-base font-medium">
                       {profile.name}
-                      {profile.id === profiles.activeId && <Pill tone="accent">активный</Pill>}
+                      {profile.id === profiles.activeId && <Pill tone="accent">{t('активный')}</Pill>}
                     </div>
                     <div className="text-sm text-dim">
-                      создан {new Date(profile.created).toLocaleDateString('ru-RU')}
+                      {t('создан {date}', {
+                        date: new Date(profile.created).toLocaleDateString(
+                          currentLanguage() || undefined
+                        )
+                      })}
                     </div>
                   </div>
                   {profile.id !== profiles.activeId && (
                     <button className="btn" onClick={() => window.browser.switchProfile(profile.id)}>
-                      Войти
+                      {t('Войти')}
                     </button>
                   )}
                   <button className="btn" onClick={() => setEditProfile(profile)}>
-                    Изменить
+                    {t('Изменить')}
                   </button>
                   {profiles.profiles.length > 1 && (
                     <button
                       className="icon-btn"
-                      title="Удалить профиль вместе с данными"
+                      title={t('Удалить профиль вместе с данными')}
                       onClick={async () => {
                         await window.browser.removeProfile(profile.id)
-                        flash('Профиль удалён')
+                        flash(t('Профиль удалён'))
                       }}
                     >
                       <Trash width={15} height={15} />
@@ -670,51 +699,51 @@ export default function SettingsPage({
           {tab === 'privacy' && (
             <>
               <Section
-                title="Блокировка"
+                title={t('Блокировка')}
                 icon={<Shield width={15} height={15} />}
-                description={`С запуска заблокировано: ${stats.ads + stats.trackers + stats.crypto}`}
+                description={t('С запуска заблокировано: {n}', { n: stats.ads + stats.trackers + stats.crypto })}
               >
-                <Row title="Реклама" hint="Рекламные сети отсекаются до сетевого запроса">
+                <Row title={t('Реклама')} hint={t('Рекламные сети отсекаются до сетевого запроса')}>
                   <Toggle checked={settings.blockAds} onChange={(v) => onPatch({ blockAds: v })} />
                 </Row>
-                <Row title="Трекеры" hint="Аналитика, пиксели, запись сессий">
+                <Row title={t('Трекеры')} hint={t('Аналитика, пиксели, запись сессий')}>
                   <Toggle checked={settings.blockTrackers} onChange={(v) => onPatch({ blockTrackers: v })} />
                 </Row>
-                <Row title="Майнеры" hint="Скрипты, считающие криптовалюту на вашем процессоре">
+                <Row title={t('Майнеры')} hint={t('Скрипты, считающие криптовалюту на вашем процессоре')}>
                   <Toggle checked={settings.blockCrypto} onChange={(v) => onPatch({ blockCrypto: v })} />
                 </Row>
-                <Row title="Убирать метки из ссылок" hint="utm_*, fbclid, gclid, yclid и ещё около 60">
+                <Row title={t('Убирать метки из ссылок')} hint={t('utm_*, fbclid, gclid, yclid и ещё около 60')}>
                   <Toggle checked={settings.stripTrackingParams} onChange={(v) => onPatch({ stripTrackingParams: v })} />
                 </Row>
               </Section>
 
               <Section
-                title="Списки фильтров"
+                title={t('Списки фильтров')}
                 icon={<Shield width={15} height={15} />}
-                description="EasyList и другие правила поверх встроенного списка доменов — без них реклама на YouTube и баннеры на сайтах остаются"
+                description={t('EasyList и другие правила поверх встроенного списка доменов — без них реклама на YouTube и баннеры на сайтах остаются')}
               >
                 <Row
-                  title="Использовать списки фильтров"
+                  title={t('Использовать списки фильтров')}
                   hint={
                     filters?.enabled
-                      ? `${filters.rules.toLocaleString('ru-RU')} сетевых правил, ${filters.cosmetic.toLocaleString('ru-RU')} косметических`
-                      : 'Списки скачиваются один раз и обновляются раз в 5 дней'
+                      ? t('{a} сетевых правил, {b} косметических', { a: filters.rules.toLocaleString(), b: filters.cosmetic.toLocaleString() })
+                      : t('Списки скачиваются один раз и обновляются раз в 5 дней')
                   }
                 >
                   <Toggle checked={settings.filterLists} onChange={(v) => onPatch({ filterLists: v })} />
                 </Row>
-                <Row title="Прятать пустые блоки" hint="Скрывает рамки и заглушки, оставшиеся от заблокированной рекламы">
+                <Row title={t('Прятать пустые блоки')} hint={t('Скрывает рамки и заглушки, оставшиеся от заблокированной рекламы')}>
                   <Toggle
                     checked={settings.cosmeticFiltering}
                     onChange={(v) => onPatch({ cosmeticFiltering: v })}
                   />
                 </Row>
                 <Row
-                  title="Обновление"
+                  title={t('Обновление')}
                   hint={
                     filters && filters.updated > 0
-                      ? `Последнее: ${new Date(filters.updated).toLocaleString('ru-RU')}`
-                      : 'Списки ещё не загружались'
+                      ? t('Последнее: {when}', { when: new Date(filters.updated).toLocaleString() })
+                      : t('Списки ещё не загружались')
                   }
                 >
                   <button
@@ -724,28 +753,32 @@ export default function SettingsPage({
                       setRefreshing(true)
                       try {
                         setFilters(await window.browser.refreshFilters())
-                        flash('Списки обновлены')
+                        flash(t('Списки обновлены'))
                       } finally {
                         setRefreshing(false)
                       }
                     }}
                   >
-                    {refreshing ? 'Обновляем…' : 'Обновить сейчас'}
+                    {refreshing ? t('Обновляем…') : t('Обновить сейчас')}
                   </button>
                 </Row>
                 {filters?.lists.map((list) => (
                   <Row
                     key={list.id}
                     title={list.name}
-                    hint={list.updated > 0 ? new Date(list.updated).toLocaleDateString('ru-RU') : 'нет данных'}
+                    hint={
+                      list.updated > 0
+                        ? new Date(list.updated).toLocaleDateString(currentLanguage() || undefined)
+                        : t('нет данных')
+                    }
                   >
                     <span className="text-sm text-dim">{Math.round(list.bytes / 1024)} КБ</span>
                   </Row>
                 ))}
               </Section>
 
-              <Section title="Свои списки" icon={<Eraser width={15} height={15} />} description="Дополнительные домены поверх встроенного списка">
-                <Row title="Блокировать домен">
+              <Section title={t('Свои списки')} icon={<Eraser width={15} height={15} />} description={t('Дополнительные домены поверх встроенного списка')}>
+                <Row title={t('Блокировать домен')}>
                   <div className="flex gap-2">
                     <TextField value={newDomain} onChange={setNewDomain} placeholder="example.com" width={200} onEnter={() => {
                       if (!newDomain.trim()) return
@@ -776,7 +809,7 @@ export default function SettingsPage({
                     ))}
                   </div>
                 )}
-                <Row title="Никогда не блокировать" hint="Если блокировка что-то ломает на конкретном сайте">
+                <Row title={t('Никогда не блокировать')} hint={t('Если блокировка что-то ломает на конкретном сайте')}>
                   <div className="flex gap-2">
                     <TextField value={newAllowed} onChange={setNewAllowed} placeholder="example.com" width={200} onEnter={() => {
                       if (!newAllowed.trim()) return
@@ -809,43 +842,43 @@ export default function SettingsPage({
                 )}
               </Section>
 
-              <Section title="Соединение и данные" icon={<Shield width={15} height={15} />}>
-                <Row title="Только HTTPS" hint="HTTP повышается автоматически; исключение можно подтвердить вручную">
+              <Section title={t('Соединение и данные')} icon={<Shield width={15} height={15} />}>
+                <Row title={t('Только HTTPS')} hint={t('HTTP повышается автоматически; исключение можно подтвердить вручную')}>
                   <Toggle checked={settings.httpsOnly} onChange={(v) => onPatch({ httpsOnly: v })} />
                 </Row>
-                <Row title="Блокировать сторонние cookie" hint="Разрывает сквозную слежку между сайтами">
+                <Row title={t('Блокировать сторонние cookie')} hint={t('Разрывает сквозную слежку между сайтами')}>
                   <Toggle checked={settings.blockThirdPartyCookies} onChange={(v) => onPatch({ blockThirdPartyCookies: v })} />
                 </Row>
-                <Row title="Заголовки DNT и Sec-GPC">
+                <Row title={t('Заголовки DNT и Sec-GPC')}>
                   <Toggle checked={settings.doNotTrack} onChange={(v) => onPatch({ doNotTrack: v })} />
                 </Row>
-                <Row title="WebRTC" hint="Ограничивает утечку локальных IP-адресов через видеозвонки">
+                <Row title="WebRTC" hint={t('Ограничивает утечку локальных IP-адресов через видеозвонки')}>
                   <Select
                     value={settings.webrtcPolicy}
                     onChange={(v) => onPatch({ webrtcPolicy: v })}
                     options={[
-                      { value: 'public_only', label: 'Только публичный IP' },
-                      { value: 'proxy_only', label: 'Только через прокси' },
-                      { value: 'default', label: 'Как в Chromium' }
+                      { value: 'public_only', label: t('Только публичный IP') },
+                      { value: 'proxy_only', label: t('Только через прокси') },
+                      { value: 'default', label: t('Как в Chromium') }
                     ]}
                     width={210}
                   />
                 </Row>
-                <Row title="Сохранять историю">
+                <Row title={t('Сохранять историю')}>
                   <Toggle checked={settings.saveHistory} onChange={(v) => onPatch({ saveHistory: v })} />
                 </Row>
-                <Row title="Очищать данные при выходе" hint="Cookies, кэш и история удаляются при закрытии">
+                <Row title={t('Очищать данные при выходе')} hint={t('Cookies, кэш и история удаляются при закрытии')}>
                   <Toggle checked={settings.clearOnExit} onChange={(v) => onPatch({ clearOnExit: v })} />
                 </Row>
               </Section>
 
-              <Section title="Доступ сайтов к устройствам" icon={<Alert width={15} height={15} />} description="По умолчанию всё спрашивается или запрещается">
+              <Section title={t('Доступ сайтов к устройствам')} icon={<Alert width={15} height={15} />} description={t('По умолчанию всё спрашивается или запрещается')}>
                 {PERMISSION_ROWS.map((row) => (
-                  <Row key={row.key} title={row.title} hint={row.hint}>
+                  <Row key={row.key} title={t(row.title)} hint={t(row.hint)}>
                     <Select
                       value={settings.permissions[row.key]}
                       onChange={(value) => onPatch({ permissions: { ...settings.permissions, [row.key]: value } })}
-                      options={POLICY_OPTIONS}
+                      options={POLICY_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))}
                       width={150}
                     />
                   </Row>
@@ -856,16 +889,16 @@ export default function SettingsPage({
 
           {/* ------------------------------------------------------ passwords */}
           {tab === 'passwords' && (
-            <Section title="Хранилище паролей" icon={<Key width={15} height={15} />} description="Шифрование AES-256-GCM для каждой записи">
-              <Row title="Записей" hint={vault?.mode === 'password' ? 'Ключ выводится из мастер-пароля' : 'Ключ запечатан средствами Windows (DPAPI)'}>
+            <Section title={t('Хранилище паролей')} icon={<Key width={15} height={15} />} description={t('Шифрование AES-256-GCM для каждой записи')}>
+              <Row title={t('Записей')} hint={vault?.mode === 'password' ? t('Ключ выводится из мастер-пароля') : t('Ключ запечатан средствами Windows (DPAPI)')}>
                 <span className="text-sm text-dim">{vault?.count ?? 0}</span>
               </Row>
-              <Row title="Состояние">
-                <Pill tone={vault?.locked ? 'warn' : 'good'}>{vault?.locked ? 'заблокировано' : 'разблокировано'}</Pill>
+              <Row title={t('Состояние')}>
+                <Pill tone={vault?.locked ? 'warn' : 'good'}>{vault?.locked ? t('заблокировано') : t('разблокировано')}</Pill>
               </Row>
-              <Row title="Управление паролями" hint="Просмотр, генератор, мастер-пароль">
+              <Row title={t('Управление паролями')} hint={t('Просмотр, генератор, мастер-пароль')}>
                 <button className="btn btn-primary" onClick={onOpenPasswords}>
-                  Открыть
+                  {t('Открыть')}
                 </button>
               </Row>
             </Section>
@@ -874,40 +907,40 @@ export default function SettingsPage({
           {/* --------------------------------------------------------- speed */}
           {tab === 'speed' && (
             <>
-              <Section title="Ускорение" icon={<Zap width={15} height={15} />} description="Часть параметров вступает в силу после перезапуска">
-                <Row title="Аппаратное ускорение" hint="Отрисовка и декодирование видео на видеокарте">
+              <Section title={t('Ускорение')} icon={<Zap width={15} height={15} />} description={t('Часть параметров вступает в силу после перезапуска')}>
+                <Row title={t('Аппаратное ускорение')} hint={t('Отрисовка и декодирование видео на видеокарте')}>
                   <Toggle checked={settings.hardwareAcceleration} onChange={(v) => onPatch({ hardwareAcceleration: v })} />
                 </Row>
-                <Row title="Предподключение" hint="TLS-соединение устанавливается ещё до клика по ссылке">
+                <Row title={t('Предподключение')} hint={t('TLS-соединение устанавливается ещё до клика по ссылке')}>
                   <Toggle checked={settings.preconnect} onChange={(v) => onPatch({ preconnect: v })} />
                 </Row>
-                <Row title="Предзагрузка DNS">
+                <Row title={t('Предзагрузка DNS')}>
                   <Toggle checked={settings.prefetchDns} onChange={(v) => onPatch({ prefetchDns: v })} />
                 </Row>
-                <Row title="Плавная прокрутка">
+                <Row title={t('Плавная прокрутка')}>
                   <Toggle checked={settings.smoothScrolling} onChange={(v) => onPatch({ smoothScrolling: v })} />
                 </Row>
-                <Row title="Размер кэша">
+                <Row title={t('Размер кэша')}>
                   <Slider value={settings.cacheSizeMb} min={128} max={4096} step={128} onChange={(v) => onPatch({ cacheSizeMb: v })} format={(v) => (v >= 1024 ? `${(v / 1024).toFixed(1)} ГБ` : `${v} МБ`)} />
                 </Row>
-                <Row title="Масштаб страниц по умолчанию">
+                <Row title={t('Масштаб страниц по умолчанию')}>
                   <Slider value={settings.defaultZoom} min={-3} max={4} step={0.5} onChange={(v) => onPatch({ defaultZoom: v })} format={(v) => `${Math.round(1.2 ** v * 100)}%`} />
                 </Row>
               </Section>
 
-              <Section title="Память" icon={<Zap width={15} height={15} />}>
-                <Row title="Усыплять фоновые вкладки" hint="Освобождает память неактивных вкладок">
+              <Section title={t('Память')} icon={<Zap width={15} height={15} />}>
+                <Row title={t('Усыплять фоновые вкладки')} hint={t('Освобождает память неактивных вкладок')}>
                   <Toggle checked={settings.sleepBackgroundTabs} onChange={(v) => onPatch({ sleepBackgroundTabs: v })} />
                 </Row>
                 {settings.sleepBackgroundTabs && (
-                  <Row title="Засыпать через">
+                  <Row title={t('Засыпать через')}>
                     <Slider value={settings.sleepAfterMinutes} min={1} max={120} onChange={(v) => onPatch({ sleepAfterMinutes: v })} format={(v) => `${v} мин`} />
                   </Row>
                 )}
-                <Row title="Восстанавливать вкладки при запуске">
+                <Row title={t('Восстанавливать вкладки при запуске')}>
                   <Toggle checked={settings.restoreSession} onChange={(v) => onPatch({ restoreSession: v })} />
                 </Row>
-                <Row title="Ленивое восстановление" hint="При старте грузится только активная вкладка">
+                <Row title={t('Ленивое восстановление')} hint={t('При старте грузится только активная вкладка')}>
                   <Toggle checked={settings.lazyRestore} onChange={(v) => onPatch({ lazyRestore: v })} />
                 </Row>
               </Section>
@@ -916,19 +949,19 @@ export default function SettingsPage({
 
           {/* ----------------------------------------------------- downloads */}
           {tab === 'downloads' && (
-            <Section title="Загрузки" icon={<Download width={15} height={15} />}>
-              <Row title="Папка для файлов" hint={settings.downloadDir || 'Папка по умолчанию'}>
+            <Section title={t('Загрузки')} icon={<Download width={15} height={15} />}>
+              <Row title={t('Папка для файлов')} hint={settings.downloadDir || t('Папка по умолчанию')}>
                 <button
                   className="btn"
                   onClick={async () => {
                     const dir = await window.browser.pickDownloadDir()
-                    if (dir) flash('Папка обновлена')
+                    if (dir) flash(t('Папка обновлена'))
                   }}
                 >
-                  Выбрать
+                  {t('Выбрать')}
                 </button>
               </Row>
-              <Row title="Спрашивать, куда сохранять" hint="Диалог для каждого файла">
+              <Row title={t('Спрашивать, куда сохранять')} hint={t('Диалог для каждого файла')}>
                 <Toggle checked={settings.askWhereToSave} onChange={(v) => onPatch({ askWhereToSave: v })} />
               </Row>
             </Section>
@@ -937,45 +970,45 @@ export default function SettingsPage({
           {/* ---------------------------------------------------------- data */}
           {tab === 'data' && (
             <>
-              <Section title="Очистка" icon={<Trash width={15} height={15} />}>
-                <Row title="История просмотров" hint="Локальные подсказки адресной строки">
-                  <button className="btn" onClick={async () => { await window.browser.clearHistory(); flash('История очищена') }}>
-                    Очистить
+              <Section title={t('Очистка')} icon={<Trash width={15} height={15} />}>
+                <Row title={t('История просмотров')} hint={t('Локальные подсказки адресной строки')}>
+                  <button className="btn" onClick={async () => { await window.browser.clearHistory(); flash(t('История очищена')) }}>
+                    {t('Очистить')}
                   </button>
                 </Row>
-                <Row title="Данные сайтов" hint="Cookies, кэш, localStorage, service workers" danger>
-                  <button className="btn btn-danger" onClick={async () => { await window.browser.clearBrowsingData(); flash('Данные удалены') }}>
-                    Удалить
+                <Row title={t('Данные сайтов')} hint={t('Cookies, кэш, localStorage, service workers')} danger>
+                  <button className="btn btn-danger" onClick={async () => { await window.browser.clearBrowsingData(); flash(t('Данные удалены')) }}>
+                    {t('Удалить')}
                   </button>
                 </Row>
-                <Row title="Данные всех профилей" hint="То же самое, но для каждого профиля сразу" danger>
-                  <button className="btn btn-danger" onClick={async () => { await window.browser.clearAllProfiles(); flash('Все профили очищены') }}>
-                    Удалить всё
+                <Row title={t('Данные всех профилей')} hint={t('То же самое, но для каждого профиля сразу')} danger>
+                  <button className="btn btn-danger" onClick={async () => { await window.browser.clearAllProfiles(); flash(t('Все профили очищены')) }}>
+                    {t('Удалить всё')}
                   </button>
                 </Row>
               </Section>
 
-              <Section title="Настройки" icon={<Gear width={15} height={15} />}>
-                <Row title="Экспорт настроек" hint="JSON со всеми параметрами профиля">
+              <Section title={t('Настройки')} icon={<Gear width={15} height={15} />}>
+                <Row title={t('Экспорт настроек')} hint={t('JSON со всеми параметрами профиля')}>
                   <button
                     className="btn"
                     onClick={async () => {
                       const json = await window.browser.exportSettings()
                       await navigator.clipboard.writeText(json)
-                      flash('Скопировано в буфер обмена')
+                      flash(t('Скопировано в буфер обмена'))
                     }}
                   >
-                    Скопировать
+                    {t('Скопировать')}
                   </button>
                 </Row>
-                <Row title="Импорт настроек">
+                <Row title={t('Импорт настроек')}>
                   <button className="btn" onClick={() => setImportOpen(true)}>
-                    Вставить JSON
+                    {t('Вставить JSON')}
                   </button>
                 </Row>
-                <Row title="Папка с данными" hint={info?.userData ?? ''}>
+                <Row title={t('Папка с данными')} hint={info?.userData ?? ''}>
                   <button className="btn" onClick={() => window.browser.openDataFolder()}>
-                    Открыть
+                    {t('Открыть')}
                   </button>
                 </Row>
               </Section>
@@ -986,21 +1019,21 @@ export default function SettingsPage({
           {tab === 'system' && (
             <>
               <Section
-                title="Обновления"
+                title={t('Обновления')}
                 icon={<Refresh width={15} height={15} />}
-                description="Из релизов проекта на GitHub"
+                description={t('Из релизов проекта на GitHub')}
               >
                 <Row
-                  title={`Установлена версия ${info?.version ?? '—'}`}
+                  title={t('Установлена версия {v}', { v: info?.version ?? '—' })}
                   hint={updateHint(update)}
                 >
                   {update?.stage === 'ready' ? (
                     <button className="btn btn-primary" onClick={() => window.browser.installUpdate()}>
-                      Перезапустить и обновить
+                      {t('Перезапустить и обновить')}
                     </button>
                   ) : update?.stage === 'available' ? (
                     <button className="btn btn-primary" onClick={() => window.browser.downloadUpdate()}>
-                      Загрузить
+                      {t('Загрузить')}
                     </button>
                   ) : (
                     <button
@@ -1009,55 +1042,55 @@ export default function SettingsPage({
                       onClick={async () => setUpdate(await window.browser.checkUpdates())}
                     >
                       {update?.stage === 'checking'
-                        ? 'Проверяем…'
+                        ? t('Проверяем…')
                         : update?.stage === 'downloading'
-                          ? `Загрузка ${update.percent}%`
-                          : 'Проверить'}
+                          ? t('Загрузка {p}%', { p: update.percent })
+                          : t('Проверить')}
                     </button>
                   )}
                 </Row>
               </Section>
 
               <Section
-                title="Первая настройка"
+                title={t('Первая настройка')}
                 icon={<Sparkles width={15} height={15} />}
-                description="Тот же экран, что и при первом запуске"
+                description={t('Тот же экран, что и при первом запуске')}
               >
                 <Row
-                  title="Пройти настройку заново"
-                  hint="Профиль, тема, прозрачность, обои, поиск и защита — по шагам"
+                  title={t('Пройти настройку заново')}
+                  hint={t('Профиль, тема, прозрачность, обои, поиск и защита — по шагам')}
                 >
                   <button className="btn" onClick={() => onPatch({ onboarded: false })}>
-                    Открыть
+                    {t('Открыть')}
                   </button>
                 </Row>
               </Section>
 
               <Section
-                title="Браузер по умолчанию"
+                title={t('Браузер по умолчанию')}
                 icon={<Monitor width={15} height={15} />}
-                description="Чтобы ссылки из Telegram, почты и редактора открывались здесь"
+                description={t('Чтобы ссылки из Telegram, почты и редактора открывались здесь')}
               >
                 <Row
-                  title="Сейчас"
+                  title={t('Сейчас')}
                   hint={
                     defaults?.isDefault
-                      ? 'Windows открывает ссылки в Nya Browser'
+                      ? t('Windows открывает ссылки в Nya Browser')
                       : defaults?.registered
-                        ? 'Nya есть в списке приложений, но основным выбран другой браузер'
-                        : 'Nya пока не зарегистрирован в системе'
+                        ? t('Nya есть в списке приложений, но основным выбран другой браузер')
+                        : t('Nya пока не зарегистрирован в системе')
                   }
                 >
                   <Pill tone={defaults?.isDefault ? 'good' : 'warn'}>
-                    {defaults?.isDefault ? 'Основной' : 'Не основной'}
+                    {defaults?.isDefault ? t('Основной') : t('Не основной')}
                   </Pill>
                 </Row>
                 <Row
-                  title="Назначить основным"
+                  title={t('Назначить основным')}
                   hint={
                     defaults && !defaults.canRegister
-                      ? 'Недоступно в режиме разработки — нужна собранная версия'
-                      : 'Откроется окно Windows: выберите Nya Browser для http и https'
+                      ? t('Недоступно в режиме разработки — нужна собранная версия')
+                      : t('Откроется окно Windows: выберите Nya Browser для http и https')
                   }
                 >
                   <button
@@ -1065,29 +1098,29 @@ export default function SettingsPage({
                     disabled={defaults ? !defaults.canRegister : true}
                     onClick={async () => {
                       setDefaults(await window.browser.makeDefaultBrowser())
-                      flash('Выберите Nya Browser в открывшемся окне Windows')
+                      flash(t('Выберите Nya Browser в открывшемся окне Windows'))
                     }}
                   >
-                    Настроить
+                    {t('Настроить')}
                   </button>
                 </Row>
               </Section>
 
               <Section
-                title="Перенос из другого браузера"
+                title={t('Перенос из другого браузера')}
                 icon={<Download width={15} height={15} />}
-                description="Закладки читаются напрямую, пароли — из экспортированного CSV"
+                description={t('Закладки читаются напрямую, пароли — из экспортированного CSV')}
               >
                 {sources === null ? (
-                  <Row title="Ищем установленные браузеры…" />
+                  <Row title={t('Ищем установленные браузеры…')} />
                 ) : sources.length === 0 ? (
-                  <Row title="Ничего не найдено" hint="Chrome, Edge, Brave, Vivaldi, Yandex и Opera на этом компьютере не найдены" />
+                  <Row title={t('Ничего не найдено')} hint={t('Chrome, Edge, Brave, Vivaldi, Yandex и Opera на этом компьютере не найдены')} />
                 ) : (
                   sources.map((source) => (
                     <Row
                       key={source.id}
                       title={`${source.browser} · ${source.profile}`}
-                      hint={`${source.bookmarks} закладок`}
+                      hint={t('{n} закладок', { n: source.bookmarks })}
                     >
                       <button
                         className="btn"
@@ -1096,18 +1129,18 @@ export default function SettingsPage({
                           flash(
                             result.error
                               ? result.error
-                              : `Добавлено ${result.added}, пропущено ${result.skipped}`
+                              : t('Добавлено {a}, пропущено {s}', { a: result.added, s: result.skipped })
                           )
                         }}
                       >
-                        Импортировать
+                        {t('Импортировать')}
                       </button>
                     </Row>
                   ))
                 )}
                 <Row
-                  title="Пароли из CSV"
-                  hint="В Chrome: Пароли → ⋮ → Экспорт паролей. Файл после импорта лучше удалить"
+                  title={t('Пароли из CSV')}
+                  hint={t('В Chrome: Пароли → ⋮ → Экспорт паролей. Файл после импорта лучше удалить')}
                 >
                   <button
                     className="btn"
@@ -1115,75 +1148,75 @@ export default function SettingsPage({
                       const result = await window.browser.importPasswordsCsv()
                       if (result.error) flash(result.error)
                       else if (result.added || result.skipped)
-                        flash(`Добавлено ${result.added}, пропущено ${result.skipped}`)
+                        flash(t('Добавлено {a}, пропущено {s}', { a: result.added, s: result.skipped }))
                     }}
                   >
-                    Выбрать файл
+                    {t('Выбрать файл')}
                   </button>
                 </Row>
               </Section>
 
               <Section
-                title="Защищённое видео"
+                title={t('Защищённое видео')}
                 icon={<Film width={15} height={15} />}
-                description="Widevine — без него Netflix, Spotify и Кинопоиск не играют"
+                description={t('Widevine — без него Netflix, Spotify и Кинопоиск не играют')}
               >
                 <Row
-                  title="Разрешить DRM"
+                  title={t('Разрешить DRM')}
                   hint={drmHint(drm, settings.drm)}
                 >
                   <Toggle checked={settings.drm} onChange={(value) => onPatch({ drm: value })} />
                 </Row>
                 <Row
-                  title="Качество ограничено"
-                  hint="Доступен только программный L3, поэтому сервисы отдают 480p–720p. 4K требует аппаратной защиты, которой нет ни у одного браузера на Electron"
+                  title={t('Качество ограничено')}
+                  hint={t('Доступен только программный L3, поэтому сервисы отдают 480p–720p. 4K требует аппаратной защиты, которой нет ни у одного браузера на Electron')}
                 >
                   <Pill>L3</Pill>
                 </Row>
               </Section>
 
               <Section
-                title="Расширения"
+                title={t('Расширения')}
                 icon={<Grid width={15} height={15} />}
-                description="Папка с manifest.json, либо файл .crx или .zip — распакуется сам"
+                description={t('Папка с manifest.json, либо файл .crx или .zip — распакуется сам')}
               >
                 {extensions === null ? (
-                  <Row title="Читаем список…" />
+                  <Row title={t('Читаем список…')} />
                 ) : extensions.length === 0 ? (
-                  <Row title="Пока ничего не установлено" />
+                  <Row title={t('Пока ничего не установлено')} />
                 ) : (
                   extensions.map((item) => (
                     <Row
                       key={item.path}
                       title={item.version ? `${item.name} · ${item.version}` : item.name}
-                      hint={item.loaded ? item.path : 'Не загрузилось — подробности в nya.log'}
+                      hint={item.loaded ? item.path : t('Не загрузилось — подробности в nya.log')}
                     >
                       <div className="flex items-center gap-2">
                         {item.loaded ? (
                           item.manifest > 0 && <Pill>MV{item.manifest}</Pill>
                         ) : (
-                          <Pill tone="bad">Ошибка</Pill>
+                          <Pill tone="bad">{t('Ошибка')}</Pill>
                         )}
                         <button className="btn" onClick={() => window.browser.revealExtension(item.path)}>
-                          Папка
+                          {t('Папка')}
                         </button>
                         <button
                           className="btn btn-danger"
                           onClick={async () => {
                             await window.browser.removeExtension(item.path)
                             setExtensions(await window.browser.extensions())
-                            flash('Расширение удалено')
+                            flash(t('Расширение удалено'))
                           }}
                         >
-                          Удалить
+                          {t('Удалить')}
                         </button>
                       </div>
                     </Row>
                   ))
                 )}
                 <Row
-                  title="Установить"
-                  hint="Работает всё на content-скриптах: Dark Reader, Stylus и подобные. Блокировщики рекламы и менеджеры паролей — нет: Electron не даёт расширениям ни блокирующий webRequest, ни кнопку на панели"
+                  title={t('Установить')}
+                  hint={t('Работает всё на content-скриптах: Dark Reader, Stylus и подобные. Блокировщики рекламы и менеджеры паролей — нет: Electron не даёт расширениям ни блокирующий webRequest, ни кнопку на панели')}
                 >
                   <button
                     className="btn btn-primary"
@@ -1191,22 +1224,22 @@ export default function SettingsPage({
                       const result = await window.browser.addExtension()
                       setExtensions(await window.browser.extensions())
                       if (result.error) flash(result.error)
-                      else if (result.added) flash(`Установлено: ${result.added.name}`)
+                      else if (result.added) flash(t('Установлено: {name}', { name: result.added.name }))
                     }}
                   >
-                    Выбрать файл или папку
+                    {t('Выбрать файл или папку')}
                   </button>
                 </Row>
               </Section>
 
               <Section
-                title="Проверка орфографии"
+                title={t('Проверка орфографии')}
                 icon={<Keyboard width={15} height={15} />}
-                description="Подчёркивает ошибки в текстовых полях на страницах"
+                description={t('Подчёркивает ошибки в текстовых полях на страницах')}
               >
                 <Row
-                  title="Проверять правописание"
-                  hint="Русский и английский. Словари скачиваются с серверов Google при первом включении — это единственный запрос, который браузер делает сам"
+                  title={t('Проверять правописание')}
+                  hint={t('Русский и английский. Словари скачиваются с серверов Google при первом включении — это единственный запрос, который браузер делает сам')}
                 >
                   <Toggle
                     checked={settings.spellcheck}
@@ -1236,35 +1269,35 @@ export default function SettingsPage({
                 </div>
               </div>
 
-              <Section title="О браузере" icon={<Gear width={15} height={15} />}>
+              <Section title={t('О браузере')} icon={<Gear width={15} height={15} />}>
                 <Row title="Nya Browser"><span className="text-sm text-dim">версия {info?.version ?? '—'}</span></Row>
-                <Row title="Движок"><span className="text-sm text-dim">Chromium {info?.chrome ?? '—'}</span></Row>
+                <Row title={t('Движок')}><span className="text-sm text-dim">Chromium {info?.chrome ?? '—'}</span></Row>
                 <Row title="Electron"><span className="text-sm text-dim">{info?.electron ?? '—'}</span></Row>
                 <Row title="Node / V8"><span className="text-sm text-dim">{info?.node ?? '—'} · {info?.v8 ?? '—'}</span></Row>
-                <Row title="Платформа"><span className="text-sm text-dim">{info?.platform ?? '—'} {info?.arch ?? ''}</span></Row>
-                <Row title="Правил в списке блокировки"><span className="text-sm text-dim">{info?.blocklistSize ?? '—'}</span></Row>
-                <Row title="Проверка безопасности" hint="Живые тесты изоляции, блокировки и разрешений">
+                <Row title={t('Платформа')}><span className="text-sm text-dim">{info?.platform ?? '—'} {info?.arch ?? ''}</span></Row>
+                <Row title={t('Правил в списке блокировки')}><span className="text-sm text-dim">{info?.blocklistSize ?? '—'}</span></Row>
+                <Row title={t('Проверка безопасности')} hint={t('Живые тесты изоляции, блокировки и разрешений')}>
                   <button className="btn btn-primary" onClick={() => window.browser.navigate('nya://security')}>
                     <Shield width={15} height={15} />
-                    Запустить
+                    {t('Запустить')}
                   </button>
                 </Row>
               </Section>
 
-              <Section title="Горячие клавиши" icon={<Keyboard width={15} height={15} />}>
+              <Section title={t('Горячие клавиши')} icon={<Keyboard width={15} height={15} />}>
                 {[
-                  ['Ctrl+T / Ctrl+W', 'Новая вкладка / закрыть'],
-                  ['Ctrl+Shift+T', 'Вернуть закрытую вкладку'],
-                  ['Ctrl+L, Alt+D, F6', 'Адресная строка'],
-                  ['Ctrl+D', 'Добавить в закладки'],
-                  ['Ctrl+F', 'Поиск по странице'],
-                  ['Ctrl+J / Ctrl+H', 'Загрузки / история'],
-                  ['Ctrl+Shift+O', 'Закладки'],
-                  ['Ctrl+Shift+B', 'Автоскрытие панелей'],
-                  ['Ctrl+Tab', 'Следующая вкладка'],
-                  ['Ctrl+1…9', 'Перейти к вкладке'],
-                  ['Ctrl + / −  / 0', 'Масштаб страницы'],
-                  ['F11 / F12', 'Полный экран / DevTools']
+                  ['Ctrl+T / Ctrl+W', t('Новая вкладка / закрыть')],
+                  ['Ctrl+Shift+T', t('Вернуть закрытую вкладку')],
+                  ['Ctrl+L, Alt+D, F6', t('Адресная строка')],
+                  ['Ctrl+D', t('Добавить в закладки')],
+                  ['Ctrl+F', t('Поиск по странице')],
+                  ['Ctrl+J / Ctrl+H', t('Загрузки / история')],
+                  ['Ctrl+Shift+O', t('Закладки')],
+                  ['Ctrl+Shift+B', t('Автоскрытие панелей')],
+                  ['Ctrl+Tab', t('Следующая вкладка')],
+                  ['Ctrl+1…9', t('Перейти к вкладке')],
+                  ['Ctrl + / −  / 0', t('Масштаб страницы')],
+                  ['F11 / F12', t('Полный экран / DevTools')]
                 ].map(([keys, label]) => (
                   <Row key={keys} title={label}>
                     <kbd className="rounded-[7px] px-2 py-1 text-2xs" style={{ background: 'var(--field-idle)' }}>{keys}</kbd>
@@ -1282,7 +1315,7 @@ export default function SettingsPage({
           onClose={() => setEditProfile(null)}
           onSaved={() => {
             setEditProfile(null)
-            flash('Профиль сохранён')
+            flash(t('Профиль сохранён'))
           }}
         />
       )}
@@ -1292,7 +1325,7 @@ export default function SettingsPage({
           onClose={() => setImportOpen(false)}
           onDone={(ok) => {
             setImportOpen(false)
-            flash(ok ? 'Настройки применены' : 'Не удалось разобрать JSON')
+            flash(ok ? t('Настройки применены') : t('Не удалось разобрать JSON'))
           }}
         />
       )}
@@ -1407,11 +1440,11 @@ function ProfileDialog({
 
   return (
     <Modal
-      title="Профиль"
+      title={t('Профиль')}
       onClose={onClose}
       footer={
         <>
-          <button className="btn" onClick={onClose}>Отмена</button>
+          <button className="btn" onClick={onClose}>{t('Отмена')}</button>
           <button
             className="btn btn-primary"
             onClick={async () => {
@@ -1424,7 +1457,7 @@ function ProfileDialog({
               onSaved()
             }}
           >
-            Сохранить
+            {t('Сохранить')}
           </button>
         </>
       }
@@ -1432,7 +1465,7 @@ function ProfileDialog({
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-3">
           <Avatar avatar={avatar} crop={crop} color={color} size={44} />
-          <TextField value={name} onChange={setName} placeholder="Имя профиля" width="100%" autoFocus />
+          <TextField value={name} onChange={setName} placeholder={t('Имя профиля')} width="100%" autoFocus />
         </div>
 
         <div className="flex gap-4">
@@ -1440,8 +1473,8 @@ function ProfileDialog({
           <div className="flex min-w-0 flex-1 flex-col justify-center gap-2">
             <p className="text-sm text-dim">
               {picture
-                ? 'Тяните картинку, чтобы выбрать кадр, и меняйте масштаб ползунком. Анимация останется анимацией.'
-                : 'Своя картинка или анимация — PNG, JPEG, WebP, GIF или AVIF.'}
+                ? t('Тяните картинку, чтобы выбрать кадр, и меняйте масштаб ползунком. Анимация останется анимацией.')
+                : t('Своя картинка или анимация — PNG, JPEG, WebP, GIF или AVIF.')}
             </p>
             {picture && (
               <Slider
@@ -1459,7 +1492,7 @@ function ProfileDialog({
                 className="btn"
                 onClick={async () => readBack(await window.browser.pickProfileAvatar(profile.id))}
               >
-                {picture ? 'Заменить картинку' : 'Загрузить картинку'}
+                {picture ? t('Заменить картинку') : t('Загрузить картинку')}
               </button>
               {picture && (
                 <button
@@ -1470,7 +1503,7 @@ function ProfileDialog({
                     )
                   }
                 >
-                  Убрать
+                  {t('Убрать')}
                 </button>
               )}
             </div>
@@ -1478,7 +1511,7 @@ function ProfileDialog({
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <span className="text-sm text-dim">Или значок</span>
+          <span className="text-sm text-dim">{t('Или значок')}</span>
           <div className="flex flex-wrap gap-1.5">
             {choices.avatars.map((value) => (
               <button
@@ -1497,7 +1530,7 @@ function ProfileDialog({
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <span className="text-sm text-dim">Цвет</span>
+          <span className="text-sm text-dim">{t('Цвет')}</span>
           <div className="flex flex-wrap gap-1.5">
             {choices.colors.map((value) => (
               <button
@@ -1522,16 +1555,16 @@ function ImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (ok: b
   const [json, setJson] = useState('')
   return (
     <Modal
-      title="Импорт настроек"
+      title={t('Импорт настроек')}
       onClose={onClose}
       footer={
         <>
-          <button className="btn" onClick={onClose}>Отмена</button>
+          <button className="btn" onClick={onClose}>{t('Отмена')}</button>
           <button
             className="btn btn-primary"
             onClick={async () => onDone(await window.browser.importSettings(json))}
           >
-            Применить
+            {t('Применить')}
           </button>
         </>
       }

@@ -1,10 +1,11 @@
+import { t } from '../i18n'
 import type { UpdateState } from '../../../shared/types'
 import logoUrl from '../assets/logo.png'
 import { Popover } from './ui'
 
 /** Megabytes, because that is the unit the answer is decided in. */
 function megabytes(bytes: number): string {
-  return `${Math.max(1, Math.round(bytes / 1024 / 1024))} МБ`
+  return t('{n} МБ', { n: Math.max(1, Math.round(bytes / 1024 / 1024)) })
 }
 
 /**
@@ -26,10 +27,10 @@ export default function UpdateCard({
 
   const heading =
     state.stage === 'downloading'
-      ? 'Загружаем обновление'
+      ? t('Загружаем обновление')
       : state.stage === 'ready'
-        ? 'Обновление готово'
-        : 'Доступно обновление'
+        ? t('Обновление готово')
+        : t('Доступно обновление')
 
   return (
     // Further in than a menu: this one arrives on its own, and a card flush
@@ -54,7 +55,7 @@ export default function UpdateCard({
                     {version}
                   </span>
                   {state.stage === 'ready' ? (
-                    <span>· загружено</span>
+                    <span>{t('· загружено')}</span>
                   ) : (
                     state.size > 0 && <span>· {megabytes(state.size)}</span>
                   )}
@@ -82,10 +83,10 @@ export default function UpdateCard({
 
         <div className="text-sm text-dim">
           {state.stage === 'downloading'
-            ? 'Качаем в фоне — можно работать дальше. Скажем, когда будет готово.'
+            ? t('Качаем в фоне — можно работать дальше. Скажем, когда будет готово.')
             : state.stage === 'ready'
-              ? 'Браузер закроется, обновится и откроется снова. Вкладки восстановятся.'
-              : 'Загрузить сейчас? Скачаем в фоне, работать не помешает.'}
+              ? t('Браузер закроется, обновится и откроется снова. Вкладки восстановятся.')
+              : t('Загрузить сейчас? Скачаем в фоне, работать не помешает.')}
         </div>
 
         <div className="flex gap-2">
@@ -94,23 +95,23 @@ export default function UpdateCard({
               className="btn btn-primary flex-1"
               onClick={() => void window.browser.installUpdate()}
             >
-              Обновить
+              {t('Обновить')}
             </button>
           ) : state.stage === 'downloading' ? (
             <button className="btn flex-1" onClick={onClose}>
-              Скрыть
+              {t('Скрыть')}
             </button>
           ) : (
             <button
               className="btn btn-primary flex-1"
               onClick={() => void window.browser.downloadUpdate()}
             >
-              Загрузить
+              {t('Загрузить')}
             </button>
           )}
           {state.stage !== 'downloading' && (
             <button className="btn" onClick={onClose}>
-              Позже
+              {t('Позже')}
             </button>
           )}
         </div>

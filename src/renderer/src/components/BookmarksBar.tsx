@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import type { Bookmark } from '../../../preload/index'
 import { Folder, Star } from './Icons'
 
@@ -29,7 +30,7 @@ export default function BookmarksBar({ items, onManage }: { items: Bookmark[]; o
         onClick={onManage}
         style={{ transition: 'color var(--t-fast) linear' }}
       >
-        Все закладки
+        {t('Все закладки')}
       </button>
     </div>
   )

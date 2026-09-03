@@ -1,5 +1,8 @@
+import { t } from './i18n'
 import { app, dialog, ipcMain, Menu, nativeTheme, session, shell, type MenuItemConstructorOptions } from 'electron'
 import { join } from 'path'
+import { existsSync } from 'fs'
+import { execFileSync } from 'child_process'
 import { BrowserWindow } from './browser'
 import { settings } from './settings'
 import { history } from './history'
@@ -16,6 +19,8 @@ import { engine, filterStatus, hideCss, loadFilters } from './filters'
 import { addExtension, listExtensions, removeExtension, revealExtension } from './extensions'
 import { favicons } from './favicons'
 import { currentWeather, searchPlaces } from './weather'
+import { applyMainLanguage } from './i18n'
+import { isKnownLanguage } from '../shared/i18n'
 import {
   check as checkUpdates,
   download as downloadUpdate,
@@ -50,6 +55,14 @@ function applyStartupSwitches() {
     app.commandLine.appendSwitch('enable-accelerated-2d-canvas')
     app.commandLine.appendSwitch('enable-accelerated-video-decode')
   }
+
+  // navigator.language and Chromium's own UI strings follow this; it is read
+  // once at startup, so a language change fully lands after a restart (the
+  // Accept-Language header switches immediately, without one).
+  if (s.language) app.commandLine.appendSwitch('lang', s.language)
+
+  // Dev builds expose CDP so tests can drive the browser; never in releases.
+  if (!app.isPackaged) app.commandLine.appendSwitch('remote-debugging-port', '9222')
 
   app.commandLine.appendSwitch('disk-cache-size', String(s.cacheSizeMb * 1024 * 1024))
 
@@ -126,7 +139,23 @@ if (!app.requestSingleInstanceLock()) {
   app.enableSandbox()
 
   profiles.load()
+  const firstRun = !existsSync(join(profiles.dir(), 'settings.json'))
   settings.load(profiles.dir())
+  // The installer's language pill writes one registry value; the first run is
+  // the one moment it matters. After that the setting owns the choice.
+  if (firstRun && process.platform === 'win32') {
+    try {
+      const raw = execFileSync(
+        'reg',
+        ['query', 'HKCU\\Software\\Nya Browser', '/v', 'language'],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
+      )
+      const match = /language\s+REG_SZ\s+(\S+)/.exec(raw)
+      if (match && isKnownLanguage(match[1])) settings.patch({ language: match[1] })
+    } catch {
+      /* no value — the system locale decides */
+    }
+  }
   applyStartupSwitches()
   installExitHooks()
 
@@ -173,6 +202,22 @@ if (!app.requestSingleInstanceLock()) {
         event.returnValue = ''
       }
     })
+
+    // Editing keys a page left unhandled (see preload/content.ts). Only the
+    // six editing commands, and only on the sender itself.
+    ipcMain.on('edit:command', (event, command: unknown) => {
+      const wc = event.sender
+      switch (command) {
+        case 'copy': return wc.copy()
+        case 'cut': return wc.cut()
+        case 'paste': return wc.paste()
+        case 'selectAll': return wc.selectAll()
+        case 'undo': return wc.undo()
+        case 'redo': return wc.redo()
+      }
+    })
+
+    await applyMainLanguage(settings.get().language)
 
     const first = openWindow()
     registerIpc()
@@ -329,9 +374,21 @@ function registerIpc() {
   /* ---- settings ---- */
   ipcMain.handle('settings:get', (event) => settings.get())
   ipcMain.handle('settings:engines', (event) => SEARCH_ENGINES)
-  ipcMain.handle('settings:set', (event, patch: unknown) => {
+  ipcMain.handle('settings:set', async (event, patch: unknown) => {
+    const before = settings.get().language
     const next = settings.patch((patch ?? {}) as Partial<Settings>)
     nativeTheme.themeSource = next.theme
+    if (next.language !== before) {
+      // The main process speaks the new language from the next menu on, and
+      // sites hear about it through Accept-Language right away.
+      await applyMainLanguage(next.language)
+      for (const win of windows) {
+        win.applyAcceptLanguage()
+        win.retitleInternalTabs()
+      }
+      const anyWin = [...windows][0]
+      if (anyWin) buildMenu(anyWin)
+    }
     applyEverywhere()
     if (next.filterLists && !engine.ready) void loadFilters()
     return next
@@ -369,7 +426,7 @@ function registerIpc() {
   ipcMain.handle('profiles:list', (event) => profiles.state)
   ipcMain.handle('profiles:choices', (event) => ({ avatars: AVATAR_CHOICES, colors: COLOR_CHOICES }))
   ipcMain.handle('profiles:create', (event, name: unknown) => {
-    const profile = profiles.create(str(name, 40) || 'Профиль')
+    const profile = profiles.create(str(name, 40) || t('Профиль'))
     profilesEverywhere()
     return profile
   })
@@ -390,9 +447,9 @@ function registerIpc() {
   ipcMain.handle('profiles:pick-avatar', async (event, id: unknown) => {
     const win = current(event)
     const picked = await dialog.showOpenDialog(win.win, {
-      title: 'Выберите картинку для аватара',
+      title: t('Выберите картинку для аватара'),
       properties: ['openFile'],
-      filters: [{ name: 'Картинки', extensions: AVATAR_PICTURE_EXTENSIONS }]
+      filters: [{ name: t('Картинки'), extensions: AVATAR_PICTURE_EXTENSIONS }]
     })
     if (picked.canceled || !picked.filePaths[0]) return profiles.state
     let state = profiles.state
@@ -573,36 +630,36 @@ function buildMenu(b: BrowserWindow) {
   const template: MenuItemConstructorOptions[] = [
     {
       label: 'Nya Browser',
-      submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'quit', label: 'Выход' }]
+      submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'quit', label: t('Выход') }]
     },
     {
-      label: 'Файл',
+      label: t('Файл'),
       submenu: [
-        { label: 'Новая вкладка', accelerator: 'Cmd+T', click: () => b.newTab() },
-        { label: 'Закрыть вкладку', accelerator: 'Cmd+W', click: () => b.closeTab(b.activeId) },
-        { label: 'Вернуть вкладку', accelerator: 'Cmd+Shift+T', click: () => b.reopenClosed() }
+        { label: t('Новая вкладка'), accelerator: 'Cmd+T', click: () => b.newTab() },
+        { label: t('Закрыть вкладку'), accelerator: 'Cmd+W', click: () => b.closeTab(b.activeId) },
+        { label: t('Вернуть вкладку'), accelerator: 'Cmd+Shift+T', click: () => b.reopenClosed() }
       ]
     },
     {
-      label: 'Правка',
+      label: t('Правка'),
       submenu: [
-        { role: 'undo', label: 'Отменить' },
-        { role: 'redo', label: 'Повторить' },
+        { role: 'undo', label: t('Отменить') },
+        { role: 'redo', label: t('Повторить') },
         { type: 'separator' },
-        { role: 'cut', label: 'Вырезать' },
-        { role: 'copy', label: 'Копировать' },
-        { role: 'paste', label: 'Вставить' },
-        { role: 'selectAll', label: 'Выделить всё' }
+        { role: 'cut', label: t('Вырезать') },
+        { role: 'copy', label: t('Копировать') },
+        { role: 'paste', label: t('Вставить') },
+        { role: 'selectAll', label: t('Выделить всё') }
       ]
     },
     {
-      label: 'Вид',
+      label: t('Вид'),
       submenu: [
-        { label: 'Адресная строка', accelerator: 'Cmd+L', click: () => b.sendShortcut('focus-address') },
-        { label: 'Настройки', accelerator: 'Cmd+,', click: () => b.sendShortcut('settings') },
+        { label: t('Адресная строка'), accelerator: 'Cmd+L', click: () => b.sendShortcut('focus-address') },
+        { label: t('Настройки'), accelerator: 'Cmd+,', click: () => b.sendShortcut('settings') },
         { type: 'separator' },
-        { label: 'Обновить', accelerator: 'Cmd+R', click: () => b.reload() },
-        { label: 'Инструменты разработчика', accelerator: 'F12', click: () => b.openDevTools() }
+        { label: t('Обновить'), accelerator: 'Cmd+R', click: () => b.reload() },
+        { label: t('Инструменты разработчика'), accelerator: 'F12', click: () => b.openDevTools() }
       ]
     }
   ]

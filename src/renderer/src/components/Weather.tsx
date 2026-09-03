@@ -1,3 +1,4 @@
+import { currentLanguage, t } from '../i18n'
 import { useEffect, useMemo, useState } from 'react'
 import type { Place, TileShape, Weather, WeatherSettings } from '../../../shared/types'
 import { Modal, TextField, cx } from './ui'
@@ -52,7 +53,7 @@ const WORDS: Record<number, string> = {
   99: 'Гроза с градом'
 }
 
-const words = (code: number) => WORDS[code] ?? 'Погода'
+const words = (code: number) => t(WORDS[code] ?? 'Погода')
 
 const temp = (value: number, fahrenheit: boolean) =>
   fahrenheit ? `${Math.round(value * 1.8 + 32)}°` : `${value}°`
@@ -244,8 +245,8 @@ export default function WeatherWidget({
           style={{ borderRadius: radius, transition: 'background var(--t-base) var(--ease-out)' }}
         >
           <SkyArt sky="clear" day size={40} />
-          <span className="text-sm font-medium">Выберите город</span>
-          <span className="text-2xs opacity-55">Погода появится здесь</span>
+          <span className="text-sm font-medium">{t('Выберите город')}</span>
+          <span className="text-2xs opacity-55">{t('Погода появится здесь')}</span>
         </button>
         {picking && <PlaceDialog place={place} onClose={() => setPicking(false)} onPick={onPick} />}
       </>
@@ -258,7 +259,7 @@ export default function WeatherWidget({
         onClick={() => setPicking(true)}
         className="card flex h-full w-full flex-col justify-between overflow-hidden p-3 text-left"
         style={{ borderRadius: radius }}
-        title="Сменить город"
+        title={t('Сменить город')}
       >
         <div className="flex w-full items-start justify-between gap-2">
           <div className="min-w-0">
@@ -274,15 +275,15 @@ export default function WeatherWidget({
 
         <div className="w-full">
           <div className="truncate text-sm opacity-75">
-            {failed ? 'Нет связи с сервисом погоды' : data ? words(data.code) : 'Загружаем…'}
+            {failed ? t('Нет связи с сервисом погоды') : data ? words(data.code) : t('Загружаем…')}
           </div>
           {data && (
             <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-2xs tabular-nums opacity-55">
               <span>
                 {temp(data.low, place.fahrenheit)} … {temp(data.high, place.fahrenheit)}
               </span>
-              <span>ощущается {temp(data.feels, place.fahrenheit)}</span>
-              <span>ветер {data.wind} км/ч</span>
+              <span>{t('ощущается {value}', { value: temp(data.feels, place.fahrenheit) })}</span>
+              <span>{t('ветер {value} км/ч', { value: data.wind })}</span>
             </div>
           )}
         </div>
@@ -292,7 +293,9 @@ export default function WeatherWidget({
             {data.forecast.map((entry) => (
               <div key={entry.day} className="flex min-w-0 flex-1 flex-col items-center gap-0.5">
                 <span className="text-2xs opacity-55">
-                  {new Date(entry.day).toLocaleDateString('ru-RU', { weekday: 'short' })}
+                  {new Date(entry.day).toLocaleDateString(currentLanguage() || undefined, {
+                    weekday: 'short'
+                  })}
                 </span>
                 <SkyArt sky={skyOf(entry.code)} day size={22} />
                 <span className="text-2xs tabular-nums opacity-75">
@@ -357,7 +360,7 @@ function PlaceDialog({
 
   return (
     <Modal
-      title="Погода"
+      title={t('Погода')}
       onClose={onClose}
       footer={
         <>
@@ -369,25 +372,25 @@ function PlaceDialog({
                 onClose()
               }}
             >
-              Забыть город
+              {t('Забыть город')}
             </button>
           )}
           <button
             className="btn"
             onClick={() => onPick({ ...place, fahrenheit: !place.fahrenheit })}
           >
-            {place.fahrenheit ? 'Показывать °C' : 'Показывать °F'}
+            {place.fahrenheit ? t('Показывать °C') : t('Показывать °F')}
           </button>
           <button className="btn" onClick={onClose}>
-            Закрыть
+            {t('Закрыть')}
           </button>
         </>
       }
     >
       <div className="flex flex-col gap-3">
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm text-dim">Город</span>
-          <TextField value={query} onChange={setQuery} placeholder="Например, Киев" width="100%" autoFocus />
+          <span className="text-sm text-dim">{t('Город')}</span>
+          <TextField value={query} onChange={setQuery} placeholder={t('Например, Киев')} width="100%" autoFocus />
         </label>
 
         <div className="flex min-h-[120px] flex-col">
@@ -409,17 +412,16 @@ function PlaceDialog({
           {results.length === 0 && (
             <p className="px-2 py-2 text-sm text-faint">
               {searching
-                ? 'Ищем…'
+                ? t('Ищем…')
                 : query.trim().length < 2
-                  ? 'Начните вводить название города'
-                  : 'Ничего не нашлось'}
+                  ? t('Начните вводить название города')
+                  : t('Ничего не нашлось')}
             </p>
           )}
         </div>
 
         <p className="text-2xs text-faint">
-          Погода приходит с open-meteo.com. Запрос уходит только когда выбран город, без ключей и
-          без вашего точного адреса — координаты округляются.
+          {t('Погода приходит с open-meteo.com. Запрос уходит только когда выбран город, без ключей и без вашего точного адреса — координаты округляются.')}
         </p>
       </div>
     </Modal>

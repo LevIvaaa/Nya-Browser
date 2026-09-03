@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import type { DownloadItem } from '../../../shared/types'
 import { Cross, Download, Folder, Pause, Play, Trash } from '../components/Icons'
 import { EmptyState, formatBytes, formatDate } from '../components/ui'
@@ -16,17 +17,17 @@ export default function DownloadsPage({ items }: { items: DownloadItem[] }) {
       <div className="mx-auto w-full max-w-[760px] px-6 py-8">
         <header className="animate-fade-up mb-5 flex items-center gap-3">
           <div className="mr-auto">
-            <h1 className="text-[22px] font-semibold tracking-[-0.02em]">Загрузки</h1>
+            <h1 className="text-[22px] font-semibold tracking-[-0.02em]">{t('Загрузки')}</h1>
             <p className="text-sm text-dim">{items.length} файлов в этой сессии</p>
           </div>
           <button className="btn" onClick={() => window.browser.clearDownloads()}>
             <Trash width={15} height={15} />
-            Очистить список
+            {t('Очистить список')}
           </button>
         </header>
 
         {items.length === 0 ? (
-          <EmptyState icon={<Download width={26} height={26} />} title="Загрузок пока нет" hint="Скачанные файлы появятся здесь." />
+          <EmptyState icon={<Download width={26} height={26} />} title={t('Загрузок пока нет')} hint={t('Скачанные файлы появятся здесь.')} />
         ) : (
           <div className="card overflow-hidden">
             {items.map((item) => {
@@ -38,31 +39,31 @@ export default function DownloadsPage({ items }: { items: DownloadItem[] }) {
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-base font-medium">{item.name}</span>
                       <span className="block truncate text-sm text-dim">
-                        {STATE_LABEL[item.state]} · {formatBytes(item.received)}
-                        {item.total > 0 ? ` из ${formatBytes(item.total)}` : ''}
-                        {active && item.speed > 0 ? ` · ${formatBytes(item.speed)}/с` : ''}
+                        {t(STATE_LABEL[item.state])} · {formatBytes(item.received)}
+                        {item.total > 0 ? ` ${t('из')} ${formatBytes(item.total)}` : ''}
+                        {active && item.speed > 0 ? ` · ${formatBytes(item.speed)}${t('/с')}` : ''}
                         {!active ? ` · ${formatDate(item.startedAt)}` : ''}
                       </span>
                     </span>
 
                     {active && (
-                      <button className="icon-btn" title="Пауза" onClick={() => window.browser.pauseDownload(item.id)}>
+                      <button className="icon-btn" title={t('Пауза')} onClick={() => window.browser.pauseDownload(item.id)}>
                         {item.state === 'paused' ? <Play width={14} height={14} /> : <Pause width={14} height={14} />}
                       </button>
                     )}
                     {item.state === 'completed' && (
                       <>
                         <button className="btn h-[30px] px-3 text-sm" onClick={() => window.browser.openDownload(item.id)}>
-                          Открыть
+                          {t('Открыть')}
                         </button>
-                        <button className="icon-btn" title="Показать в папке" onClick={() => window.browser.revealDownload(item.id)}>
+                        <button className="icon-btn" title={t('Показать в папке')} onClick={() => window.browser.revealDownload(item.id)}>
                           <Folder width={14} height={14} />
                         </button>
                       </>
                     )}
                     <button
                       className="icon-btn"
-                      title={active ? 'Отменить' : 'Убрать из списка'}
+                      title={active ? t('Отменить') : t('Убрать из списка')}
                       onClick={() =>
                         active ? window.browser.cancelDownload(item.id) : window.browser.removeDownload(item.id)
                       }

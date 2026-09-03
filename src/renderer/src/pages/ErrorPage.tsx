@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import type { TabError } from '../../../shared/types'
 import { Alert, Reload, Shield } from '../components/Icons'
 
@@ -43,19 +44,19 @@ export default function ErrorPage({ error }: { error: TabError }) {
         </span>
 
         <h1 className="text-[24px] font-semibold tracking-[-0.02em]">
-          {certificate ? 'Соединение не защищено' : 'Страница не открылась'}
+          {certificate ? t('Соединение не защищено') : t('Страница не открылась')}
         </h1>
         <p className="mx-auto mt-2 max-w-[440px] text-base text-dim">
-          {HINTS[error.code] ?? error.description}
+          {HINTS[error.code] ? t(HINTS[error.code]) : error.description}
         </p>
 
         <div
           className="mx-auto mt-5 rounded-card px-4 py-3 text-left"
           style={{ background: 'var(--field-idle)', border: '1px solid var(--line)' }}
         >
-          <div className="text-2xs uppercase tracking-wider text-faint">Адрес</div>
+          <div className="text-2xs uppercase tracking-wider text-faint">{t('Адрес')}</div>
           <div className="truncate text-sm">{host}</div>
-          <div className="mt-2 text-2xs uppercase tracking-wider text-faint">Код ошибки</div>
+          <div className="mt-2 text-2xs uppercase tracking-wider text-faint">{t('Код ошибки')}</div>
           <div className="font-mono text-xs text-dim">
             {error.code} · {error.description}
           </div>
@@ -64,22 +65,21 @@ export default function ErrorPage({ error }: { error: TabError }) {
         <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
           <button className="btn btn-primary" onClick={() => window.browser.reload()}>
             <Reload width={15} height={15} />
-            Попробовать снова
+            {t('Попробовать снова')}
           </button>
           <button className="btn" onClick={() => window.browser.home()}>
-            На стартовую
+            {t('На стартовую')}
           </button>
           {error.httpsFallbackAvailable && (
             <button className="btn" onClick={() => window.browser.continueOverHttp()}>
-              Открыть без шифрования
+              {t('Открыть без шифрования')}
             </button>
           )}
         </div>
 
         {error.httpsFallbackAvailable && (
           <p className="mx-auto mt-4 max-w-[440px] text-sm text-faint">
-            Браузер попытался открыть сайт по HTTPS, но у него нет защищённой версии. Без шифрования
-            данные видны в сети — не вводите на такой странице пароли и карты.
+            {t('Браузер попытался открыть сайт по HTTPS, но у него нет защищённой версии. Без шифрования данные видны в сети — не вводите на такой странице пароли и карты.')}
           </p>
         )}
       </div>
