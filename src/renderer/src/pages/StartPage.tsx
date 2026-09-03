@@ -12,11 +12,12 @@ import type {
   WidgetId
 } from '../../../shared/types'
 import { DEFAULT_LAYOUT, GRID_COLUMNS, GRID_GAP, GRID_ROW } from '../../../shared/startPage'
-import type { ClosedTab } from '../../../preload/index'
+import type { BlockedEntry, ClosedTab } from '../../../preload/index'
 import {
   Check,
   Clock,
   Cross,
+  Eraser,
   Grip,
   Minus,
   Pencil,
@@ -155,6 +156,7 @@ export default function StartPage({
   const [recent, setRecent] = useState<Suggestion[]>([])
   const [editing, setEditing] = useState(false)
   const [dialog, setDialog] = useState<{ mode: 'add' | 'edit'; item: Favorite } | null>(null)
+  const [blockedOpen, setBlockedOpen] = useState(false)
   const [now, setNow] = useState(() => new Date())
   // Icons of sites that have been visited, kept by the main process; tiles for
   // anything else fall back to the letter.
@@ -317,21 +319,27 @@ export default function StartPage({
 
       case 'stats':
         return (
-          <Card icon={<Shield width={13} height={13} />} title="Защита" shape={page.shape}>
-            <div className="grid grid-cols-4 gap-2">
-              {[
-                { label: 'Реклама', value: stats.ads },
-                { label: 'Трекеры', value: stats.trackers },
-                { label: 'HTTPS', value: stats.upgrades },
-                { label: 'Метки', value: stats.params }
-              ].map((item) => (
-                <div key={item.label}>
-                  <div className="text-[22px] font-semibold tabular-nums tracking-[-0.02em]">{item.value}</div>
-                  <div className="text-sm opacity-65">{item.label}</div>
-                </div>
-              ))}
-            </div>
-          </Card>
+          <button
+            className="lift block h-full w-full text-left"
+            onClick={() => !editing && setBlockedOpen(true)}
+            title="Что именно заблокировано"
+          >
+            <Card icon={<Shield width={13} height={13} />} title="Защита" shape={page.shape}>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { label: 'Реклама', value: stats.ads },
+                  { label: 'Трекеры', value: stats.trackers },
+                  { label: 'HTTPS', value: stats.upgrades },
+                  { label: 'Метки', value: stats.params }
+                ].map((item) => (
+                  <div key={item.label}>
+                    <div className="text-[22px] font-semibold tabular-nums tracking-[-0.02em]">{item.value}</div>
+                    <div className="text-sm opacity-65">{item.label}</div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </button>
         )
 
       case 'closed':
@@ -434,6 +442,8 @@ export default function StartPage({
         onReset={() => patchPage({ layout: { ...DEFAULT_LAYOUT } })}
       />
 
+      {blockedOpen && <BlockedLogDialog stats={stats} onClose={() => setBlockedOpen(false)} />}
+
       {dialog && (
         <FavoriteDialog
           mode={dialog.mode}
@@ -510,7 +520,10 @@ function Widget({
         gridRow: `${box.y + 1} / span ${box.h}`,
         outline: editing ? '1px dashed var(--line-strong)' : 'none',
         outlineOffset: 4,
-        borderRadius: 'var(--radius)'
+        borderRadius: 'var(--radius)',
+        // The widget's own colour sits on top of the page-wide one; children
+        // inherit it, and the weather widget draws its clouds from it.
+        ...(box.ink ? { color: box.ink } : null)
       }}
     >
       {/* The content keeps the box's size while drawing at the chosen scale.
@@ -562,6 +575,26 @@ function Widget({
             <button className="icon-btn h-6 w-6" onClick={() => scaleBy(0.1)} title="Крупнее">
               <Plus width={12} height={12} />
             </button>
+            <span className="flex h-6 w-6 items-center justify-center" title="Цвет этого виджета">
+              <input
+                type="color"
+                className="h-[16px] w-[16px] cursor-pointer border-0 bg-transparent p-0"
+                value={box.ink || '#ffffff'}
+                onChange={(event) => onChange({ ...box, ink: event.target.value })}
+              />
+            </span>
+            {box.ink && (
+              <button
+                className="icon-btn h-6 w-6"
+                onClick={() => {
+                  const { ink: _dropped, ...rest } = box
+                  onChange(rest)
+                }}
+                title="Цвет как у страницы"
+              >
+                <Eraser width={12} height={12} />
+              </button>
+            )}
             <button className="icon-btn h-6 w-6" onClick={onHide} title="Убрать с главной">
               <Cross width={12} height={12} />
             </button>
@@ -914,6 +947,109 @@ function AddTile({
       <Plus width={19} height={19} />
       {labels && <span className="text-sm">Добавить</span>}
     </button>
+  )
+}
+
+/* -------------------------------------------------------- blocked log */
+
+const KIND_LABEL: Record<BlockedEntry['kind'], string> = {
+  ad: 'Реклама',
+  tracker: 'Трекер',
+  crypto: 'Майнер',
+  param: 'Метки',
+  upgrade: 'HTTPS'
+}
+
+const KIND_TONE: Record<BlockedEntry['kind'], string> = {
+  ad: 'var(--bad)',
+  tracker: '#F5A524',
+  crypto: '#E255A1',
+  param: '#0A84FF',
+  upgrade: 'var(--good)'
+}
+
+/**
+ * What exactly the counters counted. The log lives in the main process's
+ * memory only — this is a window into the blocker, not a second history.
+ */
+function BlockedLogDialog({ stats, onClose }: { stats: SecurityStats; onClose: () => void }) {
+  const [entries, setEntries] = useState<BlockedEntry[]>([])
+  const [kind, setKind] = useState<BlockedEntry['kind'] | 'all'>('all')
+
+  useEffect(() => {
+    void window.browser.blockedLog().then(setEntries)
+    const timer = setInterval(() => void window.browser.blockedLog().then(setEntries), 4000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const shown = entries.filter((entry) => kind === 'all' || entry.kind === kind)
+  const chip = (value: BlockedEntry['kind'] | 'all', label: string, count?: number) => (
+    <button
+      key={value}
+      onClick={() => setKind(value)}
+      className="rounded-pill px-2.5 py-1 text-2xs font-medium"
+      style={{
+        background: kind === value ? 'var(--accent)' : 'var(--field-idle)',
+        color: kind === value ? '#fff' : 'var(--ink)',
+        transition: 'background var(--t-fast) linear, color var(--t-fast) linear'
+      }}
+    >
+      {label}
+      {typeof count === 'number' ? ` · ${count}` : ''}
+    </button>
+  )
+
+  return (
+    <Modal title="Что заблокировано" onClose={onClose} width={560}>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap gap-1.5">
+          {chip('all', 'Всё')}
+          {chip('ad', 'Реклама', stats.ads)}
+          {chip('tracker', 'Трекеры', stats.trackers)}
+          {chip('crypto', 'Майнеры', stats.crypto)}
+          {chip('upgrade', 'HTTPS', stats.upgrades)}
+          {chip('param', 'Метки', stats.params)}
+        </div>
+
+        <div className="flex max-h-[46vh] min-h-[160px] flex-col overflow-y-auto">
+          {shown.length === 0 ? (
+            <p className="px-1 py-6 text-center text-sm text-faint">
+              {entries.length === 0
+                ? 'С запуска браузера ничего не блокировалось — счётчики начнут заполняться по мере просмотра'
+                : 'В этой категории пока пусто'}
+            </p>
+          ) : (
+            shown.slice(0, 200).map((entry, index) => (
+              <div
+                key={`${entry.time}-${index}`}
+                className="flex items-center gap-2.5 rounded-[9px] px-2 py-1.5"
+                style={{ background: index % 2 ? 'transparent' : 'var(--field-idle)' }}
+              >
+                <span
+                  className="w-[68px] shrink-0 rounded-pill px-1.5 py-0.5 text-center text-2xs font-semibold text-white"
+                  style={{ background: KIND_TONE[entry.kind] }}
+                >
+                  {KIND_LABEL[entry.kind]}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm">{entry.host}</span>
+                  {entry.page && entry.page !== entry.host && (
+                    <span className="block truncate text-2xs text-faint">на {entry.page}</span>
+                  )}
+                </span>
+                <span className="shrink-0 text-2xs tabular-nums text-faint">
+                  {new Date(entry.time).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+
+        <p className="text-2xs text-faint">
+          Список живёт в памяти и очищается при закрытии браузера. Счётчики — с {new Date(stats.since).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}.
+        </p>
+      </div>
+    </Modal>
   )
 }
 

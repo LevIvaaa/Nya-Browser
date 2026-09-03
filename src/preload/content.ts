@@ -25,6 +25,35 @@ const isTop = (() => {
 
 const httpOrigin = /^https?:$/.test(location.protocol)
 
+/* ------------------------------------------------------ instant hiding */
+// The element-hiding CSS for this host, injected before the first paint.
+// Waiting for DOMContentLoaded (the old way) let ad frames flash for a moment
+// before disappearing; this is the flash removed. The synchronous call is a
+// sub-millisecond lookup against an in-memory index, and an empty answer
+// (blocker off, engine not ready) costs one round trip and nothing else.
+if (isTop && httpOrigin) {
+  try {
+    const css = ipcRenderer.sendSync('cosmetic:boot', location.hostname) as string
+    if (css) {
+      const style = document.createElement('style')
+      style.textContent = css
+      const attach = () => {
+        const root = document.head ?? document.documentElement
+        if (root) root.appendChild(style)
+        return style.isConnected
+      }
+      // At document-start there is no <html> yet; catch it the moment it lands.
+      if (!attach()) {
+        new MutationObserver((_mutations, observer) => {
+          if (attach()) observer.disconnect()
+        }).observe(document, { childList: true, subtree: true })
+      }
+    }
+  } catch {
+    /* a page without the hiding CSS is a page, not a failure */
+  }
+}
+
 if (isTop && httpOrigin) {
   const PASSWORD = 'input[type="password"]:not([disabled]):not([readonly])'
   const USERNAME_HINTS = /user|login|email|mail|phone|tel|account|логин|почта|телефон/i

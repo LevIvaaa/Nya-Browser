@@ -33,8 +33,7 @@ import {
   refreshCustomLists,
   resetStats,
   setPermissionPrompt,
-  stats
-} from './security'
+  stats, isBlockedPopup } from './security'
 import { engine, hideCss } from './filters'
 import { loadExtensions, setExtensionSession } from './extensions'
 import { normalizeInput } from '../shared/search'
@@ -874,6 +873,8 @@ export class BrowserWindow {
         if (/^(mailto|tel):/i.test(url)) void shell.openExternal(url)
         return { action: 'deny' }
       }
+      // A popup aimed at an ad network is a popunder; it does not get a tab.
+      if (isBlockedPopup(url, documentHosts.get(wc.id) ?? '')) return { action: 'deny' }
       // A page that asked for a window gets a window; everything else is a
       // tab, which is what people mean by "open in new tab" anyway.
       if (disposition === 'new-window') {
