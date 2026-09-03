@@ -400,7 +400,9 @@ export default function StartPage({
     >
       <div
         ref={canvas}
-        className="mx-auto grid w-full max-w-[1280px] px-6 py-8"
+        // No width cap: the canvas is the window, so a widget can be dragged
+        // into any corner of it, not just around the middle column.
+        className="grid w-full px-6 py-8"
         style={{
           gridTemplateColumns: `repeat(${COLUMNS}, minmax(0, 1fr))`,
           gridAutoRows: `${ROW}px`,

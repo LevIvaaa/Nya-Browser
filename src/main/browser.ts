@@ -22,7 +22,7 @@ import { profiles } from './profiles'
 import { downloads } from './downloads'
 import { attachLog } from './log'
 import { WALLPAPER_EXTENSIONS, registerProtocols } from './protocol'
-import { pageContextMenu, tabContextMenu } from './menus'
+import { pageContextMenu, tabContextMenu, uiContextMenu } from './menus'
 import {
   allowHttpFallback,
   clearBrowsingData,
@@ -113,6 +113,8 @@ class Tab {
   progress = 0
   hasContent = false
   upgraded = false
+  /** the page asked for HTML fullscreen (a video, usually) */
+  htmlFullscreen = false
   error: TabState['error'] = null
   lastActive = Date.now()
   private pendingUrl: string | null = null
@@ -301,6 +303,8 @@ export class BrowserWindow {
    * writes for itself — history, the icon cache, the saved session — skips it.
    */
   readonly incognito: boolean
+  /** window was windowed when a page went HTML-fullscreen; restore on leave */
+  private windowedBeforeHtmlFullscreen = false
 
   constructor(incognito = false) {
     this.incognito = incognito
@@ -376,6 +380,11 @@ export class BrowserWindow {
       void this.overlay.webContents.loadFile(file, { query: { overlay: '1' } })
     }
 
+    // Right-click in the browser's own surfaces: the palette, the find bar,
+    // the settings fields. Pages get the richer menu attached per tab.
+    this.chrome.webContents.on('context-menu', (_e, params) => uiContextMenu(this.chrome.webContents, params))
+    this.overlay.webContents.on('context-menu', (_e, params) => uiContextMenu(this.overlay.webContents, params))
+
     this.overlay.webContents.on('before-input-event', (event, input) => {
       if (this.handleInput(input, true)) event.preventDefault()
     })
@@ -415,7 +424,13 @@ export class BrowserWindow {
     this.win.on('maximize', onWindowChange)
     this.win.on('unmaximize', onWindowChange)
     this.win.on('enter-full-screen', onWindowChange)
-    this.win.on('leave-full-screen', onWindowChange)
+    this.win.on('leave-full-screen', () => {
+      // F11 out while a video is fullscreen: the page must follow the window,
+      // or its view would keep covering the toolbar of a windowed browser.
+      const active = this.getActive()
+      if (active?.htmlFullscreen) this.exitHtmlFullscreen(active)
+      onWindowChange()
+    })
     this.win.on('focus', () => {
       this.sendWindowState()
       this.focusView()
@@ -597,6 +612,14 @@ export class BrowserWindow {
 
     const active = this.getActive()
     if (!active?.view) return
+
+    // A page in HTML fullscreen owns the window, toolbar included.
+    if (active.htmlFullscreen) {
+      active.view.setBounds({ x: 0, y: 0, width: w, height: h })
+      active.view.setBorderRadius(0)
+      active.view.setVisible(active.hasContent && !active.sleeping)
+      return
+    }
 
     const r = this.layoutRect
     const rect = {
@@ -816,6 +839,30 @@ export class BrowserWindow {
     wc.on('media-paused', () => this.broadcast())
     wc.on('zoom-changed', () => this.broadcast())
 
+    // HTML fullscreen — a video's ⛶ button. The view normally lives in the
+    // strip below the toolbar, so without help "fullscreen" meant "the content
+    // area": stretched, chrome still visible. The window goes fullscreen with
+    // the page and comes back with it, unless it was already fullscreen (F11)
+    // before the video asked.
+    wc.on('enter-html-full-screen', () => {
+      tab.htmlFullscreen = true
+      if (!this.win.isFullScreen()) {
+        this.windowedBeforeHtmlFullscreen = true
+        this.win.setFullScreen(true)
+      }
+      this.layout()
+      this.sendWindowState()
+    })
+    wc.on('leave-html-full-screen', () => {
+      tab.htmlFullscreen = false
+      if (this.windowedBeforeHtmlFullscreen) {
+        this.windowedBeforeHtmlFullscreen = false
+        this.win.setFullScreen(false)
+      }
+      this.layout()
+      this.sendWindowState()
+    })
+
     wc.on('context-menu', (_e, params) => pageContextMenu(this, wc, params))
 
     wc.on('before-input-event', (event, input) => {
@@ -979,12 +1026,25 @@ export class BrowserWindow {
   switchTab(id: number) {
     const tab = this.tabs.find((t) => t.id === id)
     if (!tab) return
+    const previous = this.getActive()
+    if (previous && previous.id !== id && previous.htmlFullscreen) {
+      this.exitHtmlFullscreen(previous)
+    }
     this.activeId = id
     tab.lastActive = Date.now()
     this.wake(tab)
     this.showActive()
     this.persistSession()
     this.broadcast()
+  }
+
+  /** Asks the page itself to leave fullscreen, so its player UI follows. */
+  private exitHtmlFullscreen(tab: Tab) {
+    const wc = tab.wc
+    if (wc && !wc.isDestroyed()) {
+      void wc.executeJavaScript('document.exitFullscreen?.()', true).catch(() => undefined)
+    }
+    tab.htmlFullscreen = false
   }
 
   private wake(tab: Tab) {
@@ -1004,6 +1064,12 @@ export class BrowserWindow {
     const index = this.tabs.findIndex((t) => t.id === id)
     if (index === -1) return
     const [tab] = this.tabs.splice(index, 1)
+    // Closing a fullscreen video's tab must not leave the window fullscreen:
+    // the page dies without ever sending leave-html-full-screen.
+    if (tab.htmlFullscreen && this.windowedBeforeHtmlFullscreen) {
+      this.windowedBeforeHtmlFullscreen = false
+      this.win.setFullScreen(false)
+    }
     if (tab.hasContent) {
       this.closedStack.push({ url: tab.url, title: tab.title, favicon: tab.favicon })
       if (this.closedStack.length > 25) this.closedStack.shift()
