@@ -1277,7 +1277,7 @@ export default function SettingsPage({
                 <Row title={t('Платформа')}><span className="text-sm text-dim">{info?.platform ?? '—'} {info?.arch ?? ''}</span></Row>
                 <Row title={t('Правил в списке блокировки')}><span className="text-sm text-dim">{info?.blocklistSize ?? '—'}</span></Row>
                 <Row title={t('Проверка безопасности')} hint={t('Живые тесты изоляции, блокировки и разрешений')}>
-                  <button className="btn btn-primary" onClick={() => window.browser.navigate('nya://security')}>
+                  <button className="btn btn-primary" onClick={() => window.browser.newTab('nya://security')}>
                     <Shield width={15} height={15} />
                     {t('Запустить')}
                   </button>

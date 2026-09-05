@@ -13,6 +13,13 @@ const INTERNAL_ICONS: Record<InternalPage, typeof Gear> = {
   passwords: Key
 }
 
+/**
+ * The tab you are looking at is awake by definition — whatever the last state
+ * push happened to say while it was waking up. Nothing about the tab in front
+ * of you should be dimmed or wear a sleep mark.
+ */
+const asleep = (tab: TabState) => tab.sleeping && !tab.active
+
 /* ----------------------------------------------------------------- favicon */
 function Favicon({ tab, size = 15 }: { tab: TabState; size?: number }) {
   const [failed, setFailed] = useState(false)
@@ -45,7 +52,7 @@ function Favicon({ tab, size = 15 }: { tab: TabState; size?: number }) {
         src={tab.favicon}
         alt=""
         onError={() => setFailed(true)}
-        className={cx('shrink-0 rounded-[4px] object-contain', tab.sleeping && 'opacity-45 saturate-0')}
+        className={cx('shrink-0 rounded-[4px] object-contain', asleep(tab) && 'opacity-45 saturate-0')}
         style={{ width: size, height: size, transition: 'opacity var(--t-base) linear' }}
       />
     )
@@ -60,7 +67,7 @@ function Favicon({ tab, size = 15 }: { tab: TabState; size?: number }) {
         width: size,
         height: size,
         background: 'color-mix(in srgb, var(--accent) 70%, #6b7280)',
-        opacity: tab.sleeping ? 0.45 : 1
+        opacity: asleep(tab) ? 0.45 : 1
       }}
     >
       {letter}
@@ -124,7 +131,7 @@ function TabItem({ tab, settings, vertical, index, dropIndex, onDragStart, onDra
         maxWidth: vertical ? undefined : settings.tabMaxWidth,
         background: tab.active ? 'var(--surface-solid)' : hover ? 'var(--surface)' : 'transparent',
         boxShadow: tab.active ? 'var(--shadow-sm)' : 'none',
-        opacity: tab.sleeping && !tab.active ? 0.62 : 1,
+        opacity: asleep(tab) ? 0.62 : 1,
         outline: dropIndex === index ? '2px solid var(--accent)' : 'none',
         outlineOffset: -2,
         transition:
@@ -144,7 +151,7 @@ function TabItem({ tab, settings, vertical, index, dropIndex, onDragStart, onDra
         {title}
       </span>
 
-      {tab.sleeping && <Sleep width={12} height={12} className="shrink-0 text-faint" />}
+      {asleep(tab) && <Sleep width={12} height={12} className="shrink-0 text-faint" />}
 
       {audio && (
         <button
