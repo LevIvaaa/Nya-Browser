@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useBrowser } from './state/useBrowser'
 import Wallpaper from './components/Wallpaper'
 import Toolbar from './components/Toolbar'
@@ -9,11 +9,11 @@ import { applyLanguage, onLanguageChange } from './i18n'
 import { AutofillBar, FindBar, PermissionBar, SavePasswordBar } from './components/Bars'
 import { TabRail, TabStrip } from './components/Tabs'
 import StartPage from './pages/StartPage'
-import SettingsPage from './pages/SettingsPage'
-import HistoryPage from './pages/HistoryPage'
-import DownloadsPage from './pages/DownloadsPage'
-import BookmarksPage from './pages/BookmarksPage'
-import PasswordsPage from './pages/PasswordsPage'
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const HistoryPage = lazy(() => import('./pages/HistoryPage'))
+const DownloadsPage = lazy(() => import('./pages/DownloadsPage'))
+const BookmarksPage = lazy(() => import('./pages/BookmarksPage'))
+const PasswordsPage = lazy(() => import('./pages/PasswordsPage'))
 import ErrorPage from './pages/ErrorPage'
 import type { UpdateState } from '../../shared/types'
 
@@ -364,6 +364,10 @@ export default function App() {
                   className="absolute inset-0"
                   hidden={tab.id !== active?.id}
                 >
+                  {/* Each of these arrives as its own chunk the first time it
+                      is opened; the fallback is a beat of empty page, which is
+                      what the tab looks like anyway before it paints. */}
+                  <Suspense fallback={null}>
                   {tab.internal === 'settings' && (
                     <SettingsPage
                       settings={settings}
@@ -383,6 +387,7 @@ export default function App() {
                     <BookmarksPage items={bookmarks} onRefresh={refreshBookmarks} />
                   )}
                   {tab.internal === 'passwords' && <PasswordsPage />}
+                  </Suspense>
                 </div>
               ))}
           </div>

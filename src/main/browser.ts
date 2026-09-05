@@ -748,6 +748,7 @@ export class BrowserWindow {
 
   applySettings() {
     const s = settings.get()
+    this.startEdgeWatch()
     history.setEnabled(s.saveHistory)
     refreshCustomLists()
     hardenSession(this.ses)
@@ -1555,7 +1556,20 @@ export class BrowserWindow {
   }
 
   /* ------------------------------------------------------------ auto-hide */
+  /**
+   * Watches for the cursor at the window's edge, and only while auto-hide is
+   * on: a timer this fast is nine wake-ups a second, and a laptop feels the
+   * ones it did not need.
+   */
   private startEdgeWatch() {
+    const wanted = settings.get().tabAutoHide
+    if (wanted === (this.edgeTimer !== null)) return
+    if (!wanted) {
+      if (this.edgeTimer) clearInterval(this.edgeTimer)
+      this.edgeTimer = null
+      this.setEdge(false)
+      return
+    }
     this.edgeTimer = setInterval(() => {
       const s = settings.get()
       if (!s.tabAutoHide || this.win.isDestroyed()) return
