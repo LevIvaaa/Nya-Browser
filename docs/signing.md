@@ -91,7 +91,7 @@ npm run release:signed
 ## Как проверить, что получилось
 
 ```powershell
-signtool verify /pa /v dist\NyaBrowser-1.0.3-setup.exe
+signtool verify /pa /v dist\NyaBrowser-1.0.4-setup.exe
 ```
 
 Должно быть `Successfully verified` и ваше имя в `Signing Certificate Chain`.
