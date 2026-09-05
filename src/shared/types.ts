@@ -279,6 +279,10 @@ export interface TabState {
   id: number
   /** set when this tab holds one of the browser's own pages instead of a site */
   internal: InternalPage | null
+  /** pinned tabs sit at the front of the strip, narrow and without a close button */
+  pinned: boolean
+  /** the TabGroup this tab belongs to, if any */
+  groupId: number | null
   title: string
   url: string
   displayUrl: string
@@ -317,12 +321,26 @@ export interface WindowState {
   incognito: boolean
 }
 
+/**
+ * A named, coloured run of tabs in the strip. Members are kept next to each
+ * other, so a group is a place in the strip and not just a label.
+ */
+export interface TabGroup {
+  id: number
+  name: string
+  /** one of GROUP_COLOURS */
+  color: string
+  collapsed: boolean
+}
+
 export interface Suggestion {
-  kind: 'search' | 'url' | 'history' | 'favorite'
+  kind: 'search' | 'url' | 'history' | 'favorite' | 'tab'
   title: string
   url: string
   subtitle?: string
   visits?: number
+  /** set on 'tab': picking it switches to that tab instead of navigating */
+  tabId?: number
 }
 
 export interface HistoryEntry {

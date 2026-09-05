@@ -336,6 +336,28 @@ function registerIpc() {
   ipcMain.handle('tab:sleep', (event, id: unknown) => current(event).sleepTab(num(id)))
   ipcMain.handle('tab:reload', (event, id: unknown) => current(event).reloadTab(num(id)))
   ipcMain.handle('tab:menu', (event, id: unknown) => current(event).showTabMenu(num(id)))
+  ipcMain.handle('tab:pin', (event, id: unknown, pinned?: unknown) =>
+    current(event).pinTab(num(id), pinned === undefined ? undefined : flag(pinned))
+  )
+  ipcMain.handle('tab:group-new', (event, id: unknown, name?: unknown) =>
+    current(event).createGroup(num(id), name === undefined ? undefined : str(name, 40))
+  )
+  ipcMain.handle('tab:group-add', (event, id: unknown, groupId: unknown) =>
+    current(event).addToGroup(num(id), num(groupId))
+  )
+  ipcMain.handle('tab:group-remove', (event, id: unknown) => current(event).removeFromGroup(num(id)))
+  ipcMain.handle('group:rename', (event, groupId: unknown, name: unknown) =>
+    current(event).renameGroup(num(groupId), str(name, 40))
+  )
+  ipcMain.handle('group:colour', (event, groupId: unknown, colour: unknown) =>
+    current(event).setGroupColour(num(groupId), str(colour, 16))
+  )
+  ipcMain.handle('group:toggle', (event, groupId: unknown, collapsed?: unknown) =>
+    current(event).toggleGroup(num(groupId), collapsed === undefined ? undefined : flag(collapsed))
+  )
+  ipcMain.handle('group:ungroup', (event, groupId: unknown) => current(event).ungroup(num(groupId)))
+  ipcMain.handle('group:close', (event, groupId: unknown) => current(event).closeGroup(num(groupId)))
+  ipcMain.handle('group:menu', (event, groupId: unknown) => current(event).showGroupMenu(num(groupId)))
   ipcMain.handle('tab:reopen', (event) => current(event).reopenClosed())
   ipcMain.handle('tab:closed-list', (event) => current(event).recentlyClosed())
   ipcMain.handle('tab:navigate', (event, url: unknown, id?: unknown) =>

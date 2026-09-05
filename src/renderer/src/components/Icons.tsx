@@ -200,6 +200,20 @@ export const Grid = (p: P) => (
     <rect x="13.5" y="13.5" width="7" height="7" rx="2" />
   </svg>
 )
+/** A drawing pin, for a tab that is kept. */
+export const Pin = (p: P) => (
+  <svg {...svg(p, 1.6)}>
+    <path d="M9 3.5h6l-1 5 3 3v2H7v-2l3-3-1-5z" />
+    <path d="M12 13.5V20" />
+  </svg>
+)
+/** A browser tab, for anything that is about the tabs themselves. */
+export const Tabs = (p: P) => (
+  <svg {...svg(p, 1.6)}>
+    <path d="M3 19.5V8.5a2 2 0 012-2h4l1.6-2h3.4a2 2 0 012 2v1" />
+    <rect x="8" y="9.5" width="13" height="10" rx="2" />
+  </svg>
+)
 export const More = (p: P) => (
   <svg {...svg(p, 2)}>
     <circle cx="5.5" cy="12" r="1.4" fill="currentColor" stroke="none" />

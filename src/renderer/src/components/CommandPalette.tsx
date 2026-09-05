@@ -1,20 +1,25 @@
 import { t } from '../i18n'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { SearchEngine, Suggestion } from '../../../shared/types'
-import { Clock, Globe, Search, Star } from './Icons'
+import { Clock, Globe, Search, Star, Tabs } from './Icons'
 import { cx } from './ui'
 
 const iconFor = (kind: Suggestion['kind']) => {
   if (kind === 'search') return <Search width={15} height={15} />
   if (kind === 'history') return <Clock width={15} height={15} />
   if (kind === 'favorite') return <Star width={15} height={15} />
+  if (kind === 'tab') return <Tabs width={15} height={15} />
   return <Globe width={15} height={15} />
 }
 
 /**
  * Address input and suggestions in one overlay. Suggestions come only from the
- * local profile — history, favourites and bookmarks — so keystrokes never leave
- * the machine before you press Enter.
+ * local profile — the tabs already open, history, favourites and bookmarks —
+ * so keystrokes never leave the machine before you press Enter.
+ *
+ * Open tabs are listed first and picking one switches to it. With twenty tabs
+ * the page you are after is usually already one of them, and opening a second
+ * copy is the wrong answer to "where did that go".
  */
 export default function CommandPalette({
   initialValue,
@@ -50,6 +55,10 @@ export default function CommandPalette({
   }, [value])
 
   const go = (target?: Suggestion) => {
+    if (target?.kind === 'tab' && target.tabId !== undefined) {
+      void window.browser.switchTab(target.tabId)
+      return onClose()
+    }
     const url = target ? target.url : value
     if (!url.trim()) return onClose()
     void window.browser.navigate(url)
@@ -71,7 +80,10 @@ export default function CommandPalette({
     }
     if (event.key === 'Tab' && items[cursor]) {
       event.preventDefault()
-      return setValue(items[cursor].url)
+      // Completing to a tab's address would lose the tab; only addresses you
+      // could type yourself are worth completing to.
+      if (items[cursor].kind !== 'tab') setValue(items[cursor].url)
+      return
     }
     if (event.key === 'Enter') {
       event.preventDefault()

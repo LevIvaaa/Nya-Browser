@@ -6,6 +6,7 @@ import type {
   SearchEngine,
   SecurityStats,
   Settings,
+  TabGroup,
   TabState,
   WindowState
 } from '../../../shared/types'
@@ -27,6 +28,7 @@ export interface Toast {
 /** One place for every piece of state the main process pushes to the UI. */
 export function useBrowser() {
   const [tabs, setTabs] = useState<TabState[]>([])
+  const [groups, setGroups] = useState<TabGroup[]>([])
   const [settings, setSettings] = useState<Settings | null>(null)
   const [engines, setEngines] = useState<SearchEngine[]>([])
   const [profiles, setProfiles] = useState<ProfilesState | null>(null)
@@ -55,6 +57,7 @@ export function useBrowser() {
     const api = window.browser
     const off = [
       api.onTabs(setTabs),
+      api.onGroups(setGroups),
       api.onSettings(setSettings),
       api.onWindow(setWin),
       api.onProfiles(setProfiles),
@@ -106,7 +109,7 @@ export function useBrowser() {
   }, [])
 
   return {
-    tabs, active, settings, engines, engine, profiles, profile, bookmarks, bookmarked,
+    tabs, groups, active, settings, engines, engine, profiles, profile, bookmarks, bookmarked,
     downloads, activeDownloads, closed, stats, win, permission, autofill, savePassword,
     edge, toasts, patch, pushToast, refreshBookmarks,
     setPermission, setAutofill, setSavePassword, setToasts

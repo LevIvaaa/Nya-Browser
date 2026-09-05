@@ -1,7 +1,7 @@
 import { t } from '../i18n'
-import { useRef, useState } from 'react'
-import type { InternalPage, Settings, TabState } from '../../../shared/types'
-import { Clock, Cross, Download, Gear, Globe, Key, Plus, Sleep, Star, Volume, VolumeOff } from './Icons'
+import { useEffect, useRef, useState } from 'react'
+import type { InternalPage, Settings, TabGroup, TabState } from '../../../shared/types'
+import { Clock, Cross, Download, Gear, Globe, Key, Pin, Plus, Sleep, Star, Volume, VolumeOff } from './Icons'
 import { cx } from './ui'
 
 /** The same icons these pages carry in the toolbar and in the menu. */
@@ -81,13 +81,29 @@ interface ItemProps {
   settings: Settings
   vertical: boolean
   index: number
+  /** set when this tab is inside a group, with where it sits in the run */
+  group?: TabGroup
+  first?: boolean
+  last?: boolean
   dropIndex: number | null
   onDragStart: (id: number) => void
   onDragOver: (index: number) => void
   onDrop: () => void
 }
 
-function TabItem({ tab, settings, vertical, index, dropIndex, onDragStart, onDragOver, onDrop }: ItemProps) {
+function TabItem({
+  tab,
+  settings,
+  vertical,
+  index,
+  group,
+  first,
+  last,
+  dropIndex,
+  onDragStart,
+  onDragOver,
+  onDrop
+}: ItemProps) {
   const [hover, setHover] = useState(false)
   const height = settings.compact ? 30 : 34
   const audio = tab.audible || tab.muted
@@ -123,14 +139,35 @@ function TabItem({ tab, settings, vertical, index, dropIndex, onDragStart, onDra
       onMouseLeave={() => setHover(false)}
       title={vertical ? undefined : `${title}${tab.origin ? ` — ${tab.origin}` : ''}`}
       className={cx(
-        'animate-tab no-drag group relative flex cursor-default select-none items-center gap-2 rounded-[11px] px-2.5',
+        'animate-tab no-drag group relative flex cursor-default select-none items-center gap-2 px-2.5',
         vertical ? 'w-full' : 'min-w-[54px] flex-1'
       )}
       style={{
+        // Inside a group, the run of tabs sits on the group's colour and is
+        // rounded only at its ends, so where the group starts and stops is
+        // something you can see rather than something you count.
+        ...(group
+          ? {
+              borderTopLeftRadius: vertical || first ? 11 : 3,
+              borderBottomLeftRadius: vertical || first ? 11 : 3,
+              borderTopRightRadius: vertical || last ? 11 : 3,
+              borderBottomRightRadius: vertical || last ? 11 : 3,
+              boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${group.color} 38%, transparent)`
+            }
+          : { borderRadius: 11 }),
         height,
-        maxWidth: vertical ? undefined : settings.tabMaxWidth,
-        background: tab.active ? 'var(--surface-solid)' : hover ? 'var(--surface)' : 'transparent',
-        boxShadow: tab.active ? 'var(--shadow-sm)' : 'none',
+        // A pinned tab is its icon and nothing else: it is there to be found
+        // in the same place every time, not to be read.
+        width: tab.pinned && !vertical ? 38 : undefined,
+        maxWidth: tab.pinned && !vertical ? 38 : vertical ? undefined : settings.tabMaxWidth,
+        background: tab.active
+          ? 'var(--surface-solid)'
+          : hover
+            ? 'var(--surface)'
+            : group
+              ? `color-mix(in srgb, ${group.color} 13%, transparent)`
+              : 'transparent',
+        boxShadow: tab.active && !group ? 'var(--shadow-sm)' : undefined,
         opacity: asleep(tab) ? 0.62 : 1,
         outline: dropIndex === index ? '2px solid var(--accent)' : 'none',
         outlineOffset: -2,
@@ -147,11 +184,17 @@ function TabItem({ tab, settings, vertical, index, dropIndex, onDragStart, onDra
 
       <Favicon tab={tab} />
 
-      <span className={cx('min-w-0 flex-1 truncate text-sm', tab.active ? 'font-medium text-ink' : 'text-dim')}>
-        {title}
-      </span>
+      {!(tab.pinned && !vertical) && (
+        <span
+          className={cx('min-w-0 flex-1 truncate text-sm', tab.active ? 'font-medium text-ink' : 'text-dim')}
+        >
+          {title}
+        </span>
+      )}
 
       {asleep(tab) && <Sleep width={12} height={12} className="shrink-0 text-faint" />}
+
+      {tab.pinned && vertical && <Pin width={12} height={12} className="shrink-0 text-faint" />}
 
       {audio && (
         <button
@@ -169,6 +212,7 @@ function TabItem({ tab, settings, vertical, index, dropIndex, onDragStart, onDra
 
       <button
         aria-label={t('Закрыть вкладку')}
+        hidden={tab.pinned}
         onClick={(event) => {
           event.stopPropagation()
           window.browser.closeTab(tab.id)
@@ -184,6 +228,131 @@ function TabItem({ tab, settings, vertical, index, dropIndex, onDragStart, onDra
       </button>
     </div>
   )
+}
+
+/* ------------------------------------------------------------ group chip */
+
+/**
+ * The name over a run of tabs. Clicking folds the run away; right-clicking
+ * opens the group's own menu, where it is renamed, recoloured or closed.
+ * Double-clicking renames it in place, which is how a folder gets a name
+ * without a dialog in the way.
+ */
+function GroupChip({
+  group,
+  count,
+  vertical
+}: {
+  group: TabGroup
+  count: number
+  vertical: boolean
+}) {
+  const [editing, setEditing] = useState(false)
+  const field = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (editing) {
+      field.current?.focus()
+      field.current?.select()
+    }
+  }, [editing])
+
+  const commit = () => {
+    const name = field.current?.value ?? ''
+    setEditing(false)
+    if (name.trim() && name !== group.name) void window.browser.renameGroup(group.id, name.trim())
+  }
+
+  return (
+    <div
+      className={cx(
+        'no-drag flex shrink-0 items-center gap-1.5 rounded-[8px] px-2',
+        vertical ? 'w-full' : ''
+      )}
+      style={{
+        height: vertical ? 24 : 26,
+        background: `color-mix(in srgb, ${group.color} 22%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${group.color} 45%, transparent)`,
+        cursor: 'pointer'
+      }}
+      title={group.collapsed ? t('Развернуть группу') : t('Свернуть группу')}
+      onClick={() => !editing && void window.browser.toggleGroup(group.id)}
+      onDoubleClick={(event) => {
+        event.stopPropagation()
+        setEditing(true)
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        void window.browser.groupMenu(group.id)
+      }}
+    >
+      <span
+        className='shrink-0 rounded-pill'
+        style={{ width: 7, height: 7, background: group.color }}
+      />
+      {editing ? (
+        <input
+          ref={field}
+          defaultValue={group.name}
+          className='min-w-0 flex-1 bg-transparent text-2xs font-semibold outline-none'
+          style={{ width: 90 }}
+          onClick={(event) => event.stopPropagation()}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') commit()
+            if (event.key === 'Escape') setEditing(false)
+          }}
+        />
+      ) : (
+        <span className='min-w-0 max-w-[120px] truncate text-2xs font-semibold text-ink'>
+          {group.name}
+        </span>
+      )}
+      {group.collapsed && <span className='shrink-0 text-2xs text-dim'>{count}</span>}
+    </div>
+  )
+}
+
+/* ---------------------------------------------------------------- the rows */
+
+type Row =
+  | { kind: 'tab'; tab: TabState; index: number; group?: TabGroup; first?: boolean; last?: boolean }
+  | { kind: 'group'; group: TabGroup; count: number }
+
+/**
+ * The strip is a flat list of tabs with names laid over runs of them. This
+ * turns one into the other: a chip before each group, and the group's tabs
+ * left out while it is folded. The index carried along is the tab's index in
+ * the real list, because that is what a drop has to be expressed in.
+ */
+function rowsOf(tabs: TabState[], groups: TabGroup[]): Row[] {
+  const byId = new Map(groups.map((group) => [group.id, group]))
+  const rows: Row[] = []
+  let seen: number | null = null
+  tabs.forEach((tab, index) => {
+    if (tab.groupId !== seen) {
+      seen = tab.groupId
+      const group = tab.groupId === null ? undefined : byId.get(tab.groupId)
+      if (group) {
+        rows.push({
+          kind: 'group',
+          group,
+          count: tabs.filter((t) => t.groupId === group.id).length
+        })
+      }
+    }
+    const group = tab.groupId === null ? undefined : byId.get(tab.groupId)
+    if (group?.collapsed) return
+    rows.push({
+      kind: 'tab',
+      tab,
+      index,
+      group,
+      first: group ? tabs[index - 1]?.groupId !== tab.groupId : undefined,
+      last: group ? tabs[index + 1]?.groupId !== tab.groupId : undefined
+    })
+  })
+  return rows
 }
 
 /* ------------------------------------------------------------ reorder glue */
@@ -212,8 +381,17 @@ function useReorder() {
 }
 
 /* -------------------------------------------------------------- horizontal */
-export function TabStrip({ tabs, settings }: { tabs: TabState[]; settings: Settings }) {
+export function TabStrip({
+  tabs,
+  groups,
+  settings
+}: {
+  tabs: TabState[]
+  groups: TabGroup[]
+  settings: Settings
+}) {
   const reorder = useReorder()
+  const rows = rowsOf(tabs, groups)
 
   return (
     <div
@@ -222,19 +400,26 @@ export function TabStrip({ tabs, settings }: { tabs: TabState[]; settings: Setti
       onDoubleClick={() => window.browser.maximize()}
     >
       <div className="flex min-w-0 items-center gap-1" style={{ flex: '0 1 auto' }}>
-        {tabs.map((tab, index) => (
-          <TabItem
-            key={tab.id}
-            tab={tab}
-            settings={settings}
-            index={index}
-            vertical={false}
-            dropIndex={reorder.dropIndex}
-            onDragStart={reorder.onDragStart}
-            onDragOver={reorder.onDragOver}
-            onDrop={reorder.onDrop}
-          />
-        ))}
+        {rows.map((row) =>
+          row.kind === 'group' ? (
+            <GroupChip key={`g${row.group.id}`} group={row.group} count={row.count} vertical={false} />
+          ) : (
+            <TabItem
+              key={row.tab.id}
+              tab={row.tab}
+              settings={settings}
+              index={row.index}
+              group={row.group}
+              first={row.first}
+              last={row.last}
+              vertical={false}
+              dropIndex={reorder.dropIndex}
+              onDragStart={reorder.onDragStart}
+              onDragOver={reorder.onDragOver}
+              onDrop={reorder.onDrop}
+            />
+          )
+        )}
       </div>
       <button className="icon-btn shrink-0" title={t('Новая вкладка · Ctrl+T')} onClick={() => window.browser.newTab()}>
         <Plus />
@@ -247,14 +432,17 @@ export function TabStrip({ tabs, settings }: { tabs: TabState[]; settings: Setti
 /* ---------------------------------------------------------------- vertical */
 export function TabRail({
   tabs,
+  groups,
   settings,
   side
 }: {
   tabs: TabState[]
+  groups: TabGroup[]
   settings: Settings
   side: 'left' | 'right'
 }) {
   const reorder = useReorder()
+  const rows = rowsOf(tabs, groups)
 
   return (
     <aside
@@ -276,19 +464,26 @@ export function TabRail({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto overflow-x-hidden pr-0.5">
-        {tabs.map((tab, index) => (
-          <TabItem
-            key={tab.id}
-            tab={tab}
-            settings={settings}
-            index={index}
-            vertical
-            dropIndex={reorder.dropIndex}
-            onDragStart={reorder.onDragStart}
-            onDragOver={reorder.onDragOver}
-            onDrop={reorder.onDrop}
-          />
-        ))}
+        {rows.map((row) =>
+          row.kind === 'group' ? (
+            <GroupChip key={`g${row.group.id}`} group={row.group} count={row.count} vertical />
+          ) : (
+            <TabItem
+              key={row.tab.id}
+              tab={row.tab}
+              settings={settings}
+              index={row.index}
+              group={row.group}
+              first={row.first}
+              last={row.last}
+              vertical
+              dropIndex={reorder.dropIndex}
+              onDragStart={reorder.onDragStart}
+              onDragOver={reorder.onDragOver}
+              onDrop={reorder.onDrop}
+            />
+          )
+        )}
       </div>
     </aside>
   )
