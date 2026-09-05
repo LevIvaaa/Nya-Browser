@@ -8,6 +8,7 @@ import type {
   Settings,
   TabGroup,
   TabState,
+  WebAppCandidate,
   WindowState
 } from '../../../shared/types'
 import type { AutofillOffer, Bookmark, ClosedTab, SavePasswordOffer } from '../../../preload/index'
@@ -29,6 +30,8 @@ export interface Toast {
 export function useBrowser() {
   const [tabs, setTabs] = useState<TabState[]>([])
   const [groups, setGroups] = useState<TabGroup[]>([])
+  /** the site in front of you, when it says it is an app we could install */
+  const [appCandidate, setAppCandidate] = useState<WebAppCandidate | null>(null)
   const [settings, setSettings] = useState<Settings | null>(null)
   const [engines, setEngines] = useState<SearchEngine[]>([])
   const [profiles, setProfiles] = useState<ProfilesState | null>(null)
@@ -39,7 +42,7 @@ export function useBrowser() {
     ads: 0, trackers: 0, crypto: 0, upgrades: 0, params: 0, cookies: 0, since: Date.now()
   })
   const [win, setWin] = useState<WindowState>({
-    maximized: false, fullscreen: false, focused: true, platform: 'win32', incognito: false
+    maximized: false, fullscreen: false, focused: true, platform: 'win32', incognito: false, app: null
   })
   const [permission, setPermission] = useState<PermissionRequest | null>(null)
   const [autofill, setAutofill] = useState<AutofillOffer | null>(null)
@@ -58,6 +61,7 @@ export function useBrowser() {
     const off = [
       api.onTabs(setTabs),
       api.onGroups(setGroups),
+      api.onAppCandidate(setAppCandidate),
       api.onSettings(setSettings),
       api.onWindow(setWin),
       api.onProfiles(setProfiles),
@@ -109,7 +113,7 @@ export function useBrowser() {
   }, [])
 
   return {
-    tabs, groups, active, settings, engines, engine, profiles, profile, bookmarks, bookmarked,
+    tabs, groups, appCandidate, active, settings, engines, engine, profiles, profile, bookmarks, bookmarked,
     downloads, activeDownloads, closed, stats, win, permission, autofill, savePassword,
     edge, toasts, patch, pushToast, refreshBookmarks,
     setPermission, setAutofill, setSavePassword, setToasts

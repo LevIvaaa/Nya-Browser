@@ -1,4 +1,4 @@
-import type { Profile, Settings, TabState, UpdateState } from '../../../shared/types'
+import type { Profile, Settings, TabState, UpdateState, WebAppCandidate } from '../../../shared/types'
 import { t } from '../i18n'
 import {
   ArrowLeft,
@@ -17,6 +17,7 @@ import {
   Star,
   StarFilled,
   Unlock,
+  Install,
   UpdateArrow
 } from './Icons'
 import WindowControls from './WindowControls'
@@ -31,6 +32,11 @@ interface Props {
   downloadCount: number
   /** null until something about a new version is worth a button */
   update: UpdateState | null
+  /** set when this window is one installed app rather than the browser */
+  appMode: { id: string; name: string; themeColor: string } | null
+  /** set when this page says it is an app that can be installed */
+  appCandidate: WebAppCandidate | null
+  onInstallApp: () => void
   /** this window keeps nothing; the badge says so */
   incognito: boolean
   view: string
@@ -46,6 +52,9 @@ export default function Toolbar({
   bookmarked,
   downloadCount,
   update,
+  appMode,
+  appCandidate,
+  onInstallApp,
   incognito,
   view,
   onOpenAddress,
@@ -90,17 +99,21 @@ export default function Toolbar({
             {loading ? <Cross /> : <Reload />}
           </button>
         </Tooltip>
-        <Tooltip label={t('Стартовая страница')}>
-          <button className="icon-btn" onClick={() => window.browser.home()}>
-            <Home />
-          </button>
-        </Tooltip>
+        {!appMode && (
+          <Tooltip label={t('Стартовая страница')}>
+            <button className="icon-btn" onClick={() => window.browser.home()}>
+              <Home />
+            </button>
+          </Tooltip>
+        )}
       </div>
 
-      {/* address field */}
+      {/* address field — in an app window it is a nameplate, not a place to
+          type: there is one page here and it is the app. */}
       <div className="flex min-w-0 flex-1 justify-center px-2">
         <button
-          onClick={onOpenAddress}
+          disabled={appMode !== null}
+          onClick={appMode ? undefined : onOpenAddress}
           className="no-drag group relative flex h-[32px] w-full max-w-[760px] items-center gap-2 overflow-hidden rounded-[11px] border px-3 text-left"
           style={{
             background: 'var(--field-idle)',
@@ -144,7 +157,12 @@ export default function Toolbar({
           )}
 
           <span className="min-w-0 flex-1 truncate text-sm">
-            {tab?.displayUrl ? (
+            {appMode ? (
+              <>
+                <span className="text-ink">{appMode.name}</span>
+                <span className="text-faint"> · {tab?.origin}</span>
+              </>
+            ) : tab?.displayUrl ? (
               <>
                 <span className="text-ink">{tab.origin}</span>
                 <span className="text-faint">{tab.displayUrl.slice(tab.origin.length)}</span>
@@ -168,6 +186,30 @@ export default function Toolbar({
             >
               <Shield width={10} height={10} />
               {blocked}
+            </span>
+          )}
+
+          {/* A site that says it is an app. Chromium's own install prompt is
+              part of Chrome and not of the engine, so this is the offer. */}
+          {appCandidate && (
+            <span
+              role="button"
+              tabIndex={0}
+              title={t('Установить {name} как приложение', { name: appCandidate.name })}
+              className="no-drag animate-pop flex shrink-0 items-center rounded-[7px] p-1 hover:bg-[var(--line)]"
+              style={{ color: 'var(--accent)' }}
+              onClick={(event) => {
+                event.stopPropagation()
+                onInstallApp()
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return
+                event.stopPropagation()
+                event.preventDefault()
+                onInstallApp()
+              }}
+            >
+              <Install width={14} height={14} />
             </span>
           )}
 
@@ -198,6 +240,7 @@ export default function Toolbar({
       )}
 
       <div className="no-drag flex items-center gap-0.5 pr-1">
+        {!appMode && (
         <Tooltip label={bookmarked ? t('Убрать из закладок · Ctrl+D') : t('В закладки · Ctrl+D')}>
           <button
             className="icon-btn"
@@ -208,6 +251,7 @@ export default function Toolbar({
             {bookmarked ? <StarFilled /> : <Star />}
           </button>
         </Tooltip>
+        )}
 
         {updateBadge && (
           <Tooltip label={updateLabel}>
@@ -266,13 +310,15 @@ export default function Toolbar({
           </button>
         </Tooltip>
 
-        <Tooltip label={t('Новая вкладка · Ctrl+T')}>
-          <button className="icon-btn" onClick={() => window.browser.newTab()}>
-            <Plus />
-          </button>
-        </Tooltip>
+        {!appMode && (
+          <Tooltip label={t('Новая вкладка · Ctrl+T')}>
+            <button className="icon-btn" onClick={() => window.browser.newTab()}>
+              <Plus />
+            </button>
+          </Tooltip>
+        )}
 
-        {profile && (
+        {!appMode && profile && (
           <Tooltip label={t('Профиль: {name}', { name: profile.name })}>
             <button
               className="icon-btn"
@@ -285,15 +331,17 @@ export default function Toolbar({
           </Tooltip>
         )}
 
-        <Tooltip label={t('Настройки · Ctrl+,')}>
-          <button
-            className="icon-btn"
-            onClick={() => onToggleView('settings')}
-            style={view === 'settings' ? { background: 'var(--surface-hover)', color: 'var(--text)' } : undefined}
-          >
-            <Gear />
-          </button>
-        </Tooltip>
+        {!appMode && (
+          <Tooltip label={t('Настройки · Ctrl+,')}>
+            <button
+              className="icon-btn"
+              onClick={() => onToggleView('settings')}
+              style={view === 'settings' ? { background: 'var(--surface-hover)', color: 'var(--text)' } : undefined}
+            >
+              <Gear />
+            </button>
+          </Tooltip>
+        )}
 
         <Tooltip label={t('Меню')}>
           <button

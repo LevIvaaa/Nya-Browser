@@ -13,6 +13,7 @@ import { initLog, log } from './log'
 import { flushAll, installExitHooks } from './store'
 import { registerProtocols, registerSchemes } from './protocol'
 import { helloAvailable, helloVerify } from './hello'
+import { apps, appIdFromArgv } from './apps'
 import { sites } from './sites'
 import { BLOCKLIST_SIZE, blockedLog, clearBrowsingData, hardenApp, hardenSession, resetStats, stats } from './security'
 import { detectSources, importBookmarks, importPasswordsCsv } from './import'
@@ -149,8 +150,14 @@ const windows = new Set<BrowserWindow>()
 let browser: BrowserWindow | null = null
 
 /** Opens another window, wired the same way as the first. */
-function openWindow(incognito = false): BrowserWindow {
-  const win = new BrowserWindow(incognito)
+function openWindow(incognito = false, appId?: string | null): BrowserWindow {
+  const win = new BrowserWindow(incognito, (appId && apps.get(appId)) || null)
+  // An app window is the app: it opens what the shortcut pointed at, once its
+  // chrome is there to hold it, and nothing else.
+  if (win.appMode) {
+    const startUrl = win.appMode.startUrl
+    win.chrome.webContents.once('did-finish-load', () => win.newTab(startUrl))
+  }
   windows.add(win)
   win.win.on('closed', () => {
     windows.delete(win)
@@ -195,6 +202,19 @@ if (!app.requestSingleInstanceLock()) {
   installExitHooks()
 
   app.on('second-instance', (_event, argv) => {
+    // A shortcut for an installed app: raise the window it already has, or
+    // open one. It is a separate window, not a tab in this one.
+    const appId = appIdFromArgv(argv)
+    if (appId && apps.has(appId)) {
+      const open = [...windows].find((win) => win.appMode?.id === appId)
+      if (open) {
+        if (open.win.isMinimized()) open.win.restore()
+        open.win.focus()
+      } else {
+        openWindow(false, appId)
+      }
+      return
+    }
     if (!browser) return
     if (browser.win.isMinimized()) browser.win.restore()
     browser.win.focus()
@@ -206,6 +226,9 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform === 'win32') app.setAppUserModelId('com.nya.browser')
 
     initLog()
+    // Installed apps belong to the machine, not to a profile: a shortcut on the
+    // desktop cannot know which profile was last used, and should not care.
+    apps.load(app.getPath('userData'))
     // Deliberately not awaited. The CDM is a ~10 MB download from Google's
     // component server on first use, and waiting for it would leave the window
     // unpainted for as long as that takes. The cost is that a DRM page opened in
@@ -255,7 +278,8 @@ if (!app.requestSingleInstanceLock()) {
 
     await applyMainLanguage(settings.get().language)
 
-    const first = openWindow()
+    const launchApp = appIdFromArgv(process.argv)
+    const first = openWindow(false, launchApp)
     registerIpc()
     buildMenu(first)
 
@@ -265,6 +289,10 @@ if (!app.requestSingleInstanceLock()) {
       b.sendWindowState()
       b.sendProfiles()
       b.applySettings()
+      // An app window opens its app and nothing else — no restored session, no
+      // link from the command line, which was meant for the browser. The tab
+      // itself is opened by openWindow.
+      if (b.appMode) return
       // A cold start from "open link in Nya Browser" must land on that link
       // rather than on whatever the restored session had open.
       const launchUrl = urlFromArgv(process.argv)
@@ -361,6 +389,21 @@ function registerIpc() {
   ipcMain.handle('group:ungroup', (event, groupId: unknown) => current(event).ungroup(num(groupId)))
   ipcMain.handle('group:close', (event, groupId: unknown) => current(event).closeGroup(num(groupId)))
   ipcMain.handle('group:menu', (event, groupId: unknown) => current(event).showGroupMenu(num(groupId)))
+  ipcMain.handle('apps:candidate', (event) => current(event).installable())
+  ipcMain.handle('apps:install', (event) => current(event).installApp())
+  ipcMain.handle('apps:list', () => apps.list())
+  ipcMain.handle('apps:remove', (event, id: unknown) => {
+    apps.remove(str(id, 40))
+    return apps.list()
+  })
+  ipcMain.handle('apps:open', (event, id: unknown) => {
+    const wanted = str(id, 40)
+    if (!apps.has(wanted)) return false
+    const open = [...windows].find((win) => win.appMode?.id === wanted)
+    if (open) open.win.focus()
+    else openWindow(false, wanted)
+    return true
+  })
   ipcMain.handle('site:info', (event) => current(event).siteInfo())
   ipcMain.handle('site:set', (event, host: unknown, patch: unknown, reload?: unknown) =>
     current(event).setSiteRules(str(host, 260), (patch ?? {}) as Partial<SiteRules>, flag(reload))
