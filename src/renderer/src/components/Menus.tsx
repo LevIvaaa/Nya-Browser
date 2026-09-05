@@ -50,7 +50,7 @@ export function AppMenu({ onClose, onOpen }: { onClose: () => void; onOpen: (vie
         {item(<Key width={15} height={15} />, t('Пароли'), '', () => onOpen('passwords'))}
         <div className="my-1.5" style={{ borderTop: '1px solid var(--line)' }} />
         {item(<Shield width={15} height={15} />, t('Проверка безопасности'), '', () =>
-          window.browser.navigate('nya://security')
+          window.browser.newTab('nya://security')
         )}
         {item(<Eraser width={15} height={15} />, t('Очистить данные сайтов'), 'Ctrl+Shift+Del', () =>
           window.browser.clearBrowsingData()

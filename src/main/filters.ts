@@ -782,6 +782,8 @@ async function download(list: FilterList): Promise<string | null> {
 
 let lastStatus: FilterStatus = { enabled: false, rules: 0, cosmetic: 0, updated: 0, lists: [] }
 let loading: Promise<FilterStatus> | null = null
+/** Every launch asks the servers once, however fresh the cache looks. */
+let startupRefreshDone = false
 
 export const filterStatus = () => lastStatus
 
@@ -832,6 +834,11 @@ function build(texts: Map<string, string>, meta: Record<string, ListMeta>): Filt
  * then refreshed in the background, and the engine is rebuilt when the fresh
  * copies arrive. A forced refresh (the settings button) awaits the downloads,
  * because its whole point is to report what the refresh fetched.
+ *
+ * The first load of each run checks every list, not only the ones the clock
+ * calls stale: a filter list that gained a rule this morning should be blocking
+ * with it by the time you finish reading your first page. The requests
+ * revalidate, so a list nobody touched costs a 304 and no rebuild.
  */
 export function loadFilters(force = false): Promise<FilterStatus> {
   loading ??= run(force).finally(() => {
@@ -852,27 +859,39 @@ async function run(force: boolean): Promise<FilterStatus> {
   }
   if (texts.size > 0 && !force) build(texts, meta)
 
+  const startup = !startupRefreshDone
+  startupRefreshDone = true
+
   const refresh = FILTER_LISTS.filter(
     (list) =>
-      force || !texts.has(list.id) || !meta[list.id] || now - meta[list.id].updated > REFRESH_AFTER
+      force ||
+      startup ||
+      !texts.has(list.id) ||
+      !meta[list.id] ||
+      now - meta[list.id].updated > REFRESH_AFTER
   )
   if (refresh.length === 0) return lastStatus
 
   // Phase two: bring the stale ones up to date. Awaited only when forced.
   const update = (async () => {
     let changed = false
+    let fetched = false
     for (const list of refresh) {
       const text = await download(list)
-      if (text !== null) {
+      if (text === null) continue
+      fetched = true
+      // A list that came back byte for byte the same is still up to date; it
+      // is not worth rebuilding a hundred thousand rules to learn that.
+      if (text !== texts.get(list.id)) {
         texts.set(list.id, text)
-        meta[list.id] = { updated: Date.now(), bytes: text.length }
         changed = true
       }
+      meta[list.id] = { updated: Date.now(), bytes: text.length }
     }
-    if (changed) {
-      build(texts, meta)
-      writeMeta(meta)
-    }
+    // A forced refresh rebuilds regardless: it skipped phase one, and its
+    // caller is waiting to be told what the engine now holds.
+    if (changed || (force && fetched)) build(texts, meta)
+    if (fetched) writeMeta(meta)
     return lastStatus
   })()
 

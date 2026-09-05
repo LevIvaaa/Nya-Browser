@@ -124,7 +124,9 @@ class Tab {
   }
 
   get sleeping() {
-    return this.view === null && this.hasContent
+    // Our own pages are drawn by the chrome renderer and never own a view, so
+    // "no view" does not mean the tab was put to sleep.
+    return this.internal === null && this.view === null && this.hasContent
   }
 
   get wc() {
@@ -1098,6 +1100,21 @@ export class BrowserWindow {
     tab.htmlFullscreen = false
   }
 
+  /**
+   * Turns one of the browser's own pages back into an ordinary tab. Internal
+   * pages are painted by the chrome renderer and hold no view, so navigating
+   * away from one has to build the view the site will land in — otherwise the
+   * tab keeps showing settings while it believes it is loading a page.
+   */
+  private leaveInternal(tab: Tab) {
+    if (!tab.internal) return
+    tab.internal = null
+    if (tab.ensureView(this.wire) && tab.view) {
+      this.win.contentView.addChildView(tab.view)
+      this.raiseOverlay()
+    }
+  }
+
   private wake(tab: Tab) {
     if (!tab.sleeping) return
     if (tab.ensureView(this.wire) && tab.view) {
@@ -1208,6 +1225,7 @@ export class BrowserWindow {
     if (!tab) return
     const url = normalizeInput(input, settings.get())
     if (url === START_URL) return this.goHome(id)
+    this.leaveInternal(tab)
     this.wake(tab)
     tab.load(url)
     this.showActive()
@@ -1258,6 +1276,7 @@ export class BrowserWindow {
     if (homepage) return this.navigate(homepage, id)
 
     tab.destroy(this.win)
+    tab.internal = null
     tab.hasContent = false
     tab.url = START_URL
     tab.title = t('Новая вкладка')
