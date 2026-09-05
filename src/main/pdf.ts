@@ -221,8 +221,8 @@ function viewerPage(src: string): string {
     fitWidth: t('По ширине'),
     fitPage: t('Страница целиком'),
     rotate: t('Повернуть'),
-    download: t('Скачать'),
-    print: t('Печать'),
+    download: t('Загрузить'),
+    print: t('Печать страницы'),
     previous: t('Предыдущая страница'),
     next: t('Следующая страница')
   }
