@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import type {
   AppInfo,
   AvatarCrop,
+  InstalledApp,
   DefaultBrowserState,
   FilterStatus,
   InstalledExtension,
@@ -33,6 +34,7 @@ import {
   Globe,
   Grid,
   Image,
+  Install,
   Key,
   Keyboard,
   LayoutHidden,
@@ -192,6 +194,7 @@ export default function SettingsPage({
   const [extensions, setExtensions] = useState<InstalledExtension[] | null>(null)
   const [update, setUpdate] = useState<UpdateState | null>(null)
   const [drm, setDrm] = useState<(WidevineState & { needsRestart: boolean }) | null>(null)
+  const [installedApps, setInstalledApps] = useState<InstalledApp[]>([])
 
   useEffect(() => {
     void window.browser.appInfo().then(setInfo)
@@ -209,6 +212,7 @@ export default function SettingsPage({
       void window.browser.importSources().then(setSources)
       void window.browser.extensions().then(setExtensions)
       void window.browser.drmState().then(setDrm)
+      void window.browser.installedApps().then(setInstalledApps)
     }
     if (tab === 'privacy') void window.browser.filterStatus().then(setFilters)
   }, [tab])
@@ -1083,6 +1087,37 @@ export default function SettingsPage({
           {/* -------------------------------------------------------- system */}
           {tab === 'system' && (
             <>
+              <Section
+                title={t('Установленные приложения')}
+                icon={<Install width={15} height={15} />}
+                description={t('Сайты, установленные как приложения, со своим окном и ярлыком')}
+              >
+                {installedApps.length === 0 ? (
+                  <Row
+                    title={t('Пока ничего не установлено')}
+                    hint={t('Когда сайт можно установить, в адресной строке появится значок')}
+                  >
+                    <span />
+                  </Row>
+                ) : (
+                  installedApps.map((item) => (
+                    <Row key={item.id} title={item.name} hint={item.startUrl}>
+                      <div className="flex items-center gap-2">
+                        <button className="btn" onClick={() => void window.browser.openApp(item.id)}>
+                          {t('Открыть')}
+                        </button>
+                        <button
+                          className="btn"
+                          onClick={async () => setInstalledApps(await window.browser.removeApp(item.id))}
+                        >
+                          {t('Удалить')}
+                        </button>
+                      </div>
+                    </Row>
+                  ))
+                )}
+              </Section>
+
               <Section
                 title={t('Обновления')}
                 icon={<Refresh width={15} height={15} />}

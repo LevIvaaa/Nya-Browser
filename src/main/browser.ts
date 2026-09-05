@@ -24,6 +24,7 @@ import { attachLog } from './log'
 import { looksLikePdf, pdfSource, pdfViewerUrl } from './pdf'
 import { WALLPAPER_EXTENSIONS, registerProtocols } from './protocol'
 import { sites } from './sites'
+import { apps, inScope, readManifest } from './apps'
 import { groupContextMenu, pageContextMenu, tabContextMenu, uiContextMenu } from './menus'
 import { acceptLanguages, t } from './i18n'
 import {
@@ -45,8 +46,10 @@ import type {
   InternalPage,
   PermissionRequest,
   Profile,
+  InstalledApp,
   SiteInfo,
   SiteRules,
+  WebAppCandidate,
   Suggestion,
   TabGroup,
   TabState,
@@ -343,11 +346,20 @@ export class BrowserWindow {
    * writes for itself — history, the icon cache, the saved session — skips it.
    */
   readonly incognito: boolean
+  /**
+   * Set when this window is one installed app rather than the browser: no tab
+   * strip, no address bar, and a link that leaves the app's scope opens in a
+   * real browser window instead of quietly turning the app into one.
+   */
+  readonly appMode: InstalledApp | null
+  /** the app a page could be installed as, for the toolbar to offer */
+  private candidate: WebAppCandidate | null = null
   /** window was windowed when a page went HTML-fullscreen; restore on leave */
   private windowedBeforeHtmlFullscreen = false
 
-  constructor(incognito = false) {
+  constructor(incognito = false, appMode: InstalledApp | null = null) {
     this.incognito = incognito
+    this.appMode = appMode
     const saved = this.readBounds()
     const offset = BrowserWindow.open++ * 32
     this.offsetFromFirst = offset > 0
@@ -598,7 +610,8 @@ export class BrowserWindow {
     this.send('state:closed', [])
     // The saved session belongs to the browser, not to every window of it: a
     // second window starts empty rather than cloning the first.
-    if (this.incognito || this.offsetFromFirst || !this.restoreSession()) this.newTab()
+    if (this.appMode) this.newTab(this.appMode.startUrl)
+    else if (this.incognito || this.offsetFromFirst || !this.restoreSession()) this.newTab()
     this.broadcast()
   }
 
@@ -794,7 +807,10 @@ export class BrowserWindow {
       fullscreen: this.win.isFullScreen(),
       focused: this.win.isFocused(),
       platform: process.platform,
-      incognito: this.incognito
+      incognito: this.incognito,
+      app: this.appMode
+        ? { id: this.appMode.id, name: this.appMode.name, themeColor: this.appMode.themeColor }
+        : null
     }
     this.send('state:window', state)
   }
@@ -859,6 +875,9 @@ export class BrowserWindow {
       cosmeticSeen.delete(wc.id)
       tab.progress = 0.25
       this.broadcast()
+    })
+    wc.on('did-finish-load', () => {
+      if (tab.id === this.activeId) void this.lookForApp(tab)
     })
     wc.on('dom-ready', () => {
       void this.applyCosmetic(wc)
@@ -954,6 +973,13 @@ export class BrowserWindow {
     // hand us a blank document, so the tab goes to the viewer instead and the
     // address bar keeps saying the document.
     wc.on('will-navigate', (event, url) => {
+      // An app window is the app. A link that leaves its scope opens in a
+      // real browser window rather than quietly turning the app into one.
+      if (this.appMode && !inScope(this.appMode, url)) {
+        event.preventDefault()
+        void shell.openExternal(url).catch(() => undefined)
+        return
+      }
       if (!looksLikePdf(url)) return
       event.preventDefault()
       tab.load(url)
@@ -967,6 +993,10 @@ export class BrowserWindow {
     })
 
     wc.setWindowOpenHandler(({ url, disposition }) => {
+      if (this.appMode && /^https?:/i.test(url) && !inScope(this.appMode, url)) {
+        void shell.openExternal(url).catch(() => undefined)
+        return { action: 'deny' }
+      }
       if (!/^https?:/i.test(url)) {
         if (/^(mailto|tel):/i.test(url)) void shell.openExternal(url)
         return { action: 'deny' }
@@ -1447,6 +1477,57 @@ export class BrowserWindow {
     if (!tab) return
     if (tab.sleeping) return this.switchTab(id)
     tab.wc?.reload()
+  }
+
+  /* --------------------------------------------------------------- apps */
+
+  /**
+   * Asks the page where its manifest is, and reads it. Only the page knows —
+   * the link is in its head — but only this process should fetch it, so the
+   * page is asked for an address and nothing more.
+   */
+  private async lookForApp(tab: Tab) {
+    this.candidate = null
+    const wc = tab.wc
+    if (this.appMode || this.incognito || !wc || wc.isDestroyed()) return this.sendApp()
+    if (!/^https?:/i.test(tab.url)) return this.sendApp()
+    let manifestUrl = ''
+    try {
+      manifestUrl = String(
+        await wc.executeJavaScript(
+          `(() => { const l = document.querySelector('link[rel~="manifest"]'); return l ? l.href : '' })()`,
+          false
+        )
+      )
+    } catch {
+      return this.sendApp()
+    }
+    if (!manifestUrl) return this.sendApp()
+    const found = await readManifest(this.ses, tab.url, manifestUrl)
+    // The page may have moved on while the manifest was being fetched.
+    if (this.getActive()?.id !== tab.id) return
+    this.candidate = found && !apps.has(found.id) ? found : null
+    this.sendApp()
+  }
+
+  private sendApp() {
+    this.send('state:app-candidate', this.candidate)
+  }
+
+  installable(): WebAppCandidate | null {
+    return this.candidate
+  }
+
+  /** Installs what the toolbar is currently offering. */
+  async installApp(): Promise<InstalledApp | null> {
+    if (!this.candidate) return null
+    const record = await apps.install(this.candidate, this.ses)
+    if (record) {
+      this.candidate = null
+      this.sendApp()
+      this.send('toast', t('{name} установлено', { name: record.name }))
+    }
+    return record
   }
 
   /* ---------------------------------------------------------- one site */

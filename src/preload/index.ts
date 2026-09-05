@@ -18,10 +18,12 @@ import type {
   SecurityStats,
   Settings,
   Suggestion,
+  InstalledApp,
   SiteInfo,
   SiteRules,
   TabGroup,
   TabState,
+  WebAppCandidate,
   Weather,
   WindowState
 } from '../shared/types'
@@ -148,6 +150,15 @@ const api = {
   setLayout: (rect: ContentLayout) => ipcRenderer.invoke('ui:layout', rect),
   setOverlay: (mode: string | null) => ipcRenderer.invoke('ui:overlay', mode),
   openChromePage: (page: string) => ipcRenderer.invoke('ui:page', page),
+
+  /* ---- installed apps ---- */
+  appCandidate: (): Promise<WebAppCandidate | null> => ipcRenderer.invoke('apps:candidate'),
+  installApp: (): Promise<InstalledApp | null> => ipcRenderer.invoke('apps:install'),
+  installedApps: (): Promise<InstalledApp[]> => ipcRenderer.invoke('apps:list'),
+  removeApp: (id: string): Promise<InstalledApp[]> => ipcRenderer.invoke('apps:remove', id),
+  openApp: (id: string): Promise<boolean> => ipcRenderer.invoke('apps:open', id),
+  onAppCandidate: (cb: (found: WebAppCandidate | null) => void) =>
+    on<WebAppCandidate | null>('state:app-candidate', cb),
 
   /* ---- one site ---- */
   siteInfo: (): Promise<SiteInfo | null> => ipcRenderer.invoke('site:info'),

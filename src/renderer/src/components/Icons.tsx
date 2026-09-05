@@ -200,6 +200,14 @@ export const Grid = (p: P) => (
     <rect x="13.5" y="13.5" width="7" height="7" rx="2" />
   </svg>
 )
+/** A window with an arrow into it: install this site as an app. */
+export const Install = (p: P) => (
+  <svg {...svg(p, 1.6)}>
+    <rect x="3" y="4" width="18" height="16" rx="3" />
+    <path d="M3 8.5h18" />
+    <path d="M12 11v5m0 0l-2.2-2.2M12 16l2.2-2.2" />
+  </svg>
+)
 /** A drawing pin, for a tab that is kept. */
 export const Pin = (p: P) => (
   <svg {...svg(p, 1.6)}>

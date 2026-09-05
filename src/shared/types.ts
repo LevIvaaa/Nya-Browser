@@ -81,6 +81,27 @@ export interface SiteRules {
   blocking?: 'off'
 }
 
+/**
+ * A site that says it is an app: what its manifest claims, before anything is
+ * installed. `icon` is still a URL here — it becomes a file on install.
+ */
+export interface WebAppCandidate {
+  id: string
+  name: string
+  startUrl: string
+  scope: string
+  icon: string
+  themeColor: string
+  backgroundColor: string
+}
+
+/** One installed app, with the icon written to disk and the time it arrived. */
+export interface InstalledApp extends Omit<WebAppCandidate, 'icon'> {
+  /** path to the .ico the shortcuts point at */
+  icon: string
+  installed: number
+}
+
 /** What the padlock panel shows about the page in front of you. */
 export interface SiteInfo {
   host: string
@@ -360,6 +381,8 @@ export interface WindowState {
   platform: NodeJS.Platform
   /** a private window: nothing about this session reaches the disk */
   incognito: boolean
+  /** set when the window is one installed app rather than the browser */
+  app: { id: string; name: string; themeColor: string } | null
 }
 
 /**

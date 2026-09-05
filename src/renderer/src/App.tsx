@@ -24,7 +24,7 @@ type Overlay = 'menu' | 'profiles' | 'update' | null
 export default function App() {
   const state = useBrowser()
   const {
-    tabs, groups, active, settings, engines, engine, profiles, profile, bookmarks, bookmarked,
+    tabs, groups, appCandidate, active, settings, engines, engine, profiles, profile, bookmarks, bookmarked,
     downloads, activeDownloads, closed, stats, win, permission, autofill, savePassword,
     edge, toasts, patch, refreshBookmarks, setPermission, setAutofill, setSavePassword
   } = state
@@ -270,7 +270,10 @@ export default function App() {
     return <div className="h-full w-full" style={{ background: 'var(--bg)' }} />
   }
 
-  const vertical = settings.tabPosition !== 'top'
+  // An installed app is one page in a window of its own. A tab strip with a
+  // single tab in it, and a rail beside it, would be furniture.
+  const appWindow = win.app !== null
+  const vertical = !appWindow && settings.tabPosition !== 'top'
   const pinnedBookmarks = bookmarks.filter((item) => item.pinned)
 
   return (
@@ -301,6 +304,9 @@ export default function App() {
                 downloadCount={activeDownloads}
                 incognito={win.incognito}
                 update={update}
+                appMode={win.app}
+                appCandidate={appCandidate}
+                onInstallApp={() => void window.browser.installApp()}
                 view={overlay ?? view}
                 onOpenAddress={openPalette}
                 onToggleView={(target) => {
@@ -313,7 +319,7 @@ export default function App() {
               />
             </div>
 
-            {!vertical && <TabStrip tabs={tabs} groups={groups} settings={settings} />}
+            {!vertical && !appWindow && <TabStrip tabs={tabs} groups={groups} settings={settings} />}
             {pinnedBookmarks.length > 0 && (
               <BookmarksBar items={pinnedBookmarks} onManage={() => toggleView('bookmarks')} />
             )}
