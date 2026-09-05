@@ -18,7 +18,7 @@
 // capturing a second page in the same process wedges the compositor.
 
 const electron = require('electron')
-const { readFileSync, writeFileSync, mkdirSync, rmSync } = require('fs')
+const { readFileSync, readdirSync, writeFileSync, mkdirSync, rmSync } = require('fs')
 const { join, resolve } = require('path')
 
 const root = resolve(__dirname, '..')
@@ -37,9 +37,41 @@ const SCALE = process.env.NYA_ART_SCALE ? Number(process.env.NYA_ART_SCALE) : 2
 
 const version = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version
 
+/**
+ * Turns build/installer-strings/<code>.json into the INI files the installer
+ * reads at run time. GetPrivateProfileString only understands Unicode when the
+ * file is UTF-16LE with a BOM, which is the whole reason this is generated
+ * rather than checked in as JSON the script could not parse anyway.
+ */
+function buildStrings(outDir) {
+  const from = join(root, 'build', 'installer-strings')
+  const files = readdirSync(from).filter((name) => name.endsWith('.json'))
+  mkdirSync(outDir, { recursive: true })
+  for (const file of files) {
+    const strings = JSON.parse(readFileSync(join(from, file), 'utf8'))
+    const body =
+      '[strings]\r\n' +
+      Object.entries(strings)
+        .map(([key, value]) => `${key}=${String(value).replace(/[\r\n]+/g, ' ')}`)
+        .join('\r\n') +
+      '\r\n'
+    writeFileSync(join(outDir, `lang-${file.replace(/\.json$/, '')}.ini`), '﻿' + body, 'utf16le')
+  }
+  console.log(`${files.length} installer string files`)
+}
+
+/**
+ * The pill widths the language strip is baked at, in design pixels of label
+ * room. The pill is artwork, so it cannot stretch at run time; the installer
+ * measures the language name and blits the narrowest strip that holds it,
+ * which is how the pill ends up hugging "ไทย" and "Português (Portugal)"
+ * alike. The same ladder is spelled out in build/installer.nsh.
+ */
+const PILL_WIDTHS = [30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140]
+
 /** The artboards to bake, the names NSIS knows them by, and their checkboxes. */
 const PAGES = [
-  { file: 'Main', name: 'welcome', boxes: ['box-desktop', 'box-default'] },
+  { file: 'Main', name: 'welcome', boxes: ['box-desktop', 'box-default'], pills: 'lang-strip' },
   { file: 'Installing', name: 'installing' },
   { file: 'Updating', name: 'updating' },
   { file: 'Installed', name: 'installed' },
@@ -105,6 +137,7 @@ if (!process.versions.electron) {
   ]
   writeFileSync(join(root, 'build', 'art-layout.nsh'), header.concat(layout).join('\n') + '\n')
   console.log('art-layout.nsh written')
+  buildStrings(outDir)
   process.exit(0)
 }
 
@@ -222,6 +255,7 @@ app.whenReady().then(async () => {
     defines.push(`!define ${name}_W ${Math.round(rect.width)}`)
     defines.push(`!define ${name}_H ${Math.round(rect.height)}`)
   }
+  if (page.pills) defines.push(`!define ${prefix}_LANG_PILLS "${PILL_WIDTHS.join(' ')}"`)
   writeFileSync(join(outDir, `.layout-${page.name}.nsh`), defines.join('\n'))
 
   if (page.boxes) {
@@ -230,6 +264,18 @@ app.whenReady().then(async () => {
       for (const box of page.boxes) {
         cropBmp(image, rects[box], join(outDir, `${page.name}-${box}-${state}.bmp`))
       }
+    }
+  }
+
+  // One strip per pill width. Each is the whole patch of artwork the pill sits
+  // on, so blitting it both draws the new pill and wipes the old one.
+  if (page.pills) {
+    for (const width of PILL_WIDTHS) {
+      const image = await shoot(
+        window,
+        `${HIDE_CSS} [data-nsis="lang"] { min-width: ${width}px !important; }`
+      )
+      cropBmp(image, rects[page.pills], join(outDir, `${page.name}-lang-${width}.bmp`))
     }
   }
 

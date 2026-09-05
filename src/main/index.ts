@@ -1,8 +1,7 @@
 import { t } from './i18n'
 import { app, dialog, ipcMain, Menu, nativeTheme, session, shell, type MenuItemConstructorOptions } from 'electron'
 import { join } from 'path'
-import { existsSync } from 'fs'
-import { execFileSync } from 'child_process'
+import { execFile, execFileSync } from 'child_process'
 import { BrowserWindow } from './browser'
 import { settings } from './settings'
 import { history } from './history'
@@ -43,6 +42,42 @@ import type { AppInfo, Settings } from '../shared/types'
 /* ------------------------------------------------------------------------- */
 /* Startup switches — read before app.whenReady() and fixed for the session.  */
 /* ------------------------------------------------------------------------- */
+const LANGUAGE_HANDOFF_KEY = 'HKCU\\Software\\Nya Browser'
+
+/**
+ * The registry value the installer and the browser hand the language through.
+ * `raw` is what is there verbatim (null when nothing is); `picked` is what it
+ * means for the setting: a known code, '' for the explicit "system", null when
+ * there is nothing usable.
+ */
+function readLanguageHandoff(): { raw: string | null; picked: string | null } {
+  try {
+    const out = execFileSync('reg', ['query', LANGUAGE_HANDOFF_KEY, '/v', 'language'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    })
+    const match = /language\s+REG_SZ\s+(\S+)/.exec(out)
+    if (!match) return { raw: null, picked: null }
+    const raw = match[1]
+    if (raw === 'system') return { raw, picked: '' }
+    return { raw, picked: isKnownLanguage(raw) ? raw : null }
+  } catch {
+    return { raw: null, picked: null }
+  }
+}
+
+/** Mirrors the browser's language for the installer; '' travels as "system". */
+function writeLanguageHandoff(code: string) {
+  if (process.platform !== 'win32') return
+  execFile(
+    'reg',
+    ['add', LANGUAGE_HANDOFF_KEY, '/v', 'language', '/t', 'REG_SZ', '/d', code || 'system', '/f'],
+    () => {
+      /* the registry is a courtesy to the installer, never a failure */
+    }
+  )
+}
+
 function applyStartupSwitches() {
   const s = settings.get()
 
@@ -139,22 +174,20 @@ if (!app.requestSingleInstanceLock()) {
   app.enableSandbox()
 
   profiles.load()
-  const firstRun = !existsSync(join(profiles.dir(), 'settings.json'))
   settings.load(profiles.dir())
-  // The installer's language pill writes one registry value; the first run is
-  // the one moment it matters. After that the setting owns the choice.
-  if (firstRun && process.platform === 'win32') {
-    try {
-      const raw = execFileSync(
-        'reg',
-        ['query', 'HKCU\\Software\\Nya Browser', '/v', 'language'],
-        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
-      )
-      const match = /language\s+REG_SZ\s+(\S+)/.exec(raw)
-      if (match && isKnownLanguage(match[1])) settings.patch({ language: match[1] })
-    } catch {
-      /* no value — the system locale decides */
+  // The installer and the browser share one registry value for the language.
+  // The installer writes what its pill picked; the browser applies anything
+  // that differs from its own setting — a reinstall with a new pick has to
+  // land even when settings.json already exists — and then mirrors its
+  // language back, so the next installer opens its pill on the language the
+  // browser really speaks and the uninstaller can talk in it too.
+  if (process.platform === 'win32') {
+    const handoff = readLanguageHandoff()
+    if (handoff.picked !== null && handoff.picked !== settings.get().language) {
+      settings.patch({ language: handoff.picked })
     }
+    const mirror = settings.get().language || 'system'
+    if (handoff.raw !== mirror) writeLanguageHandoff(mirror)
   }
   applyStartupSwitches()
   installExitHooks()
@@ -388,6 +421,7 @@ function registerIpc() {
       }
       const anyWin = [...windows][0]
       if (anyWin) buildMenu(anyWin)
+      writeLanguageHandoff(next.language)
     }
     applyEverywhere()
     if (next.filterLists && !engine.ready) void loadFilters()

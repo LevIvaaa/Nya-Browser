@@ -29,9 +29,18 @@
 ; ---------------------------------------------------------------------------
 
 !include "LogicLib.nsh"
+!include "WordFunc.nsh"
 !include "WinMessages.nsh"
 !include "nsDialogs.nsh"
 !include "${BUILD_RESOURCES_DIR}\art-layout.nsh"
+!include "${BUILD_RESOURCES_DIR}\installer-langs.nsh"
+
+; The version goes into a sentence whose shape the language decides.
+!ifndef BUILD_UNINSTALLER
+  !insertmacro WordReplace
+!else
+  !insertmacro un.WordReplace
+!endif
 
 ; Without this Windows treats the installer as a program from before high-DPI
 ; displays and scales the whole window as an image: the artwork, rendered at 2×
@@ -41,6 +50,9 @@ ManifestDPIAware true
 ; ---- the few colours still mixed at run time, from the browser's dark theme
 !define NYA_BG      "0C0D12"
 !define NYA_DIM     "9B9CA0"
+!define NYA_TEXT    "F2F3F7"
+!define NYA_FAINT   "6C6D72"
+!define NYA_WHITE   "FFFFFF"
 
 ; The accent and the progress track as COLORREF (0x00BBGGRR), which is what
 ; the progress bar messages want.
@@ -50,6 +62,7 @@ ManifestDPIAware true
 !define /ifndef PBM_SETBARCOLOR 0x0409
 !define /ifndef PBM_SETBKCOLOR  0x2001
 !define /ifndef STM_SETIMAGE    0x0172
+!define /ifndef STM_GETIMAGE    0x0173
 !define /ifndef PBM_SETMARQUEE  0x040A
 
 ; WS_CHILD|WS_VISIBLE plus, in turn: SS_NOPREFIX for a plain label, the same
@@ -60,6 +73,10 @@ ManifestDPIAware true
 !define NYA_LABEL   0x50000080
 !define NYA_PATH    0x50008080
 !define NYA_HIT     0x5000010D   ; SS_OWNERDRAW|SS_NOTIFY: unpainted, clickable
+!define NYA_TXT_L   0x50000080   ; a line of live text, left-aligned
+!define NYA_TXT_C   0x50000081   ; the same, centred in its box
+!define NYA_TXT_LV  0x50000280   ; left, and centred on the box's own height
+!define NYA_TXT_CV  0x50000281   ; centred both ways — button captions
 !define NYA_IMAGE   0x5000004E
 !define NYA_ART     0x5000004E
 
@@ -69,6 +86,14 @@ Var nyaW              ; client size, already scaled
 Var nyaH
 Var nyaFontPath
 Var nyaFontSmall
+Var nyaFontBody       ; 13.5 px body copy
+Var nyaFontBtn        ; 15 px medium — button captions
+Var nyaFontBtnSm      ; 12.5 px medium — the small secondary button
+Var nyaFontH20        ; the progress headings
+Var nyaFontH22
+Var nyaFontH24
+Var nyaFontH26
+Var nyaLangIni        ; the string file the chosen language reads from
 Var nyaDialog
 Var nyaArt            ; where the bitmaps live for this half of the script
 
@@ -77,8 +102,18 @@ Var nyaProgressDone
 Var nyaPathLabel
 Var nyaBoxDesktop
 Var nyaBoxDefault
+Var nyaSysCode        ; language code Windows itself is set to
 Var nyaLang           ; browser language code chosen in the pill; "" = system
+Var nyaTagline        ; the welcome page's live text, re-set on every pick
+Var nyaInstallLabel
+Var nyaPathTitle
+Var nyaBrowseLabel
+Var nyaDesktopLabel
+Var nyaDefaultLabel
+Var nyaVersionLabel
 Var nyaLangLabel      ; the pill's STATIC with the language name
+Var nyaLangStrip      ; the patch of artwork the pill is drawn on
+Var nyaLangHit        ; its click zone, which grows with the pill
 Var nyaDesktop        ; "1"/"0", empty when the welcome page never ran
 Var nyaDefault
 Var nyaOldVersion
@@ -158,6 +193,34 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
 ; whatever lies beneath, and nsDialogs::OnClick only fires for controls
 ; nsDialogs itself created — so the control is made through the plugin, not
 ; CreateWindowEx. Every page with a clickable spot is an nsDialogs page.
+; A line of text the artwork no longer carries. The design measured the box;
+; the language decides what goes in it, which is the whole reason these are
+; controls and not pixels.
+!macro NyaText OUT PARENT STYLE X Y W H FONT COLOUR
+  ${control} ${OUT} ${PARENT} ${STYLE} ${X} ${Y} ${W} ${H} ""
+  SendMessage ${OUT} ${WM_SETFONT} ${FONT} 1
+  SetCtlColors ${OUT} ${COLOUR} transparent
+!macroend
+!define text "!insertmacro NyaText"
+
+; Reads one string for the language in force. A missing key leaves the
+; variable empty rather than failing the install.
+!macro NyaStr OUT KEY
+  ClearErrors
+  ReadINIStr ${OUT} "$nyaLangIni" "strings" "${KEY}"
+  ${If} ${Errors}
+    StrCpy ${OUT} ""
+  ${EndIf}
+!macroend
+!define str "!insertmacro NyaStr"
+
+; Sets a label from the string file in one line.
+!macro NyaSetStr HWND KEY
+  ${str} $R7 "${KEY}"
+  SendMessage ${HWND} ${WM_SETTEXT} 0 "STR:$R7"
+!macroend
+!define setstr "!insertmacro NyaSetStr"
+
 !macro NyaHit PARENT RECT CALLBACK
   ${px} $0 ${${RECT}_X}
   ${px} $1 ${${RECT}_Y}
@@ -168,6 +231,15 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
   ${NSD_OnClick} $R1 ${CALLBACK}
 !macroend
 !define hit "!insertmacro NyaHit"
+
+; One rung of the pill ladder: the first baked width that holds the name wins.
+; $R6 is the name's width in device pixels, $R7 the width chosen so far.
+!macro NyaPillPick W
+  ${If} $R7 == ""
+    ${px} $R8 ${W}
+    ${IfThen} $R6 <= $R8 ${|} StrCpy $R7 ${W} ${|}
+  ${EndIf}
+!macroend
 
 !macro NyaCheckbox OUT PARENT RECT FILE
   ${control} ${OUT} ${PARENT} ${NYA_IMAGE} ${${RECT}_X} ${${RECT}_Y} ${${RECT}_W} ${${RECT}_H} ""
@@ -209,6 +281,14 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
   ; and 11px of the design, in points.
   CreateFont $nyaFontPath "Segoe UI" 9 400
   CreateFont $nyaFontSmall "Segoe UI" 8 400
+  ; The design is drawn in CSS pixels; a point is three quarters of one.
+  CreateFont $nyaFontBody "Segoe UI" 10 400
+  CreateFont $nyaFontBtn "Segoe UI" 11 500
+  CreateFont $nyaFontBtnSm "Segoe UI" 9 500
+  CreateFont $nyaFontH20 "Segoe UI" 15 600
+  CreateFont $nyaFontH22 "Segoe UI" 17 600
+  CreateFont $nyaFontH24 "Segoe UI" 18 600
+  CreateFont $nyaFontH26 "Segoe UI" 20 600
 
   ${px} $nyaW 640
   ${px} $nyaH 400
@@ -389,17 +469,48 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
     ${checkbox} $nyaBoxDefault $nyaDialog ART_WELCOME_BOX_DEFAULT \
       "welcome-box-default-on.bmp"
 
-    ; The language pill. The label is a native STATIC over the baked pill so
-    ; its text can change; the click zone covers the whole pill.
+    ; Everything the design used to have baked in. The artwork keeps the
+    ; layout; these carry the words, so the page can speak any language.
+    ${text} $nyaTagline $nyaDialog ${NYA_TXT_C}       0 ${ART_WELCOME_TAGLINE_Y} 640 ${ART_WELCOME_TAGLINE_H}       $nyaFontBody ${NYA_DIM}
+    ${text} $nyaInstallLabel $nyaDialog ${NYA_TXT_CV}       ${ART_WELCOME_INSTALL_X} ${ART_WELCOME_INSTALL_Y}       ${ART_WELCOME_INSTALL_W} ${ART_WELCOME_INSTALL_H} $nyaFontBtn ${NYA_WHITE}
+    ${text} $nyaPathTitle $nyaDialog ${NYA_TXT_L}       ${ART_WELCOME_PATH_LABEL_X} ${ART_WELCOME_PATH_LABEL_Y}       300 ${ART_WELCOME_PATH_LABEL_H} $nyaFontSmall ${NYA_FAINT}
+    ${text} $nyaBrowseLabel $nyaDialog ${NYA_TXT_CV}       ${ART_WELCOME_BROWSE_X} ${ART_WELCOME_BROWSE_Y}       ${ART_WELCOME_BROWSE_W} ${ART_WELCOME_BROWSE_H} $nyaFontBtnSm ${NYA_TEXT}
+    ${text} $nyaDesktopLabel $nyaDialog ${NYA_TXT_LV}       ${ART_WELCOME_LABEL_DESKTOP_X} ${ART_WELCOME_LABEL_DESKTOP_Y}       ${ART_WELCOME_LABEL_DESKTOP_W} ${ART_WELCOME_LABEL_DESKTOP_H}       $nyaFontPath ${NYA_DIM}
+    ${text} $nyaDefaultLabel $nyaDialog ${NYA_TXT_LV}       ${ART_WELCOME_LABEL_DEFAULT_X} ${ART_WELCOME_LABEL_DEFAULT_Y}       ${ART_WELCOME_LABEL_DEFAULT_W} ${ART_WELCOME_LABEL_DEFAULT_H}       $nyaFontPath ${NYA_DIM}
+    ${text} $nyaVersionLabel $nyaDialog ${NYA_TXT_L}       ${ART_WELCOME_VERSION_LINE_X} ${ART_WELCOME_VERSION_LINE_Y}       400 ${ART_WELCOME_VERSION_LINE_H} $nyaFontSmall ${NYA_FAINT}
+
+    ; The language pill: a patch of artwork with the pill drawn on it, a
+    ; native STATIC for the name, and a click zone over the two. All three are
+    ; resized together by nyaLangFit, which is what makes the pill fit its
+    ; text instead of standing in a box sized for the longest name.
     StrCpy $nyaLang ""
-    Call nyaSystemLangName
-    Pop $R0
-    ${control} $nyaLangLabel $nyaDialog ${NYA_PATH} \
+    ${control} $nyaLangStrip $nyaDialog ${NYA_IMAGE} \
+      ${ART_WELCOME_LANG_STRIP_X} ${ART_WELCOME_LANG_STRIP_Y} \
+      ${ART_WELCOME_LANG_STRIP_W} ${ART_WELCOME_LANG_STRIP_H} ""
+    ${control} $nyaLangLabel $nyaDialog ${NYA_LABEL} \
       ${ART_WELCOME_LANG_X} ${ART_WELCOME_LANG_Y} \
-      ${ART_WELCOME_LANG_W} ${ART_WELCOME_LANG_H} "$R0"
+      ${ART_WELCOME_LANG_W} ${ART_WELCOME_LANG_H} ""
     SendMessage $nyaLangLabel ${WM_SETFONT} $nyaFontSmall 1
     SetCtlColors $nyaLangLabel ${NYA_DIM} transparent
     ${hit} $nyaDialog ART_WELCOME_LANG_HIT nyaLangClicked
+    StrCpy $nyaLangHit $R1
+
+    ; The browser mirrors its language into the same registry value, so a
+    ; second install opens the pill on the language the user is actually
+    ; reading rather than on whatever Windows is set to. Left untouched the
+    ; pill writes nothing back, and that choice survives the reinstall.
+    ReadRegStr $R5 HKCU "Software\Nya Browser" "language"
+    ${If} $R5 == ""
+    ${OrIf} $R5 == "system"
+      Call nyaSystemLangName
+      Pop $R5
+    ${Else}
+      Push $R5
+      Call nyaLangNameOf
+      Pop $R5
+    ${EndIf}
+    Call nyaLangFit
+    Call nyaApplyStrings
 
     ${hit} $nyaDialog ART_WELCOME_INSTALL nyaInstallClicked
     ${hit} $nyaDialog ART_WELCOME_BROWSE nyaBrowseClicked
@@ -410,49 +521,537 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
     nsDialogs::Show
   FunctionEnd
 
+  ; Which string file the installer is reading. An explicit pick wins; with
+  ; none, Windows' own language decides; English is what is left.
+  Function nyaLangIniPath
+    ${If} $nyaLang != ""
+      StrCpy $nyaLangIni "$PLUGINSDIR\lang-$nyaLang.ini"
+    ${Else}
+      StrCpy $nyaLangIni "$PLUGINSDIR\lang-$nyaSysCode.ini"
+    ${EndIf}
+    ${IfNot} ${FileExists} "$nyaLangIni"
+      StrCpy $nyaLangIni "$PLUGINSDIR\lang-en.ini"
+    ${EndIf}
+  FunctionEnd
+
+  ; Fills the welcome page from the string file. Called once when the page is
+  ; built and again after every pick, which is what makes the whole window —
+  ; not just the pill — change language.
+  Function nyaApplyStrings
+    Call nyaLangIniPath
+    ${setstr} $nyaTagline "welcome.tagline"
+    ${setstr} $nyaInstallLabel "welcome.install"
+    ${setstr} $nyaPathTitle "welcome.pathLabel"
+    ${setstr} $nyaBrowseLabel "welcome.browse"
+    ${setstr} $nyaDesktopLabel "welcome.desktop"
+    ${setstr} $nyaDefaultLabel "welcome.default"
+    ${str} $R7 "welcome.version"
+    ${WordReplace} "$R7" "{v}" "${VERSION}" "+" $R7
+    SendMessage $nyaVersionLabel ${WM_SETTEXT} 0 "STR:$R7"
+    ; Transparent labels paint over whatever was there; the page has to be
+    ; repainted underneath or the old language shows through the new one.
+    System::Call 'user32::RedrawWindow(p $nyaDialog, p 0, p 0, i 0x0185)'
+  FunctionEnd
+
+  ; The name of a language code, for the pill to open on whatever language
+  ; the browser is already set to. Anything unknown falls back to the system.
+  Function nyaLangNameOf
+    Exch $R9
+    ${Switch} $R9
+      ${Case} "ru"
+        StrCpy $R9 "Русский"
+        ${Break}
+      ${Case} "en"
+        StrCpy $R9 "English"
+        ${Break}
+      ${Case} "de"
+        StrCpy $R9 "Deutsch"
+        ${Break}
+      ${Case} "fr"
+        StrCpy $R9 "Français"
+        ${Break}
+      ${Case} "es"
+        StrCpy $R9 "Español"
+        ${Break}
+      ${Case} "it"
+        StrCpy $R9 "Italiano"
+        ${Break}
+      ${Case} "pt-BR"
+        StrCpy $R9 "Português (Brasil)"
+        ${Break}
+      ${Case} "pt-PT"
+        StrCpy $R9 "Português (Portugal)"
+        ${Break}
+      ${Case} "pl"
+        StrCpy $R9 "Polski"
+        ${Break}
+      ${Case} "tr"
+        StrCpy $R9 "Türkçe"
+        ${Break}
+      ${Case} "nl"
+        StrCpy $R9 "Nederlands"
+        ${Break}
+      ${Case} "cs"
+        StrCpy $R9 "Čeština"
+        ${Break}
+      ${Case} "sk"
+        StrCpy $R9 "Slovenčina"
+        ${Break}
+      ${Case} "sl"
+        StrCpy $R9 "Slovenščina"
+        ${Break}
+      ${Case} "hr"
+        StrCpy $R9 "Hrvatski"
+        ${Break}
+      ${Case} "sr"
+        StrCpy $R9 "Српски"
+        ${Break}
+      ${Case} "bg"
+        StrCpy $R9 "Български"
+        ${Break}
+      ${Case} "ro"
+        StrCpy $R9 "Română"
+        ${Break}
+      ${Case} "hu"
+        StrCpy $R9 "Magyar"
+        ${Break}
+      ${Case} "el"
+        StrCpy $R9 "Ελληνικά"
+        ${Break}
+      ${Case} "sv"
+        StrCpy $R9 "Svenska"
+        ${Break}
+      ${Case} "no"
+        StrCpy $R9 "Norsk"
+        ${Break}
+      ${Case} "da"
+        StrCpy $R9 "Dansk"
+        ${Break}
+      ${Case} "fi"
+        StrCpy $R9 "Suomi"
+        ${Break}
+      ${Case} "et"
+        StrCpy $R9 "Eesti"
+        ${Break}
+      ${Case} "lv"
+        StrCpy $R9 "Latviešu"
+        ${Break}
+      ${Case} "lt"
+        StrCpy $R9 "Lietuvių"
+        ${Break}
+      ${Case} "be"
+        StrCpy $R9 "Беларуская"
+        ${Break}
+      ${Case} "kk"
+        StrCpy $R9 "Қазақша"
+        ${Break}
+      ${Case} "ky"
+        StrCpy $R9 "Кыргызча"
+        ${Break}
+      ${Case} "uz"
+        StrCpy $R9 "Oʻzbekcha"
+        ${Break}
+      ${Case} "az"
+        StrCpy $R9 "Azərbaycanca"
+        ${Break}
+      ${Case} "ka"
+        StrCpy $R9 "ქართული"
+        ${Break}
+      ${Case} "hy"
+        StrCpy $R9 "Հայերեն"
+        ${Break}
+      ${Case} "he"
+        StrCpy $R9 "עברית"
+        ${Break}
+      ${Case} "ar"
+        StrCpy $R9 "العربية"
+        ${Break}
+      ${Case} "fa"
+        StrCpy $R9 "فارسی"
+        ${Break}
+      ${Case} "hi"
+        StrCpy $R9 "हिन्दी"
+        ${Break}
+      ${Case} "bn"
+        StrCpy $R9 "বাংলা"
+        ${Break}
+      ${Case} "ur"
+        StrCpy $R9 "اردو"
+        ${Break}
+      ${Case} "ta"
+        StrCpy $R9 "தமிழ்"
+        ${Break}
+      ${Case} "te"
+        StrCpy $R9 "తెలుగు"
+        ${Break}
+      ${Case} "mr"
+        StrCpy $R9 "मराठी"
+        ${Break}
+      ${Case} "id"
+        StrCpy $R9 "Bahasa Indonesia"
+        ${Break}
+      ${Case} "ms"
+        StrCpy $R9 "Bahasa Melayu"
+        ${Break}
+      ${Case} "vi"
+        StrCpy $R9 "Tiếng Việt"
+        ${Break}
+      ${Case} "th"
+        StrCpy $R9 "ไทย"
+        ${Break}
+      ${Case} "fil"
+        StrCpy $R9 "Filipino"
+        ${Break}
+      ${Case} "ja"
+        StrCpy $R9 "日本語"
+        ${Break}
+      ${Case} "ko"
+        StrCpy $R9 "한국어"
+        ${Break}
+      ${Case} "zh-CN"
+        StrCpy $R9 "中文（简体）"
+        ${Break}
+      ${Case} "zh-TW"
+        StrCpy $R9 "中文（繁體）"
+        ${Break}
+      ${Case} "sw"
+        StrCpy $R9 "Kiswahili"
+        ${Break}
+      ${Case} "af"
+        StrCpy $R9 "Afrikaans"
+        ${Break}
+      ${Case} "ca"
+        StrCpy $R9 "Català"
+        ${Break}
+      ${Case} "gl"
+        StrCpy $R9 "Galego"
+        ${Break}
+      ${Case} "sq"
+        StrCpy $R9 "Shqip"
+        ${Break}
+      ${Case} "mk"
+        StrCpy $R9 "Македонски"
+        ${Break}
+      ${Case} "bs"
+        StrCpy $R9 "Bosanski"
+        ${Break}
+      ${Case} "is"
+        StrCpy $R9 "Íslenska"
+        ${Break}
+      ${Case} "mn"
+        StrCpy $R9 "Монгол"
+        ${Break}
+      ${Case} "ne"
+        StrCpy $R9 "नेपाली"
+        ${Break}
+      ${Case} "si"
+        StrCpy $R9 "සිංහල"
+        ${Break}
+      ${Case} "km"
+        StrCpy $R9 "ខ្មែរ"
+        ${Break}
+      ${Case} "am"
+        StrCpy $R9 "አማርኛ"
+        ${Break}
+      ${Default}
+        Call nyaSystemLangName
+        Pop $R9
+        ${Break}
+    ${EndSwitch}
+    Exch $R9
+  FunctionEnd
+
   ; What the pill says before anyone touches it: the language the system
   ; already speaks. Only an explicit pick writes anything to the registry.
+  ;
+  ; Windows hands over a full LCID. A handful of languages need the country
+  ; half to choose a dictionary — Brazilian against European Portuguese,
+  ; simplified against traditional Chinese, the three that share one primary
+  ; id in the Balkans — so those are matched whole and everything else is
+  ; matched on the primary language alone.
   Function nyaSystemLangName
+    StrCpy $nyaSysCode "en"
     ${Switch} $LANGUAGE
-      ${Case} 1049
-        Push "Русский"
+      ${Case} 2070
+        StrCpy $nyaSysCode "pt-PT"
+        Push "Português (Portugal)"
         ${Break}
-      ${Case} 1031
-        Push "Deutsch"
+      ${Case} 1028
+        StrCpy $nyaSysCode "zh-TW"
+        Push "中文（繁體）"
         ${Break}
-      ${Case} 1036
-        Push "Français"
+      ${Case} 3076
+        StrCpy $nyaSysCode "zh-TW"
+        Push "中文（繁體）"
         ${Break}
-      ${Case} 1034
-      ${Case} 3082
-        Push "Español"
+      ${Case} 5124
+        StrCpy $nyaSysCode "zh-TW"
+        Push "中文（繁體）"
         ${Break}
-      ${Case} 1040
-        Push "Italiano"
+      ${Case} 1050
+        StrCpy $nyaSysCode "hr"
+        Push "Hrvatski"
         ${Break}
-      ${Case} 1046
-        Push "Português"
+      ${Case} 5146
+        StrCpy $nyaSysCode "bs"
+        Push "Bosanski"
         ${Break}
-      ${Case} 1045
-        Push "Polski"
+      ${Case} 8218
+        StrCpy $nyaSysCode "bs"
+        Push "Bosanski"
         ${Break}
-      ${Case} 1055
-        Push "Türkçe"
+      ${Default}
+        Call nyaPrimaryLangName
         ${Break}
-      ${Case} 1041
-        Push "日本語"
-        ${Break}
-      ${Case} 1042
-        Push "한국어"
-        ${Break}
-      ${Case} 2052
-        Push "中文"
-        ${Break}
-      ${Case} 1025
+    ${EndSwitch}
+  FunctionEnd
+
+  Function nyaPrimaryLangName
+    IntOp $R8 $LANGUAGE & 1023
+    ${Switch} $R8
+      ${Case} 1
+        StrCpy $nyaSysCode "ar"
         Push "العربية"
         ${Break}
-      ${Case} 1081
+      ${Case} 2
+        StrCpy $nyaSysCode "bg"
+        Push "Български"
+        ${Break}
+      ${Case} 3
+        StrCpy $nyaSysCode "ca"
+        Push "Català"
+        ${Break}
+      ${Case} 4
+        StrCpy $nyaSysCode "zh-CN"
+        Push "中文（简体）"
+        ${Break}
+      ${Case} 5
+        StrCpy $nyaSysCode "cs"
+        Push "Čeština"
+        ${Break}
+      ${Case} 6
+        StrCpy $nyaSysCode "da"
+        Push "Dansk"
+        ${Break}
+      ${Case} 7
+        StrCpy $nyaSysCode "de"
+        Push "Deutsch"
+        ${Break}
+      ${Case} 8
+        StrCpy $nyaSysCode "el"
+        Push "Ελληνικά"
+        ${Break}
+      ${Case} 9
+        StrCpy $nyaSysCode "en"
+        Push "English"
+        ${Break}
+      ${Case} 10
+        StrCpy $nyaSysCode "es"
+        Push "Español"
+        ${Break}
+      ${Case} 11
+        StrCpy $nyaSysCode "fi"
+        Push "Suomi"
+        ${Break}
+      ${Case} 12
+        StrCpy $nyaSysCode "fr"
+        Push "Français"
+        ${Break}
+      ${Case} 13
+        StrCpy $nyaSysCode "he"
+        Push "עברית"
+        ${Break}
+      ${Case} 14
+        StrCpy $nyaSysCode "hu"
+        Push "Magyar"
+        ${Break}
+      ${Case} 15
+        StrCpy $nyaSysCode "is"
+        Push "Íslenska"
+        ${Break}
+      ${Case} 16
+        StrCpy $nyaSysCode "it"
+        Push "Italiano"
+        ${Break}
+      ${Case} 17
+        StrCpy $nyaSysCode "ja"
+        Push "日本語"
+        ${Break}
+      ${Case} 18
+        StrCpy $nyaSysCode "ko"
+        Push "한국어"
+        ${Break}
+      ${Case} 19
+        StrCpy $nyaSysCode "nl"
+        Push "Nederlands"
+        ${Break}
+      ${Case} 20
+        StrCpy $nyaSysCode "no"
+        Push "Norsk"
+        ${Break}
+      ${Case} 21
+        StrCpy $nyaSysCode "pl"
+        Push "Polski"
+        ${Break}
+      ${Case} 22
+        StrCpy $nyaSysCode "pt-BR"
+        Push "Português (Brasil)"
+        ${Break}
+      ${Case} 24
+        StrCpy $nyaSysCode "ro"
+        Push "Română"
+        ${Break}
+      ${Case} 25
+        StrCpy $nyaSysCode "ru"
+        Push "Русский"
+        ${Break}
+      ${Case} 26
+        StrCpy $nyaSysCode "sr"
+        Push "Српски"
+        ${Break}
+      ${Case} 27
+        StrCpy $nyaSysCode "sk"
+        Push "Slovenčina"
+        ${Break}
+      ${Case} 28
+        StrCpy $nyaSysCode "sq"
+        Push "Shqip"
+        ${Break}
+      ${Case} 29
+        StrCpy $nyaSysCode "sv"
+        Push "Svenska"
+        ${Break}
+      ${Case} 30
+        StrCpy $nyaSysCode "th"
+        Push "ไทย"
+        ${Break}
+      ${Case} 31
+        StrCpy $nyaSysCode "tr"
+        Push "Türkçe"
+        ${Break}
+      ${Case} 32
+        StrCpy $nyaSysCode "ur"
+        Push "اردو"
+        ${Break}
+      ${Case} 33
+        StrCpy $nyaSysCode "id"
+        Push "Bahasa Indonesia"
+        ${Break}
+      ${Case} 35
+        StrCpy $nyaSysCode "be"
+        Push "Беларуская"
+        ${Break}
+      ${Case} 36
+        StrCpy $nyaSysCode "sl"
+        Push "Slovenščina"
+        ${Break}
+      ${Case} 37
+        StrCpy $nyaSysCode "et"
+        Push "Eesti"
+        ${Break}
+      ${Case} 38
+        StrCpy $nyaSysCode "lv"
+        Push "Latviešu"
+        ${Break}
+      ${Case} 39
+        StrCpy $nyaSysCode "lt"
+        Push "Lietuvių"
+        ${Break}
+      ${Case} 41
+        StrCpy $nyaSysCode "fa"
+        Push "فارسی"
+        ${Break}
+      ${Case} 42
+        StrCpy $nyaSysCode "vi"
+        Push "Tiếng Việt"
+        ${Break}
+      ${Case} 43
+        StrCpy $nyaSysCode "hy"
+        Push "Հայերեն"
+        ${Break}
+      ${Case} 44
+        StrCpy $nyaSysCode "az"
+        Push "Azərbaycanca"
+        ${Break}
+      ${Case} 47
+        StrCpy $nyaSysCode "mk"
+        Push "Македонски"
+        ${Break}
+      ${Case} 54
+        StrCpy $nyaSysCode "af"
+        Push "Afrikaans"
+        ${Break}
+      ${Case} 55
+        StrCpy $nyaSysCode "ka"
+        Push "ქართული"
+        ${Break}
+      ${Case} 57
+        StrCpy $nyaSysCode "hi"
         Push "हिन्दी"
+        ${Break}
+      ${Case} 62
+        StrCpy $nyaSysCode "ms"
+        Push "Bahasa Melayu"
+        ${Break}
+      ${Case} 63
+        StrCpy $nyaSysCode "kk"
+        Push "Қазақша"
+        ${Break}
+      ${Case} 64
+        StrCpy $nyaSysCode "ky"
+        Push "Кыргызча"
+        ${Break}
+      ${Case} 65
+        StrCpy $nyaSysCode "sw"
+        Push "Kiswahili"
+        ${Break}
+      ${Case} 67
+        StrCpy $nyaSysCode "uz"
+        Push "Oʻzbekcha"
+        ${Break}
+      ${Case} 69
+        StrCpy $nyaSysCode "bn"
+        Push "বাংলা"
+        ${Break}
+      ${Case} 73
+        StrCpy $nyaSysCode "ta"
+        Push "தமிழ்"
+        ${Break}
+      ${Case} 74
+        StrCpy $nyaSysCode "te"
+        Push "తెలుగు"
+        ${Break}
+      ${Case} 78
+        StrCpy $nyaSysCode "mr"
+        Push "मराठी"
+        ${Break}
+      ${Case} 80
+        StrCpy $nyaSysCode "mn"
+        Push "Монгол"
+        ${Break}
+      ${Case} 83
+        StrCpy $nyaSysCode "km"
+        Push "ខ្មែរ"
+        ${Break}
+      ${Case} 86
+        StrCpy $nyaSysCode "gl"
+        Push "Galego"
+        ${Break}
+      ${Case} 91
+        StrCpy $nyaSysCode "si"
+        Push "සිංහල"
+        ${Break}
+      ${Case} 94
+        StrCpy $nyaSysCode "am"
+        Push "አማርኛ"
+        ${Break}
+      ${Case} 97
+        StrCpy $nyaSysCode "ne"
+        Push "नेपाली"
+        ${Break}
+      ${Case} 100
+        StrCpy $nyaSysCode "fil"
+        Push "Filipino"
         ${Break}
       ${Default}
         Push "English"
@@ -464,8 +1063,9 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
   ; straight back instead of posting WM_COMMAND at a window we do not own.
   Function nyaLangClicked
     Pop $R9
+    ${str} $R7 "welcome.systemLang"
     System::Call 'user32::CreatePopupMenu() p .R0'
-    System::Call 'user32::AppendMenu(p R0, i 0, i 1, w "Язык системы")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 1, w "$R7")'
     System::Call 'user32::AppendMenu(p R0, i 0x800, i 0, w "")'
     System::Call 'user32::AppendMenu(p R0, i 0, i 2, w "Русский")'
     System::Call 'user32::AppendMenu(p R0, i 0, i 3, w "English")'
@@ -473,14 +1073,65 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
     System::Call 'user32::AppendMenu(p R0, i 0, i 5, w "Français")'
     System::Call 'user32::AppendMenu(p R0, i 0, i 6, w "Español")'
     System::Call 'user32::AppendMenu(p R0, i 0, i 7, w "Italiano")'
-    System::Call 'user32::AppendMenu(p R0, i 0, i 8, w "Português")'
-    System::Call 'user32::AppendMenu(p R0, i 0, i 9, w "Polski")'
-    System::Call 'user32::AppendMenu(p R0, i 0, i 10, w "Türkçe")'
-    System::Call 'user32::AppendMenu(p R0, i 0, i 11, w "日本語")'
-    System::Call 'user32::AppendMenu(p R0, i 0, i 12, w "한국어")'
-    System::Call 'user32::AppendMenu(p R0, i 0, i 13, w "中文")'
-    System::Call 'user32::AppendMenu(p R0, i 0, i 14, w "العربية")'
-    System::Call 'user32::AppendMenu(p R0, i 0, i 15, w "हिन्दी")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 8, w "Português (Brasil)")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 9, w "Português (Portugal)")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 10, w "Polski")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 11, w "Türkçe")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 12, w "Nederlands")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 13, w "Čeština")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 14, w "Slovenčina")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 15, w "Slovenščina")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 16, w "Hrvatski")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 17, w "Српски")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 18, w "Български")'
+    System::Call 'user32::AppendMenu(p R0, i 0x20, i 19, w "Română")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 20, w "Magyar")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 21, w "Ελληνικά")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 22, w "Svenska")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 23, w "Norsk")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 24, w "Dansk")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 25, w "Suomi")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 26, w "Eesti")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 27, w "Latviešu")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 28, w "Lietuvių")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 29, w "Беларуская")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 30, w "Қазақша")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 31, w "Кыргызча")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 32, w "Oʻzbekcha")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 33, w "Azərbaycanca")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 34, w "ქართული")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 35, w "Հայերեն")'
+    System::Call 'user32::AppendMenu(p R0, i 0x20, i 36, w "עברית")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 37, w "العربية")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 38, w "فارسی")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 39, w "हिन्दी")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 40, w "বাংলা")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 41, w "اردو")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 42, w "தமிழ்")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 43, w "తెలుగు")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 44, w "मराठी")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 45, w "Bahasa Indonesia")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 46, w "Bahasa Melayu")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 47, w "Tiếng Việt")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 48, w "ไทย")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 49, w "Filipino")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 50, w "日本語")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 51, w "한국어")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 52, w "中文（简体）")'
+    System::Call 'user32::AppendMenu(p R0, i 0x20, i 53, w "中文（繁體）")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 54, w "Kiswahili")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 55, w "Afrikaans")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 56, w "Català")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 57, w "Galego")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 58, w "Shqip")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 59, w "Македонски")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 60, w "Bosanski")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 61, w "Íslenska")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 62, w "Монгол")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 63, w "नेपाली")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 64, w "සිංහල")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 65, w "ខ្មែរ")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 66, w "አማርኛ")'
 
     System::Call '*(i 0, i 0) p .R1'
     System::Call 'user32::GetCursorPos(p R1)'
@@ -494,7 +1145,7 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
     ${EndIf}
     ${Switch} $R4
       ${Case} 1
-        StrCpy $nyaLang ""
+        StrCpy $nyaLang "system"
         Call nyaSystemLangName
         Pop $R5
         ${Break}
@@ -524,40 +1175,352 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
         ${Break}
       ${Case} 8
         StrCpy $nyaLang "pt-BR"
-        StrCpy $R5 "Português"
+        StrCpy $R5 "Português (Brasil)"
         ${Break}
       ${Case} 9
+        StrCpy $nyaLang "pt-PT"
+        StrCpy $R5 "Português (Portugal)"
+        ${Break}
+      ${Case} 10
         StrCpy $nyaLang "pl"
         StrCpy $R5 "Polski"
         ${Break}
-      ${Case} 10
+      ${Case} 11
         StrCpy $nyaLang "tr"
         StrCpy $R5 "Türkçe"
         ${Break}
-      ${Case} 11
-        StrCpy $nyaLang "ja"
-        StrCpy $R5 "日本語"
-        ${Break}
       ${Case} 12
-        StrCpy $nyaLang "ko"
-        StrCpy $R5 "한국어"
+        StrCpy $nyaLang "nl"
+        StrCpy $R5 "Nederlands"
         ${Break}
       ${Case} 13
-        StrCpy $nyaLang "zh-CN"
-        StrCpy $R5 "中文"
+        StrCpy $nyaLang "cs"
+        StrCpy $R5 "Čeština"
         ${Break}
       ${Case} 14
+        StrCpy $nyaLang "sk"
+        StrCpy $R5 "Slovenčina"
+        ${Break}
+      ${Case} 15
+        StrCpy $nyaLang "sl"
+        StrCpy $R5 "Slovenščina"
+        ${Break}
+      ${Case} 16
+        StrCpy $nyaLang "hr"
+        StrCpy $R5 "Hrvatski"
+        ${Break}
+      ${Case} 17
+        StrCpy $nyaLang "sr"
+        StrCpy $R5 "Српски"
+        ${Break}
+      ${Case} 18
+        StrCpy $nyaLang "bg"
+        StrCpy $R5 "Български"
+        ${Break}
+      ${Case} 19
+        StrCpy $nyaLang "ro"
+        StrCpy $R5 "Română"
+        ${Break}
+      ${Case} 20
+        StrCpy $nyaLang "hu"
+        StrCpy $R5 "Magyar"
+        ${Break}
+      ${Case} 21
+        StrCpy $nyaLang "el"
+        StrCpy $R5 "Ελληνικά"
+        ${Break}
+      ${Case} 22
+        StrCpy $nyaLang "sv"
+        StrCpy $R5 "Svenska"
+        ${Break}
+      ${Case} 23
+        StrCpy $nyaLang "no"
+        StrCpy $R5 "Norsk"
+        ${Break}
+      ${Case} 24
+        StrCpy $nyaLang "da"
+        StrCpy $R5 "Dansk"
+        ${Break}
+      ${Case} 25
+        StrCpy $nyaLang "fi"
+        StrCpy $R5 "Suomi"
+        ${Break}
+      ${Case} 26
+        StrCpy $nyaLang "et"
+        StrCpy $R5 "Eesti"
+        ${Break}
+      ${Case} 27
+        StrCpy $nyaLang "lv"
+        StrCpy $R5 "Latviešu"
+        ${Break}
+      ${Case} 28
+        StrCpy $nyaLang "lt"
+        StrCpy $R5 "Lietuvių"
+        ${Break}
+      ${Case} 29
+        StrCpy $nyaLang "be"
+        StrCpy $R5 "Беларуская"
+        ${Break}
+      ${Case} 30
+        StrCpy $nyaLang "kk"
+        StrCpy $R5 "Қазақша"
+        ${Break}
+      ${Case} 31
+        StrCpy $nyaLang "ky"
+        StrCpy $R5 "Кыргызча"
+        ${Break}
+      ${Case} 32
+        StrCpy $nyaLang "uz"
+        StrCpy $R5 "Oʻzbekcha"
+        ${Break}
+      ${Case} 33
+        StrCpy $nyaLang "az"
+        StrCpy $R5 "Azərbaycanca"
+        ${Break}
+      ${Case} 34
+        StrCpy $nyaLang "ka"
+        StrCpy $R5 "ქართული"
+        ${Break}
+      ${Case} 35
+        StrCpy $nyaLang "hy"
+        StrCpy $R5 "Հայերեն"
+        ${Break}
+      ${Case} 36
+        StrCpy $nyaLang "he"
+        StrCpy $R5 "עברית"
+        ${Break}
+      ${Case} 37
         StrCpy $nyaLang "ar"
         StrCpy $R5 "العربية"
         ${Break}
-      ${Case} 15
+      ${Case} 38
+        StrCpy $nyaLang "fa"
+        StrCpy $R5 "فارسی"
+        ${Break}
+      ${Case} 39
         StrCpy $nyaLang "hi"
         StrCpy $R5 "हिन्दी"
+        ${Break}
+      ${Case} 40
+        StrCpy $nyaLang "bn"
+        StrCpy $R5 "বাংলা"
+        ${Break}
+      ${Case} 41
+        StrCpy $nyaLang "ur"
+        StrCpy $R5 "اردو"
+        ${Break}
+      ${Case} 42
+        StrCpy $nyaLang "ta"
+        StrCpy $R5 "தமிழ்"
+        ${Break}
+      ${Case} 43
+        StrCpy $nyaLang "te"
+        StrCpy $R5 "తెలుగు"
+        ${Break}
+      ${Case} 44
+        StrCpy $nyaLang "mr"
+        StrCpy $R5 "मराठी"
+        ${Break}
+      ${Case} 45
+        StrCpy $nyaLang "id"
+        StrCpy $R5 "Bahasa Indonesia"
+        ${Break}
+      ${Case} 46
+        StrCpy $nyaLang "ms"
+        StrCpy $R5 "Bahasa Melayu"
+        ${Break}
+      ${Case} 47
+        StrCpy $nyaLang "vi"
+        StrCpy $R5 "Tiếng Việt"
+        ${Break}
+      ${Case} 48
+        StrCpy $nyaLang "th"
+        StrCpy $R5 "ไทย"
+        ${Break}
+      ${Case} 49
+        StrCpy $nyaLang "fil"
+        StrCpy $R5 "Filipino"
+        ${Break}
+      ${Case} 50
+        StrCpy $nyaLang "ja"
+        StrCpy $R5 "日本語"
+        ${Break}
+      ${Case} 51
+        StrCpy $nyaLang "ko"
+        StrCpy $R5 "한국어"
+        ${Break}
+      ${Case} 52
+        StrCpy $nyaLang "zh-CN"
+        StrCpy $R5 "中文（简体）"
+        ${Break}
+      ${Case} 53
+        StrCpy $nyaLang "zh-TW"
+        StrCpy $R5 "中文（繁體）"
+        ${Break}
+      ${Case} 54
+        StrCpy $nyaLang "sw"
+        StrCpy $R5 "Kiswahili"
+        ${Break}
+      ${Case} 55
+        StrCpy $nyaLang "af"
+        StrCpy $R5 "Afrikaans"
+        ${Break}
+      ${Case} 56
+        StrCpy $nyaLang "ca"
+        StrCpy $R5 "Català"
+        ${Break}
+      ${Case} 57
+        StrCpy $nyaLang "gl"
+        StrCpy $R5 "Galego"
+        ${Break}
+      ${Case} 58
+        StrCpy $nyaLang "sq"
+        StrCpy $R5 "Shqip"
+        ${Break}
+      ${Case} 59
+        StrCpy $nyaLang "mk"
+        StrCpy $R5 "Македонски"
+        ${Break}
+      ${Case} 60
+        StrCpy $nyaLang "bs"
+        StrCpy $R5 "Bosanski"
+        ${Break}
+      ${Case} 61
+        StrCpy $nyaLang "is"
+        StrCpy $R5 "Íslenska"
+        ${Break}
+      ${Case} 62
+        StrCpy $nyaLang "mn"
+        StrCpy $R5 "Монгол"
+        ${Break}
+      ${Case} 63
+        StrCpy $nyaLang "ne"
+        StrCpy $R5 "नेपाली"
+        ${Break}
+      ${Case} 64
+        StrCpy $nyaLang "si"
+        StrCpy $R5 "සිංහල"
+        ${Break}
+      ${Case} 65
+        StrCpy $nyaLang "km"
+        StrCpy $R5 "ខ្មែរ"
+        ${Break}
+      ${Case} 66
+        StrCpy $nyaLang "am"
+        StrCpy $R5 "አማርኛ"
         ${Break}
       ${Default}
         Return
     ${EndSwitch}
+    Call nyaLangFit
+    Call nyaApplyStrings
+  FunctionEnd
+
+  ; Sizes the pill to the name in $R5 and puts the name in it.
+  ;
+  ; The pill is artwork and cannot stretch, so it is baked at a ladder of
+  ; widths and the narrowest one that holds the name is blitted over the
+  ; corner of the window. That blit also erases the pill before it — which
+  ; matters, because the label is transparent and would otherwise leave the
+  ; old name showing through the new one.
+  Function nyaLangFit
+    ShowWindow $nyaLangLabel ${SW_HIDE}
+
+    ; How wide the name is in the pill's own font.
+    StrLen $R6 $R5
+    System::Call 'user32::GetDC(p $nyaLangLabel) p .r0'
+    System::Call 'gdi32::SelectObject(p r0, p $nyaFontSmall) p .r1'
+    System::Call '*(i 0, i 0) p .r2'
+    System::Call 'gdi32::GetTextExtentPoint32W(p r0, w "$R5", i $R6, p r2)'
+    System::Call '*$2(i .r3, i)'
+    System::Call 'gdi32::SelectObject(p r0, p r1)'
+    System::Call 'user32::ReleaseDC(p $nyaLangLabel, p r0)'
+    System::Free $2
+    StrCpy $R6 $3
+
+    StrCpy $R7 ""
+    !insertmacro NyaPillPick 30
+    !insertmacro NyaPillPick 40
+    !insertmacro NyaPillPick 50
+    !insertmacro NyaPillPick 60
+    !insertmacro NyaPillPick 70
+    !insertmacro NyaPillPick 80
+    !insertmacro NyaPillPick 90
+    !insertmacro NyaPillPick 100
+    !insertmacro NyaPillPick 110
+    !insertmacro NyaPillPick 120
+    !insertmacro NyaPillPick 130
+    !insertmacro NyaPillPick 140
+    ${If} $R7 == ""
+      StrCpy $R7 140
+    ${EndIf}
+
+    ; STM_SETIMAGE hands back the bitmap it replaced, and nobody else will
+    ; free it: at ~85 KB a rung, clicking through the list would add up.
+    SendMessage $nyaLangStrip ${STM_GETIMAGE} 0 0 $R4
+    ${px} $R2 ${ART_WELCOME_LANG_STRIP_W}
+    ${px} $R3 ${ART_WELCOME_LANG_STRIP_H}
+    ${Switch} $R7
+      ${Case} 30
+        ${scaledImage} $nyaLangStrip "welcome-lang-30.bmp" $R2 $R3
+        ${Break}
+      ${Case} 40
+        ${scaledImage} $nyaLangStrip "welcome-lang-40.bmp" $R2 $R3
+        ${Break}
+      ${Case} 50
+        ${scaledImage} $nyaLangStrip "welcome-lang-50.bmp" $R2 $R3
+        ${Break}
+      ${Case} 60
+        ${scaledImage} $nyaLangStrip "welcome-lang-60.bmp" $R2 $R3
+        ${Break}
+      ${Case} 70
+        ${scaledImage} $nyaLangStrip "welcome-lang-70.bmp" $R2 $R3
+        ${Break}
+      ${Case} 80
+        ${scaledImage} $nyaLangStrip "welcome-lang-80.bmp" $R2 $R3
+        ${Break}
+      ${Case} 90
+        ${scaledImage} $nyaLangStrip "welcome-lang-90.bmp" $R2 $R3
+        ${Break}
+      ${Case} 100
+        ${scaledImage} $nyaLangStrip "welcome-lang-100.bmp" $R2 $R3
+        ${Break}
+      ${Case} 110
+        ${scaledImage} $nyaLangStrip "welcome-lang-110.bmp" $R2 $R3
+        ${Break}
+      ${Case} 120
+        ${scaledImage} $nyaLangStrip "welcome-lang-120.bmp" $R2 $R3
+        ${Break}
+      ${Case} 130
+        ${scaledImage} $nyaLangStrip "welcome-lang-130.bmp" $R2 $R3
+        ${Break}
+      ${Case} 140
+        ${scaledImage} $nyaLangStrip "welcome-lang-140.bmp" $R2 $R3
+        ${Break}
+    ${EndSwitch}
+    ${If} $R4 <> 0
+      System::Call 'gdi32::DeleteObject(p $R4)'
+    ${EndIf}
+
+    ; The label gets exactly the room the artwork left it, and the click zone
+    ; grows by the same amount: the chrome around the label is whatever the
+    ; design measured, so the three can never drift apart.
+    ${px} $0 ${ART_WELCOME_LANG_X}
+    ${px} $1 ${ART_WELCOME_LANG_Y}
+    ${px} $2 $R7
+    ${px} $3 ${ART_WELCOME_LANG_H}
+    System::Call 'user32::MoveWindow(p $nyaLangLabel, i $0, i $1, i $2, i $3, i 1)'
     SendMessage $nyaLangLabel ${WM_SETTEXT} 0 "STR:$R5"
+
+    IntOp $R8 ${ART_WELCOME_LANG_HIT_W} - ${ART_WELCOME_LANG_W}
+    IntOp $R8 $R8 + $R7
+    ${px} $0 ${ART_WELCOME_LANG_HIT_X}
+    ${px} $1 ${ART_WELCOME_LANG_HIT_Y}
+    ${px} $2 $R8
+    ${px} $3 ${ART_WELCOME_LANG_HIT_H}
+    System::Call 'user32::MoveWindow(p $nyaLangHit, i $0, i $1, i $2, i $3, i 1)'
+
+    ShowWindow $nyaLangLabel ${SW_SHOW}
   FunctionEnd
 
   Function nyaInstallClicked
@@ -631,8 +1594,17 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
     ${EndIf}
     StrCpy $nyaProgressDone "1"
 
+    Call nyaLangIniPath
+
     ${If} ${isUpdated}
       !insertmacro NyaProgressBody "updating.bmp" ART_UPDATING_PROGRESS
+
+      ${text} $R6 $R8 ${NYA_TXT_C} 0 ${ART_UPDATING_TITLE_Y} 640         ${ART_UPDATING_TITLE_H} $nyaFontH20 ${NYA_TEXT}
+      ${setstr} $R6 "updating.title"
+      ${text} $R6 $R8 ${NYA_TXT_L} ${ART_UPDATING_SUBTITLE_X}         ${ART_UPDATING_SUBTITLE_Y} 260 ${ART_UPDATING_SUBTITLE_H}         $nyaFontSmall ${NYA_FAINT}
+      ${setstr} $R6 "updating.subtitle"
+      ${text} $R6 $R8 ${NYA_TXT_L} ${ART_UPDATING_HINT_X} ${ART_UPDATING_HINT_Y}         540 ${ART_UPDATING_HINT_H} $nyaFontPath ${NYA_DIM}
+      ${setstr} $R6 "updating.hint"
 
       ; The design shows which version is replacing which, and only the
       ; installer knows the old one.
@@ -648,6 +1620,13 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
       SetCtlColors $R9 ${NYA_DIM} transparent
     ${Else}
       !insertmacro NyaProgressBody "installing.bmp" ART_INSTALLING_PROGRESS
+
+      ${text} $R6 $R8 ${NYA_TXT_C} 0 ${ART_INSTALLING_TITLE_Y} 640         ${ART_INSTALLING_TITLE_H} $nyaFontH20 ${NYA_TEXT}
+      ${setstr} $R6 "installing.title"
+      ${text} $R6 $R8 ${NYA_TXT_C} 0 ${ART_INSTALLING_SUBTITLE_Y} 640         ${ART_INSTALLING_SUBTITLE_H} $nyaFontPath ${NYA_DIM}
+      ${setstr} $R6 "installing.subtitle"
+      ${text} $R6 $R8 ${NYA_TXT_L} ${ART_INSTALLING_HINT_X}         ${ART_INSTALLING_HINT_Y} 570 ${ART_INSTALLING_HINT_H}         $nyaFontPath ${NYA_DIM}
+      ${setstr} $R6 "installing.hint"
     ${EndIf}
   FunctionEnd
 
@@ -655,6 +1634,17 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
   Function nyaFinishCreate
     Call nyaInitChrome
     ${page} "installed.bmp"
+    Call nyaLangIniPath
+
+    ${text} $R6 $nyaDialog ${NYA_TXT_C} 0 ${ART_INSTALLED_TITLE_Y} 640       ${ART_INSTALLED_TITLE_H} $nyaFontH24 ${NYA_TEXT}
+    ${setstr} $R6 "installed.title"
+    ${text} $R6 $nyaDialog ${NYA_TXT_C} 0 ${ART_INSTALLED_SUBTITLE_Y} 640       ${ART_INSTALLED_SUBTITLE_H} $nyaFontBody ${NYA_DIM}
+    ${setstr} $R6 "installed.subtitle"
+    ${text} $R6 $nyaDialog ${NYA_TXT_CV} ${ART_INSTALLED_LAUNCH_X}       ${ART_INSTALLED_LAUNCH_Y} ${ART_INSTALLED_LAUNCH_W}       ${ART_INSTALLED_LAUNCH_H} $nyaFontBtn ${NYA_WHITE}
+    ${setstr} $R6 "installed.launch"
+    ${text} $R6 $nyaDialog ${NYA_TXT_L} ${ART_INSTALLED_HINT_X}       ${ART_INSTALLED_HINT_Y} 500 ${ART_INSTALLED_HINT_H} $nyaFontPath ${NYA_DIM}
+    ${setstr} $R6 "installed.hint"
+
     ${hit} $nyaDialog ART_INSTALLED_LAUNCH nyaLaunchClicked
     ${hit} $nyaDialog ART_INSTALLED_CLOSE_X nyaFinishCloseClicked
     nsDialogs::Show
@@ -671,12 +1661,41 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
   ; ============================================================ uninstaller
   Function un.nyaInitChrome
     !insertmacro NyaChromeBody
+    StrCpy $nyaLangIni "$PLUGINSDIR\lang.ini"
+    ${IfNot} ${FileExists} "$nyaLangIni"
+      StrCpy $nyaLangIni "$PLUGINSDIR\lang-en.ini"
+    ${EndIf}
   FunctionEnd
 
   ; --------------------------------------------------------------- confirm
   Function un.nyaConfirmCreate
     Call un.nyaInitChrome
     ${page} "un-confirm.bmp"
+
+    ${text} $R6 $nyaDialog ${NYA_TXT_C} 0 ${ART_UN_CONFIRM_TITLE_Y} 640 \
+      ${ART_UN_CONFIRM_TITLE_H} $nyaFontH26 ${NYA_TEXT}
+    ${setstr} $R6 "unconfirm.title"
+    ${text} $R6 $nyaDialog ${NYA_TXT_C} 0 ${ART_UN_CONFIRM_SUBTITLE_Y} 640 \
+      ${ART_UN_CONFIRM_SUBTITLE_H} $nyaFontBody ${NYA_DIM}
+    ${setstr} $R6 "unconfirm.subtitle"
+    ${text} $R6 $nyaDialog ${NYA_TXT_CV} ${ART_UN_CONFIRM_REMOVE_X} \
+      ${ART_UN_CONFIRM_REMOVE_Y} ${ART_UN_CONFIRM_REMOVE_W} \
+      ${ART_UN_CONFIRM_REMOVE_H} $nyaFontBtn ${NYA_WHITE}
+    ${setstr} $R6 "unconfirm.remove"
+    ${text} $R6 $nyaDialog ${NYA_TXT_CV} ${ART_UN_CONFIRM_CANCEL_X} \
+      ${ART_UN_CONFIRM_CANCEL_Y} ${ART_UN_CONFIRM_CANCEL_W} \
+      ${ART_UN_CONFIRM_CANCEL_H} $nyaFontBtn ${NYA_TEXT}
+    ${setstr} $R6 "unconfirm.cancel"
+    ${text} $R6 $nyaDialog ${NYA_TXT_LV} ${ART_UN_CONFIRM_LABEL_WIPE_X} \
+      ${ART_UN_CONFIRM_LABEL_WIPE_Y} 500 ${ART_UN_CONFIRM_LABEL_WIPE_H} \
+      $nyaFontPath ${NYA_DIM}
+    ${setstr} $R6 "unconfirm.wipe"
+    ${text} $R6 $nyaDialog ${NYA_TXT_L} ${ART_UN_CONFIRM_VERSION_LINE_X} \
+      ${ART_UN_CONFIRM_VERSION_LINE_Y} 240 ${ART_UN_CONFIRM_VERSION_LINE_H} \
+      $nyaFontSmall ${NYA_FAINT}
+    ${str} $R7 "unconfirm.version"
+    ${un.WordReplace} "$R7" "{v}" "${VERSION}" "+" $R7
+    SendMessage $R6 ${WM_SETTEXT} 0 "STR:$R7"
 
     StrCpy $nyaWipe "0"
     ${checkbox} $nyaBoxWipe $nyaDialog ART_UN_CONFIRM_BOX_WIPE \
@@ -716,6 +1735,17 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
       p 0) p .s'
     Pop $nyaUnShroud
     ${scaledImage} $nyaUnShroud "un-progress.bmp" $nyaW $nyaH
+
+    ${text} $R6 $nyaUnShroud ${NYA_TXT_C} 0 ${ART_UN_PROGRESS_TITLE_Y} 640 \
+      ${ART_UN_PROGRESS_TITLE_H} $nyaFontH20 ${NYA_TEXT}
+    ${setstr} $R6 "unprogress.title"
+    ${text} $R6 $nyaUnShroud ${NYA_TXT_C} 0 ${ART_UN_PROGRESS_SUBTITLE_Y} 640 \
+      ${ART_UN_PROGRESS_SUBTITLE_H} $nyaFontPath ${NYA_DIM}
+    ${setstr} $R6 "unprogress.subtitle"
+    ${text} $R6 $nyaUnShroud ${NYA_TXT_L} ${ART_UN_PROGRESS_HINT_X} \
+      ${ART_UN_PROGRESS_HINT_Y} 560 ${ART_UN_PROGRESS_HINT_H} \
+      $nyaFontPath ${NYA_DIM}
+    ${setstr} $R6 "unprogress.hint"
 
     ; A marquee bar: the section cannot report progress to another thread's
     ; window, and a bar that animates on its own is honest about that.
@@ -775,6 +1805,21 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
       StrCpy $nyaUnBar 0
     ${EndIf}
     ${page} "un-done.bmp"
+
+    ${text} $R6 $nyaDialog ${NYA_TXT_C} 0 ${ART_UN_DONE_TITLE_Y} 640 \
+      ${ART_UN_DONE_TITLE_H} $nyaFontH22 ${NYA_TEXT}
+    ${setstr} $R6 "undone.title"
+    ${text} $R6 $nyaDialog ${NYA_TXT_C} 0 ${ART_UN_DONE_SUBTITLE_Y} 640 \
+      ${ART_UN_DONE_SUBTITLE_H} $nyaFontBody ${NYA_DIM}
+    ${setstr} $R6 "undone.subtitle"
+    ${text} $R6 $nyaDialog ${NYA_TXT_CV} ${ART_UN_DONE_CLOSE_X} \
+      ${ART_UN_DONE_CLOSE_Y} ${ART_UN_DONE_CLOSE_W} ${ART_UN_DONE_CLOSE_H} \
+      $nyaFontBtn ${NYA_TEXT}
+    ${setstr} $R6 "undone.close"
+    ${text} $R6 $nyaDialog ${NYA_TXT_L} ${ART_UN_DONE_HINT_X} \
+      ${ART_UN_DONE_HINT_Y} 500 ${ART_UN_DONE_HINT_H} $nyaFontPath ${NYA_DIM}
+    ${setstr} $R6 "undone.hint"
+
     ${hit} $nyaDialog ART_UN_DONE_CLOSE un.nyaDoneCloseClicked
     ${hit} $nyaDialog ART_UN_DONE_CLOSE_X un.nyaDoneCloseClicked
     nsDialogs::Show
@@ -793,6 +1838,7 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
   CopyFiles /SILENT "$INSTDIR\un-done.bmp" "$PLUGINSDIR"
   CopyFiles /SILENT "$INSTDIR\un-confirm-box-wipe-on.bmp" "$PLUGINSDIR"
   CopyFiles /SILENT "$INSTDIR\un-confirm-box-wipe-off.bmp" "$PLUGINSDIR"
+  CopyFiles /SILENT "$INSTDIR\lang.ini" "$PLUGINSDIR"
   StrCpy $nyaArt "$PLUGINSDIR"
 !macroend
 
@@ -803,6 +1849,9 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
   SetAutoClose true
 
   InitPluginsDir
+  ; One string file per language: the pill switches between them live.
+  !insertmacro NyaLangFiles
+
   File "/oname=$PLUGINSDIR\welcome.bmp" "${BUILD_RESOURCES_DIR}\art\welcome.bmp"
   File "/oname=$PLUGINSDIR\installing.bmp" "${BUILD_RESOURCES_DIR}\art\installing.bmp"
   File "/oname=$PLUGINSDIR\updating.bmp" "${BUILD_RESOURCES_DIR}\art\updating.bmp"
@@ -811,6 +1860,20 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
   File "/oname=$PLUGINSDIR\welcome-box-desktop-off.bmp" "${BUILD_RESOURCES_DIR}\art\welcome-box-desktop-off.bmp"
   File "/oname=$PLUGINSDIR\welcome-box-default-on.bmp" "${BUILD_RESOURCES_DIR}\art\welcome-box-default-on.bmp"
   File "/oname=$PLUGINSDIR\welcome-box-default-off.bmp" "${BUILD_RESOURCES_DIR}\art\welcome-box-default-off.bmp"
+
+  ; One strip per pill width; nyaLangFit blits whichever fits the name.
+  File "/oname=$PLUGINSDIR\welcome-lang-30.bmp" "${BUILD_RESOURCES_DIR}\art\welcome-lang-30.bmp"
+  File "/oname=$PLUGINSDIR\welcome-lang-40.bmp" "${BUILD_RESOURCES_DIR}\art\welcome-lang-40.bmp"
+  File "/oname=$PLUGINSDIR\welcome-lang-50.bmp" "${BUILD_RESOURCES_DIR}\art\welcome-lang-50.bmp"
+  File "/oname=$PLUGINSDIR\welcome-lang-60.bmp" "${BUILD_RESOURCES_DIR}\art\welcome-lang-60.bmp"
+  File "/oname=$PLUGINSDIR\welcome-lang-70.bmp" "${BUILD_RESOURCES_DIR}\art\welcome-lang-70.bmp"
+  File "/oname=$PLUGINSDIR\welcome-lang-80.bmp" "${BUILD_RESOURCES_DIR}\art\welcome-lang-80.bmp"
+  File "/oname=$PLUGINSDIR\welcome-lang-90.bmp" "${BUILD_RESOURCES_DIR}\art\welcome-lang-90.bmp"
+  File "/oname=$PLUGINSDIR\welcome-lang-100.bmp" "${BUILD_RESOURCES_DIR}\art\welcome-lang-100.bmp"
+  File "/oname=$PLUGINSDIR\welcome-lang-110.bmp" "${BUILD_RESOURCES_DIR}\art\welcome-lang-110.bmp"
+  File "/oname=$PLUGINSDIR\welcome-lang-120.bmp" "${BUILD_RESOURCES_DIR}\art\welcome-lang-120.bmp"
+  File "/oname=$PLUGINSDIR\welcome-lang-130.bmp" "${BUILD_RESOURCES_DIR}\art\welcome-lang-130.bmp"
+  File "/oname=$PLUGINSDIR\welcome-lang-140.bmp" "${BUILD_RESOURCES_DIR}\art\welcome-lang-140.bmp"
 
   ; Read before the install section overwrites it, so the update window can
   ; say what it is updating from.
@@ -858,6 +1921,11 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
   File "${BUILD_RESOURCES_DIR}\art\un-done.bmp"
   File "${BUILD_RESOURCES_DIR}\art\un-confirm-box-wipe-on.bmp"
   File "${BUILD_RESOURCES_DIR}\art\un-confirm-box-wipe-off.bmp"
+
+  ; The uninstaller speaks whatever language was chosen here, so the strings
+  ; for it travel with the application rather than all sixty-five.
+  Call nyaLangIniPath
+  CopyFiles /SILENT "$nyaLangIni" "$INSTDIR\lang.ini"
 
   ; The two checkboxes. Both are empty in a silent or updating run, where the
   ; welcome page never appeared and the existing choices must stand.
