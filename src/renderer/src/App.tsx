@@ -23,7 +23,7 @@ type Overlay = 'menu' | 'profiles' | 'update' | null
 export default function App() {
   const state = useBrowser()
   const {
-    tabs, active, settings, engines, engine, profiles, profile, bookmarks, bookmarked,
+    tabs, groups, active, settings, engines, engine, profiles, profile, bookmarks, bookmarked,
     downloads, activeDownloads, closed, stats, win, permission, autofill, savePassword,
     edge, toasts, patch, refreshBookmarks, setPermission, setAutofill, setSavePassword
   } = state
@@ -295,7 +295,7 @@ export default function App() {
               />
             </div>
 
-            {!vertical && <TabStrip tabs={tabs} settings={settings} />}
+            {!vertical && <TabStrip tabs={tabs} groups={groups} settings={settings} />}
             {pinnedBookmarks.length > 0 && (
               <BookmarksBar items={pinnedBookmarks} onManage={() => toggleView('bookmarks')} />
             )}
@@ -334,7 +334,7 @@ export default function App() {
         <div className="flex min-h-0 flex-1">
           {vertical && settings.tabPosition === 'left' && !chromeHidden && (
             <div className="animate-slide-right">
-              <TabRail tabs={tabs} settings={settings} side="left" />
+              <TabRail tabs={tabs} groups={groups} settings={settings} side="left" />
             </div>
           )}
 
@@ -394,7 +394,7 @@ export default function App() {
 
           {vertical && settings.tabPosition === 'right' && !chromeHidden && (
             <div className="animate-slide-left">
-              <TabRail tabs={tabs} settings={settings} side="right" />
+              <TabRail tabs={tabs} groups={groups} settings={settings} side="right" />
             </div>
           )}
         </div>

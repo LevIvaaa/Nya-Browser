@@ -1,6 +1,17 @@
 import { t } from './i18n'
 import { Menu, clipboard, shell, type MenuItemConstructorOptions, type WebContents } from 'electron'
-import type { BrowserWindow } from './browser'
+import { GROUP_COLOURS, type BrowserWindow } from './browser'
+
+/** Colour names for the group menu; the palette itself lives in browser.ts. */
+const GROUP_COLOUR_NAMES: Record<string, string> = {
+  '#7c6cff': 'Сиреневый',
+  '#2fbf71': 'Зелёный',
+  '#f5a524': 'Янтарный',
+  '#e5484d': 'Красный',
+  '#38bdf8': 'Голубой',
+  '#e879f9': 'Розовый',
+  '#94a3b8': 'Серый'
+}
 
 /** Right-click menu inside a web page. */
 export function pageContextMenu(
@@ -149,10 +160,65 @@ export function tabContextMenu(browser: BrowserWindow, tabId: number) {
       click: () => browser.sleepTab(tabId)
     },
     { type: 'separator' },
+    {
+      label: tab.pinned ? t('Открепить вкладку') : t('Закрепить вкладку'),
+      click: () => browser.pinTab(tabId)
+    },
+    {
+      label: t('Группа'),
+      submenu: [
+        { label: t('Новая группа'), click: () => browser.createGroup(tabId) },
+        ...(browser.groups.length ? [{ type: 'separator' as const }] : []),
+        ...browser.groups
+          .filter((group) => group.id !== tab.groupId)
+          .map((group) => ({
+            label: group.name,
+            click: () => browser.addToGroup(tabId, group.id)
+          })),
+        ...(tab.groupId !== null
+          ? [
+              { type: 'separator' as const },
+              { label: t('Убрать из группы'), click: () => browser.removeFromGroup(tabId) }
+            ]
+          : [])
+      ]
+    },
+    { type: 'separator' },
     { label: t('В закладки'), enabled: tab.hasContent, click: () => browser.bookmarkTab(tabId) },
     { type: 'separator' },
     { label: t('Закрыть'), click: () => browser.closeTab(tabId) },
     { label: t('Закрыть остальные'), enabled: many, click: () => browser.closeOthers(tabId) },
     { label: t('Закрыть справа'), enabled: many, click: () => browser.closeToRight(tabId) }
+  ]).popup()
+}
+
+/** Right-clicking the name over a run of tabs. */
+export function groupContextMenu(browser: BrowserWindow, groupId: number) {
+  const group = browser.groups.find((g) => g.id === groupId)
+  if (!group) return
+  const count = browser.tabs.filter((tab) => tab.groupId === groupId).length
+
+  Menu.buildFromTemplate([
+    {
+      label: group.collapsed ? t('Развернуть группу') : t('Свернуть группу'),
+      click: () => browser.toggleGroup(groupId)
+    },
+    { label: t('Новая вкладка в группе'), click: () => browser.newTabInGroup(groupId) },
+    { type: 'separator' },
+    {
+      label: t('Цвет'),
+      submenu: GROUP_COLOURS.map((colour) => ({
+        label: t(GROUP_COLOUR_NAMES[colour]),
+        type: 'radio' as const,
+        checked: group.color === colour,
+        click: () => browser.setGroupColour(groupId, colour)
+      }))
+    },
+    { type: 'separator' },
+    { label: t('Разгруппировать'), click: () => browser.ungroup(groupId) },
+    {
+      label: t('Закрыть группу ({n})', { n: count }),
+      click: () => browser.closeGroup(groupId)
+    }
   ]).popup()
 }

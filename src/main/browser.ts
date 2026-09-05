@@ -23,7 +23,7 @@ import { downloads } from './downloads'
 import { attachLog } from './log'
 import { looksLikePdf, pdfSource, pdfViewerUrl } from './pdf'
 import { WALLPAPER_EXTENSIONS, registerProtocols } from './protocol'
-import { pageContextMenu, tabContextMenu, uiContextMenu } from './menus'
+import { groupContextMenu, pageContextMenu, tabContextMenu, uiContextMenu } from './menus'
 import { acceptLanguages, t } from './i18n'
 import {
   allowHttpFallback,
@@ -45,6 +45,7 @@ import type {
   PermissionRequest,
   Profile,
   Suggestion,
+  TabGroup,
   TabState,
   UpdateState,
   WindowState
@@ -88,7 +89,23 @@ interface PersistedTab {
   url: string
   title: string
   favicon: string | null
+  pinned?: boolean
+  groupId?: number | null
 }
+
+/**
+ * The colours a group can wear. Kept short on purpose: a group is told apart
+ * by its name and its place, and a palette of thirty is a palette of none.
+ */
+export const GROUP_COLOURS = [
+  '#7c6cff',
+  '#2fbf71',
+  '#f5a524',
+  '#e5484d',
+  '#38bdf8',
+  '#e879f9',
+  '#94a3b8'
+] as const
 
 /* ========================================================================= */
 /* Tab                                                                        */
@@ -107,6 +124,10 @@ class Tab {
   view: WebContentsView | null = null
   /** set for a tab that holds one of the browser's own pages */
   internal: InternalPage | null = null
+  /** pinned tabs sit at the front of the strip, narrow and hard to lose */
+  pinned = false
+  /** the group this tab belongs to, if any */
+  groupId: number | null = null
   title = t('Новая вкладка')
   url = START_URL
   favicon: string | null = null
@@ -242,6 +263,8 @@ class Tab {
     return {
       id: this.id,
       internal: this.internal,
+      pinned: this.pinned,
+      groupId: this.groupId,
       title: this.title || origin || t('Новая вкладка'),
       // Our own pages leave the address bar empty: it is a place to type, and
       // "nya://settings" is not an address anyone needs to see or return to.
@@ -290,6 +313,9 @@ export class BrowserWindow {
 
   private seq = 0
   private ses!: Session
+  /** named runs of tabs; see reorderStrip for what keeps them runs */
+  groups: TabGroup[] = []
+  private groupSeq = 0
   private closedStack: PersistedTab[] = []
   private layoutRect: ContentLayout = { x: 0, y: 96, width: 0, height: 0, visible: true }
   private broadcastTimer: NodeJS.Timeout | null = null
@@ -1194,14 +1220,16 @@ export class BrowserWindow {
     this.broadcast()
   }
 
+  // Pinning a tab is a way of saying it should still be there later, so
+  // neither of these takes it away.
   closeOthers(id: number) {
-    for (const tab of [...this.tabs]) if (tab.id !== id) this.closeTab(tab.id)
+    for (const tab of [...this.tabs]) if (tab.id !== id && !tab.pinned) this.closeTab(tab.id)
   }
 
   closeToRight(id: number) {
     const index = this.tabs.findIndex((t) => t.id === id)
     if (index === -1) return
-    for (const tab of this.tabs.slice(index + 1)) this.closeTab(tab.id)
+    for (const tab of this.tabs.slice(index + 1)) if (!tab.pinned) this.closeTab(tab.id)
   }
 
   reopenClosed() {
@@ -1214,13 +1242,174 @@ export class BrowserWindow {
     return this.closedStack.slice(-10).reverse()
   }
 
+  /**
+   * The two rules the strip has to keep, applied after anything that could
+   * break them: pinned tabs come first, and the members of a group sit next to
+   * each other. A group is a place in the strip — if its tabs could scatter, the
+   * name over them would be a lie — and a pinned tab that drifts into the middle
+   * is a pinned tab you have to look for.
+   *
+   * Order is otherwise left alone: each group lands where its first member
+   * already was, so grouping tabs does not rearrange the strip around them.
+   */
+  private reorderStrip() {
+    const ordered: Tab[] = []
+    const taken = new Set<number>()
+    for (const pinnedPass of [true, false]) {
+      for (const tab of this.tabs) {
+        if (tab.pinned !== pinnedPass || taken.has(tab.id)) continue
+        if (tab.groupId === null) {
+          taken.add(tab.id)
+          ordered.push(tab)
+          continue
+        }
+        for (const member of this.tabs) {
+          if (member.groupId !== tab.groupId || member.pinned !== pinnedPass) continue
+          if (taken.has(member.id)) continue
+          taken.add(member.id)
+          ordered.push(member)
+        }
+      }
+    }
+    this.tabs = ordered
+    // A group nobody is in is not a group.
+    this.groups = this.groups.filter((group) => this.tabs.some((t) => t.groupId === group.id))
+  }
+
+  /** Groups travel with the tabs; the strip draws them in one pass. */
+  private sendGroups() {
+    this.send('state:groups', this.groups)
+  }
+
+  /* -------------------------------------------------------------- pinning */
+
+  /**
+   * A pinned tab leaves its group: it is going to the front of the strip, and a
+   * group whose members are not together is not one.
+   */
+  pinTab(id: number, pinned?: boolean) {
+    const tab = this.tabs.find((t) => t.id === id)
+    if (!tab) return
+    tab.pinned = pinned ?? !tab.pinned
+    if (tab.pinned) tab.groupId = null
+    this.reorderStrip()
+    this.persistSession()
+    this.sendGroups()
+    this.broadcast()
+  }
+
+  /* --------------------------------------------------------------- groups */
+
+  /** A new group around one tab, ready to be renamed. */
+  createGroup(tabId: number, name?: string) {
+    const tab = this.tabs.find((t) => t.id === tabId)
+    if (!tab) return
+    tab.pinned = false
+    const group: TabGroup = {
+      id: ++this.groupSeq,
+      name: name ?? t('Новая группа'),
+      color: GROUP_COLOURS[this.groups.length % GROUP_COLOURS.length],
+      collapsed: false
+    }
+    this.groups.push(group)
+    tab.groupId = group.id
+    this.reorderStrip()
+    this.persistSession()
+    this.sendGroups()
+    this.broadcast()
+  }
+
+  addToGroup(tabId: number, groupId: number) {
+    const tab = this.tabs.find((t) => t.id === tabId)
+    const group = this.groups.find((g) => g.id === groupId)
+    if (!tab || !group) return
+    tab.pinned = false
+    tab.groupId = groupId
+    // Moving a tab into a folded group would hide it the moment it arrives.
+    group.collapsed = false
+    this.reorderStrip()
+    this.persistSession()
+    this.sendGroups()
+    this.broadcast()
+  }
+
+  removeFromGroup(tabId: number) {
+    const tab = this.tabs.find((t) => t.id === tabId)
+    if (!tab || tab.groupId === null) return
+    tab.groupId = null
+    this.reorderStrip()
+    this.persistSession()
+    this.sendGroups()
+    this.broadcast()
+  }
+
+  renameGroup(groupId: number, name: string) {
+    const group = this.groups.find((g) => g.id === groupId)
+    if (!group) return
+    group.name = name.slice(0, 40).trim() || t('Новая группа')
+    this.persistSession()
+    this.sendGroups()
+  }
+
+  setGroupColour(groupId: number, color: string) {
+    const group = this.groups.find((g) => g.id === groupId)
+    if (!group || !(GROUP_COLOURS as readonly string[]).includes(color)) return
+    group.color = color
+    this.persistSession()
+    this.sendGroups()
+  }
+
+  /**
+   * Folding a group hides its tabs. The tab being read cannot be one of the
+   * hidden ones, so if it is, the nearest tab outside the group takes over.
+   */
+  toggleGroup(groupId: number, collapsed?: boolean) {
+    const group = this.groups.find((g) => g.id === groupId)
+    if (!group) return
+    const next = collapsed ?? !group.collapsed
+    if (next && this.getActive()?.groupId === groupId) {
+      const outside = this.tabs.filter((t) => t.groupId !== groupId)
+      if (outside.length === 0) return
+      const index = this.tabs.findIndex((t) => t.id === this.activeId)
+      const after = this.tabs.slice(index).find((t) => t.groupId !== groupId)
+      this.switchTab((after ?? outside[outside.length - 1]).id)
+    }
+    group.collapsed = next
+    this.persistSession()
+    this.sendGroups()
+    this.broadcast()
+  }
+
+  ungroup(groupId: number) {
+    for (const tab of this.tabs) if (tab.groupId === groupId) tab.groupId = null
+    this.reorderStrip()
+    this.persistSession()
+    this.sendGroups()
+    this.broadcast()
+  }
+
+  closeGroup(groupId: number) {
+    for (const tab of [...this.tabs]) if (tab.groupId === groupId) this.closeTab(tab.id)
+    this.sendGroups()
+  }
+
   moveTab(id: number, toIndex: number) {
     const from = this.tabs.findIndex((t) => t.id === id)
     if (from === -1) return
     const clamped = Math.max(0, Math.min(this.tabs.length - 1, toIndex))
     const [tab] = this.tabs.splice(from, 1)
     this.tabs.splice(clamped, 0, tab)
+    // Dropped between two tabs of the same group, it joins them; dropped
+    // anywhere else, it leaves whatever group it was in. Which is what the
+    // drop looked like it meant.
+    if (!tab.pinned) {
+      const before = this.tabs[clamped - 1]?.groupId ?? null
+      const after = this.tabs[clamped + 1]?.groupId ?? null
+      tab.groupId = before !== null && before === after ? before : tab.groupId === before || tab.groupId === after ? tab.groupId : null
+    }
+    this.reorderStrip()
     this.persistSession()
+    this.sendGroups()
     this.broadcast()
   }
 
@@ -1253,6 +1442,17 @@ export class BrowserWindow {
 
   showTabMenu(id: number) {
     tabContextMenu(this, id)
+  }
+
+  showGroupMenu(groupId: number) {
+    groupContextMenu(this, groupId)
+  }
+
+  /** A new tab that lands inside the group rather than after it. */
+  newTabInGroup(groupId: number) {
+    if (!this.groups.some((group) => group.id === groupId)) return
+    const id = this.newTab()
+    this.addToGroup(id, groupId)
   }
 
   navigate(input: string, id = this.activeId): void {
@@ -1422,10 +1622,35 @@ export class BrowserWindow {
     // A private window neither writes history nor reads it back: suggesting
     // yesterday's browsing to whoever is at the keyboard now defeats the point.
     const useHistory = s.historySuggestions && !this.incognito
-    if (!q) return useHistory ? history.recent(8) : []
+
+    // What is already open comes first. With twenty tabs the thing you are
+    // looking for is usually one of them, and opening a second copy of a page
+    // you already have is the wrong answer to "where is that page".
+    const openTabs = (match: string): Suggestion[] =>
+      this.tabs
+        .filter((tab) => tab.id !== this.activeId && (tab.hasContent || tab.internal))
+        .filter((tab) => {
+          if (!match) return true
+          const where = `${tab.title} ${tab.url}`.toLowerCase()
+          return where.includes(match)
+        })
+        .slice(0, 6)
+        .map((tab) => ({
+          kind: 'tab' as const,
+          title: tab.title,
+          url: tab.url || `nya://${tab.internal ?? 'start'}`,
+          subtitle: t('Открытая вкладка'),
+          tabId: tab.id
+        }))
+
+    if (!q) {
+      const tabs = openTabs('')
+      return [...tabs, ...(useHistory ? history.recent(Math.max(2, 8 - tabs.length)) : [])]
+    }
 
     const out: Suggestion[] = []
     const lower = q.toLowerCase()
+    out.push(...openTabs(lower))
 
     for (const fav of s.favorites) {
       if (fav.title.toLowerCase().includes(lower) || fav.url.toLowerCase().includes(lower)) {
@@ -1446,8 +1671,20 @@ export class BrowserWindow {
     }
     out.push({ kind: 'search', title: q, url: normalizeInput(`${q} `, s), subtitle: t('Поиск') })
 
+    // A tab and a history entry often share a URL. The tab is listed first and
+    // claims the address, so the same page is never offered twice — once to
+    // switch to and once to open again.
     const seen = new Set<string>()
-    return out.filter((item) => !seen.has(item.url) && seen.add(item.url)).slice(0, 9)
+    const kept: Suggestion[] = []
+    for (const item of out) {
+      const key = item.kind === 'tab' ? `tab:${item.tabId}` : item.url
+      if (seen.has(key) || (item.kind !== 'tab' && seen.has(item.url))) continue
+      seen.add(key)
+      seen.add(item.url)
+      kept.push(item)
+      if (kept.length === 9) break
+    }
+    return kept
   }
 
   preconnect(input: string) {
@@ -1666,11 +1903,19 @@ export class BrowserWindow {
     if (this.incognito || this.offsetFromFirst) return
     if (!settings.get().restoreSession) return
     try {
+      const kept = this.tabs.filter((t) => t.hasContent && /^https?:/i.test(t.url))
       const payload = {
-        tabs: this.tabs
-          .filter((t) => t.hasContent && /^https?:/i.test(t.url))
-          .map((t) => ({ url: t.url, title: t.title, favicon: t.favicon })),
-        activeIndex: this.tabs.findIndex((t) => t.id === this.activeId)
+        tabs: kept.map((t) => ({
+          url: t.url,
+          title: t.title,
+          favicon: t.favicon,
+          pinned: t.pinned,
+          groupId: t.groupId
+        })),
+        // Only the groups that still have a saved tab in them: restoring an
+        // empty group would put a name over nothing.
+        groups: this.groups.filter((g) => kept.some((t) => t.groupId === g.id)),
+        activeIndex: kept.findIndex((t) => t.id === this.activeId)
       }
       const file = this.sessionFile()
       writeFileSync(file + '.tmp', JSON.stringify(payload), 'utf8')
@@ -1684,13 +1929,19 @@ export class BrowserWindow {
     if (!settings.get().restoreSession) return false
     const file = this.sessionFile()
     if (!existsSync(file)) return false
-    let payload: { tabs: PersistedTab[]; activeIndex: number }
+    let payload: { tabs: PersistedTab[]; activeIndex: number; groups?: TabGroup[] }
     try {
       payload = JSON.parse(readFileSync(file, 'utf8'))
     } catch {
       return false
     }
     if (!Array.isArray(payload.tabs) || payload.tabs.length === 0) return false
+
+    // Groups first: a restored tab needs its group to exist before it can
+    // point at it, and the ids have to keep meaning what they meant.
+    this.groups = (payload.groups ?? []).map((group) => ({ ...group }))
+    this.groupSeq = this.groups.reduce((top, group) => Math.max(top, group.id), 0)
+    const knownGroup = new Set(this.groups.map((group) => group.id))
 
     const lazy = settings.get().lazyRestore
     payload.tabs.slice(0, 40).forEach((saved, index) => {
@@ -1700,6 +1951,11 @@ export class BrowserWindow {
       tab.favicon = saved.favicon
       tab.url = saved.url
       tab.hasContent = true
+      tab.pinned = saved.pinned === true
+      tab.groupId =
+        saved.groupId !== undefined && saved.groupId !== null && knownGroup.has(saved.groupId)
+          ? saved.groupId
+          : null
       this.tabs.push(tab)
 
       // Only the tab you were last looking at spends a process on startup.
@@ -1713,7 +1969,9 @@ export class BrowserWindow {
     })
 
     if (this.activeId === -1 && this.tabs[0]) this.activeId = this.tabs[0].id
+    this.reorderStrip()
     this.showActive()
+    this.sendGroups()
     this.broadcast()
     return true
   }

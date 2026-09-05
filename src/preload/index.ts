@@ -18,6 +18,7 @@ import type {
   SecurityStats,
   Settings,
   Suggestion,
+  TabGroup,
   TabState,
   Weather,
   WindowState
@@ -107,6 +108,16 @@ const api = {
   sleepTab: (id: number) => ipcRenderer.invoke('tab:sleep', id),
   reloadTab: (id: number) => ipcRenderer.invoke('tab:reload', id),
   tabMenu: (id: number) => ipcRenderer.invoke('tab:menu', id),
+  pinTab: (id: number, pinned?: boolean) => ipcRenderer.invoke('tab:pin', id, pinned),
+  groupTab: (id: number, name?: string) => ipcRenderer.invoke('tab:group-new', id, name),
+  addTabToGroup: (id: number, groupId: number) => ipcRenderer.invoke('tab:group-add', id, groupId),
+  removeTabFromGroup: (id: number) => ipcRenderer.invoke('tab:group-remove', id),
+  renameGroup: (groupId: number, name: string) => ipcRenderer.invoke('group:rename', groupId, name),
+  setGroupColour: (groupId: number, colour: string) => ipcRenderer.invoke('group:colour', groupId, colour),
+  toggleGroup: (groupId: number, collapsed?: boolean) => ipcRenderer.invoke('group:toggle', groupId, collapsed),
+  ungroup: (groupId: number) => ipcRenderer.invoke('group:ungroup', groupId),
+  closeGroup: (groupId: number) => ipcRenderer.invoke('group:close', groupId),
+  groupMenu: (groupId: number) => ipcRenderer.invoke('group:menu', groupId),
   reopenTab: () => ipcRenderer.invoke('tab:reopen'),
   closedTabs: (): Promise<ClosedTab[]> => ipcRenderer.invoke('tab:closed-list'),
   navigate: (url: string, id?: number) => ipcRenderer.invoke('tab:navigate', url, id),
@@ -245,6 +256,7 @@ const api = {
 
   /* ---- subscriptions ---- */
   onTabs: (cb: (tabs: TabState[]) => void) => on<TabState[]>('state:tabs', cb),
+  onGroups: (cb: (groups: TabGroup[]) => void) => on<TabGroup[]>('state:groups', cb),
   onWindow: (cb: (state: WindowState) => void) => on<WindowState>('state:window', cb),
   onSettings: (cb: (settings: Settings) => void) => on<Settings>('state:settings', cb),
   onSecurity: (cb: (stats: SecurityStats) => void) => on<SecurityStats>('state:security', cb),
