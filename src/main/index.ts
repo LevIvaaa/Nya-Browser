@@ -3,7 +3,7 @@ import { app, dialog, ipcMain, Menu, nativeTheme, session, shell, type MenuItemC
 import { join } from 'path'
 import { execFile, execFileSync } from 'child_process'
 import { BrowserWindow } from './browser'
-import { settings } from './settings'
+import { DOH_TEMPLATES, settings } from './settings'
 import { history } from './history'
 import { bookmarks } from './bookmarks'
 import { profiles, AVATAR_CHOICES, AVATAR_PICTURE_EXTENSIONS, COLOR_CHOICES } from './profiles'
@@ -13,6 +13,7 @@ import { initLog, log } from './log'
 import { flushAll, installExitHooks } from './store'
 import { registerProtocols, registerSchemes } from './protocol'
 import { helloAvailable, helloVerify } from './hello'
+import { sites } from './sites'
 import { BLOCKLIST_SIZE, blockedLog, clearBrowsingData, hardenApp, hardenSession, resetStats, stats } from './security'
 import { detectSources, importBookmarks, importPasswordsCsv } from './import'
 import { engine, filterStatus, hideCss, loadFilters } from './filters'
@@ -38,7 +39,7 @@ import {
   urlFromArgv
 } from './windows-integration'
 import { SEARCH_ENGINES } from '../shared/search'
-import type { AppInfo, Settings } from '../shared/types'
+import type { AppInfo, Settings, SiteRules } from '../shared/types'
 
 /* ------------------------------------------------------------------------- */
 /* Startup switches — read before app.whenReady() and fixed for the session.  */
@@ -211,6 +212,7 @@ if (!app.requestSingleInstanceLock()) {
     // the first seconds may need a reload, which the settings page mentions.
     void initWidevine()
     registerProtocols()
+    applyDnsProvider()
     hardenApp(app)
     hardenSession(session.defaultSession)
     nativeTheme.themeSource = settings.get().theme
@@ -359,6 +361,12 @@ function registerIpc() {
   ipcMain.handle('group:ungroup', (event, groupId: unknown) => current(event).ungroup(num(groupId)))
   ipcMain.handle('group:close', (event, groupId: unknown) => current(event).closeGroup(num(groupId)))
   ipcMain.handle('group:menu', (event, groupId: unknown) => current(event).showGroupMenu(num(groupId)))
+  ipcMain.handle('site:info', (event) => current(event).siteInfo())
+  ipcMain.handle('site:set', (event, host: unknown, patch: unknown, reload?: unknown) =>
+    current(event).setSiteRules(str(host, 260), (patch ?? {}) as Partial<SiteRules>, flag(reload))
+  )
+  ipcMain.handle('site:clear', (event, host: unknown) => current(event).clearSiteRules(str(host, 260)))
+  ipcMain.handle('site:list', () => sites.all())
   ipcMain.handle('tab:reopen', (event) => current(event).reopenClosed())
   ipcMain.handle('tab:closed-list', (event) => current(event).recentlyClosed())
   ipcMain.handle('tab:navigate', (event, url: unknown, id?: unknown) =>
@@ -432,8 +440,18 @@ function registerIpc() {
   ipcMain.handle('settings:engines', (event) => SEARCH_ENGINES)
   ipcMain.handle('settings:set', async (event, patch: unknown) => {
     const before = settings.get().language
+    const dns = settings.get()
     const next = settings.patch((patch ?? {}) as Partial<Settings>)
     nativeTheme.themeSource = next.theme
+    // The resolver is process-wide and takes effect on the next lookup, so a
+    // change here is felt without a restart.
+    if (
+      next.dnsProvider !== dns.dnsProvider ||
+      next.dohCustom !== dns.dohCustom ||
+      next.dohFallback !== dns.dohFallback
+    ) {
+      applyDnsProvider()
+    }
     if (next.language !== before) {
       // The main process speaks the new language from the next menu on, and
       // sites hear about it through Accept-Language right away.
@@ -703,6 +721,37 @@ function registerIpc() {
   ipcMain.on('autofill:submitted', (event, payload: unknown) => {
     const data = (payload ?? {}) as { host?: string; username?: string; password?: string }
     current(event as unknown as Electron.IpcMainInvokeEvent).handleAutofillSubmitted(str(data.host, 200), str(data.username, 200), str(data.password, 400))
+  })
+}
+
+/**
+ * Points Chromium's resolver at a DNS-over-HTTPS server, or leaves it to the
+ * system.
+ *
+ * Everything else the browser does about privacy — blocking, HTTPS-only,
+ * stripping tracking parameters — happens after the address has already been
+ * asked for in the clear. This is that last request.
+ *
+ * `secureDnsMode` 'secure' refuses to fall back to the plain resolver, which is
+ * the honest setting and also the one that breaks a captive portal; 'automatic'
+ * tries the secure resolver first and lets the system answer when it cannot.
+ */
+export function applyDnsProvider() {
+  const s = settings.get()
+  const template =
+    s.dnsProvider === 'custom'
+      ? s.dohCustom
+      : s.dnsProvider === 'system'
+        ? ''
+        : DOH_TEMPLATES[s.dnsProvider]
+
+  if (!template) {
+    app.configureHostResolver({ secureDnsMode: 'off', secureDnsServers: [] })
+    return
+  }
+  app.configureHostResolver({
+    secureDnsMode: s.dohFallback ? 'automatic' : 'secure',
+    secureDnsServers: [template]
   })
 }
 

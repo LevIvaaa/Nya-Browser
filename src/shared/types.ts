@@ -67,6 +67,33 @@ export interface PermissionSettings {
   download: PermissionPolicy
 }
 
+export type PermissionKey = keyof PermissionSettings
+
+/**
+ * What one host is allowed to do, on top of the global answer. Anything absent
+ * means "as everywhere else" — an exception list, not a copy of the settings.
+ */
+export interface SiteRules {
+  permissions: Partial<Record<PermissionKey, PermissionPolicy>>
+  /** the zoom this site opens at, in Chromium's zoom levels */
+  zoom?: number
+  /** 'off' turns the ad and tracker blocker off for this host */
+  blocking?: 'off'
+}
+
+/** What the padlock panel shows about the page in front of you. */
+export interface SiteInfo {
+  host: string
+  url: string
+  secure: boolean
+  /** how many requests were blocked on this tab */
+  blocked: number
+  zoom: number
+  rules: SiteRules
+  /** the global answers, so the panel can say what "as everywhere else" means */
+  defaults: PermissionSettings
+}
+
 /** Everything the start page can put on its canvas. */
 export type WidgetId =
   | 'clock'
@@ -221,6 +248,16 @@ export interface Settings {
   /** let Windows Hello answer that question */
   passwordsHello: boolean
   webrtcPolicy: WebRtcPolicy
+  /**
+   * Who resolves addresses, and over what. 'system' leaves it to Windows,
+   * which means the provider sees every name in the clear; anything else is a
+   * DNS-over-HTTPS resolver, and 'custom' takes its template from dohCustom.
+   */
+  dnsProvider: DnsProvider
+  /** an RFC 8484 template, used when dnsProvider is 'custom' */
+  dohCustom: string
+  /** fall back to the system resolver when the secure one cannot answer */
+  dohFallback: boolean
   /** off by default costs nothing; on, Chromium downloads dictionaries from Google */
   spellcheck: boolean
   spellcheckLanguages: string[]
@@ -336,6 +373,9 @@ export interface TabGroup {
   color: string
   collapsed: boolean
 }
+
+/** The resolvers the settings page offers; see DOH_TEMPLATES. */
+export type DnsProvider = 'system' | 'cloudflare' | 'google' | 'quad9' | 'adguard' | 'custom'
 
 export interface Suggestion {
   kind: 'search' | 'url' | 'history' | 'favorite' | 'tab'

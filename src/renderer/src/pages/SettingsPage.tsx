@@ -867,6 +867,43 @@ export default function SettingsPage({
                     width={210}
                   />
                 </Row>
+                <Row
+                  title={t('DNS через HTTPS')}
+                  hint={t('Иначе каждый адрес уходит провайдеру открытым текстом')}
+                >
+                  <Select
+                    value={settings.dnsProvider}
+                    onChange={(v) => onPatch({ dnsProvider: v })}
+                    options={[
+                      { value: 'system', label: t('Как в системе') },
+                      { value: 'cloudflare', label: 'Cloudflare' },
+                      { value: 'google', label: 'Google' },
+                      { value: 'quad9', label: 'Quad9' },
+                      { value: 'adguard', label: 'AdGuard' },
+                      { value: 'custom', label: t('Свой сервер') }
+                    ]}
+                    width={210}
+                  />
+                </Row>
+                {settings.dnsProvider === 'custom' && (
+                  <Row title={t('Адрес DNS-сервера')} hint={t('Шаблон RFC 8484, только https://')}>
+                    <input
+                      className="field h-[32px] w-[280px]"
+                      defaultValue={settings.dohCustom}
+                      spellCheck={false}
+                      placeholder="https://example.net/dns-query"
+                      onBlur={(event) => onPatch({ dohCustom: event.target.value.trim() })}
+                    />
+                  </Row>
+                )}
+                {settings.dnsProvider !== 'system' && (
+                  <Row
+                    title={t('Возвращаться к системному DNS')}
+                    hint={t('Без этого сеть, где защищённый DNS не работает, не откроется вовсе')}
+                  >
+                    <Toggle checked={settings.dohFallback} onChange={(v) => onPatch({ dohFallback: v })} />
+                  </Row>
+                )}
                 <Row title={t('Сохранять историю')}>
                   <Toggle checked={settings.saveHistory} onChange={(v) => onPatch({ saveHistory: v })} />
                 </Row>
