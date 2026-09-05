@@ -38,15 +38,15 @@
 
   <div style="position: relative; z-index: 1; flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 40px;">
     <img src="nya-logo.png" alt="" style="width: 64px; height: 64px; filter: drop-shadow(0 10px 24px rgba(124, 108, 255, 0.4));">
-    <div style="margin-top: 16px; font-size: 20px; line-height: 24px; font-weight: 600; letter-spacing: -0.015em;">Устанавливаем Nya Browser</div>
-    <div style="margin-top: 7px; font-size: 12.5px; line-height: 17px; color: rgba(242, 243, 247, 0.62);">Распаковываем файлы браузера</div>
+    <div style="margin-top: 16px; font-size: 20px; line-height: 24px; font-weight: 600; letter-spacing: -0.015em;" data-nsis="title" data-nsis-hide>Устанавливаем Nya Browser</div>
+    <div style="margin-top: 7px; font-size: 12.5px; line-height: 17px; color: rgba(242, 243, 247, 0.62);" data-nsis="subtitle" data-nsis-hide>Распаковываем файлы браузера</div>
 
     <div style="margin-top: 26px; width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 9px;">
       <div data-nsis="progress" style="position: relative; height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.07); overflow: hidden;">
         <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 62%; border-radius: 999px; background: #7c6cff; box-shadow: 0 0 18px -2px rgba(124, 108, 255, 0.9);"></div>
       </div>
       <div data-nsis-hide style="display: flex; align-items: center; justify-content: space-between;">
-        <span style="font-size: 11px; line-height: 15px; color: rgba(242, 243, 247, 0.38);">73 из 118 МБ</span>
+        <span style="font-size: 11px; line-height: 15px; color: rgba(242, 243, 247, 0.38);" data-nsis-hide>73 из 118 МБ</span>
         <span style="font-size: 11px; line-height: 15px; font-weight: 600; color: rgba(242, 243, 247, 0.62); font-variant-numeric: tabular-nums;">62%</span>
       </div>
     </div>
@@ -56,7 +56,7 @@
     <span style="display: flex; flex-shrink: 0; color: rgba(124, 108, 255, 0.9);">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 19 6v5.6c0 4.3-2.9 7.4-7 8.9-4.1-1.5-7-4.6-7-8.9V6z"></path><path d="m9.2 11.8 2 2 3.6-3.9"></path></svg>
     </span>
-    <span style="font-size: 12.5px; line-height: 17px; color: rgba(242, 243, 247, 0.62); text-wrap: pretty;">Блокируем рекламу сразу после установки — списки уже внутри</span>
+    <span style="font-size: 12.5px; line-height: 17px; color: rgba(242, 243, 247, 0.62); text-wrap: pretty;" data-nsis="hint" data-nsis-hide>Блокируем рекламу сразу после установки — списки уже внутри</span>
   </div>
 </div>
 </x-dc>

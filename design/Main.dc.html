@@ -30,10 +30,18 @@
   <div class="blob" style="width: 300px; height: 200px; left: 40%; bottom: -150px; background: #e255a1; opacity: 0.10;"></div>
 
   <div style="position: relative; z-index: 1; display: flex; justify-content: space-between; align-items: stretch; height: 34px;">
+    <!-- The strip is the patch of artwork the pill lives on. It is baked at a
+         range of pill widths and the installer blits the one that fits the
+         language name, so the pill hugs its text instead of standing in a
+         fixed box with empty space to the right. -->
+    <div data-nsis="lang-strip" style="display: flex; width: 210px; height: 34px;">
     <div data-nsis="lang-hit" style="display: flex; align-items: center; gap: 7px; margin: 5px 0 0 12px; height: 24px; padding: 0 10px 0 8px; border-radius: 12px; background: rgba(255, 255, 255, 0.06);">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(242,243,247,0.62)" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M3.5 12h17M12 3.2c2.6 2.4 3.9 5.4 3.9 8.8s-1.3 6.4-3.9 8.8c-2.6-2.4-3.9-5.4-3.9-8.8s1.3-6.4 3.9-8.8z"></path></svg>
-      <span data-nsis="lang" style="font-size: 12px; line-height: 16px; color: rgba(242, 243, 247, 0.72); min-width: 64px;">Русский</span>
+      <!-- The label itself is drawn by a native STATIC at run time; the baked
+           art keeps the pill and spacing but no text, or the two would ghost. -->
+      <span data-nsis="lang" style="font-size: 12px; line-height: 16px; color: transparent; min-width: 84px;">Русский</span>
       <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="rgba(242,243,247,0.55)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+    </div>
     </div>
     <div data-nsis="close-x" style="display: flex; align-items: center; justify-content: center; width: 46px; height: 34px; color: rgba(242, 243, 247, 0.62);">
       <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
@@ -45,36 +53,36 @@
   <div style="position: relative; z-index: 1; flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 32px;">
     <img src="nya-logo.png" alt="" style="width: 84px; height: 84px; filter: drop-shadow(0 12px 28px rgba(124, 108, 255, 0.45));">
     <div style="margin-top: 14px; font-size: 26px; line-height: 31px; font-weight: 600; letter-spacing: -0.02em;">Nya Browser</div>
-    <div style="margin-top: 6px; font-size: 13.5px; line-height: 19px; color: rgba(242, 243, 247, 0.62); text-align: center; text-wrap: pretty;">Быстрый и приватный браузер</div>
-    <button data-nsis="install" style="margin-top: 24px; height: 44px; padding: 0 34px; border: 0; border-radius: 12px; background: #7c6cff; color: #ffffff; font: 500 15px/1 'Inter var', 'Inter', 'Segoe UI', system-ui, sans-serif; letter-spacing: -0.01em; cursor: pointer; box-shadow: 0 10px 26px -10px rgba(124, 108, 255, 0.85);">Установить</button>
+    <div data-nsis="tagline" data-nsis-hide style="margin-top: 6px; width: 100%; font-size: 13.5px; line-height: 19px; color: rgba(242, 243, 247, 0.62); text-align: center; text-wrap: pretty;">Быстрый и приватный браузер</div>
+    <button data-nsis="install" style="margin-top: 24px; height: 44px; width: 232px; padding: 0; border: 0; border-radius: 12px; background: #7c6cff; color: #ffffff; font: 500 15px/1 'Inter var', 'Inter', 'Segoe UI', system-ui, sans-serif; letter-spacing: -0.01em; cursor: pointer; box-shadow: 0 10px 26px -10px rgba(124, 108, 255, 0.85);"><span data-nsis-hide>Установить</span></button>
   </div>
 
   <div style="position: relative; z-index: 1; display: flex; flex-direction: column; gap: 10px; padding: 14px 22px 16px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
 
     <div style="display: flex; align-items: center; gap: 12px;">
       <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0; flex-grow: 1;">
-        <div style="font-size: 11px; line-height: 15px; color: rgba(242, 243, 247, 0.38);">Папка установки</div>
+        <div data-nsis="path-label" data-nsis-hide style="font-size: 11px; line-height: 15px; color: rgba(242, 243, 247, 0.38);">Папка установки</div>
         <div style="font-size: 12.5px; line-height: 17px; color: rgba(242, 243, 247, 0.62); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" data-nsis="path">C:\Users\Lev\AppData\Local\Programs\Nya Browser</div>
       </div>
-      <button data-nsis="browse" style="height: 30px; padding: 0 12px; border: 0; border-radius: 10px; background: rgba(255, 255, 255, 0.05); color: #f2f3f7; font: 500 12.5px/1 'Inter var', 'Inter', 'Segoe UI', system-ui, sans-serif; cursor: pointer;">Изменить</button>
+      <button data-nsis="browse" style="height: 30px; width: 116px; padding: 0; border: 0; border-radius: 10px; background: rgba(255, 255, 255, 0.05); color: #f2f3f7; font: 500 12.5px/1 'Inter var', 'Inter', 'Segoe UI', system-ui, sans-serif; cursor: pointer;"><span data-nsis-hide>Изменить</span></button>
     </div>
 
     <div style="display: flex; align-items: center; gap: 22px;">
-      <div data-nsis="row-desktop" style="display: flex; align-items: center; gap: 8px;">
+      <div data-nsis="row-desktop" style="display: flex; align-items: center; gap: 8px; width: 264px;">
         <span data-nsis="box-desktop" style="display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 5px; background: #7c6cff; color: #ffffff;">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7"></path></svg>
         </span>
-        <span style="font-size: 12.5px; line-height: 17px; color: rgba(242, 243, 247, 0.62);">Ярлык на рабочем столе</span>
+        <span data-nsis="label-desktop" data-nsis-hide style="flex-grow: 1; font-size: 12.5px; line-height: 17px; color: rgba(242, 243, 247, 0.62);">Ярлык на рабочем столе</span>
       </div>
-      <div data-nsis="row-default" style="display: flex; align-items: center; gap: 8px;">
+      <div data-nsis="row-default" style="display: flex; align-items: center; gap: 8px; width: 264px;">
         <span data-nsis="box-default" style="display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 5px; background: #7c6cff; color: #ffffff;">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7"></path></svg>
         </span>
-        <span style="font-size: 12.5px; line-height: 17px; color: rgba(242, 243, 247, 0.62);">Сделать браузером по умолчанию</span>
+        <span data-nsis="label-default" data-nsis-hide style="flex-grow: 1; font-size: 12.5px; line-height: 17px; color: rgba(242, 243, 247, 0.62);">Сделать браузером по умолчанию</span>
       </div>
     </div>
 
-    <div style="font-size: 11px; line-height: 15px; color: rgba(242, 243, 247, 0.38);">Версия 1.0.0 · открытый код</div>
+    <div data-nsis="version-line" data-nsis-hide style="font-size: 11px; line-height: 15px; color: rgba(242, 243, 247, 0.38);">Версия 1.0.0 · открытый код</div>
   </div>
 </div>
 </x-dc>

@@ -38,13 +38,13 @@
 
   <div style="position: relative; z-index: 1; flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 40px;">
     <img src="nya-logo.png" alt="" style="width: 72px; height: 72px; opacity: 0.5; filter: grayscale(0.4) drop-shadow(0 12px 28px rgba(124, 108, 255, 0.25));">
-    <div style="margin-top: 16px; font-size: 22px; line-height: 26px; font-weight: 600; letter-spacing: -0.02em;">Nya Browser удалён</div>
-    <div style="margin-top: 6px; font-size: 13.5px; line-height: 19px; color: rgba(242, 243, 247, 0.62); text-align: center;">Спасибо, что попробовали</div>
-    <button data-nsis="close" style="margin-top: 24px; height: 44px; width: 160px; border: 0; border-radius: 12px; background: rgba(255, 255, 255, 0.05); color: #f2f3f7; font: 500 15px/1 'Inter var', 'Inter', 'Segoe UI', system-ui, sans-serif; letter-spacing: -0.01em; cursor: pointer;">Закрыть</button>
+    <div style="margin-top: 16px; font-size: 22px; line-height: 26px; font-weight: 600; letter-spacing: -0.02em;" data-nsis="title" data-nsis-hide>Nya Browser удалён</div>
+    <div style="margin-top: 6px; font-size: 13.5px; line-height: 19px; color: rgba(242, 243, 247, 0.62); text-align: center;" data-nsis="subtitle" data-nsis-hide>Спасибо, что попробовали</div>
+    <button data-nsis="close" style="margin-top: 24px; height: 44px; width: 160px; border: 0; border-radius: 12px; background: rgba(255, 255, 255, 0.05); color: #f2f3f7; font: 500 15px/1 'Inter var', 'Inter', 'Segoe UI', system-ui, sans-serif; letter-spacing: -0.01em; cursor: pointer;"><span data-nsis-hide>Закрыть</span></button>
   </div>
 
   <div style="position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 22px 16px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
-    <span style="font-size: 12.5px; line-height: 17px; color: rgba(242, 243, 247, 0.62);">Установить снова можно в любой момент</span>
+    <span style="font-size: 12.5px; line-height: 17px; color: rgba(242, 243, 247, 0.62);" data-nsis="hint" data-nsis-hide>Установить снова можно в любой момент</span>
     <span style="font-size: 11px; line-height: 15px; color: rgba(242, 243, 247, 0.38);">1.0.0</span>
   </div>
 </div>
