@@ -99,8 +99,7 @@ block = '''  ; The name of a language code, for the pill to open on whatever lan
     ${Switch} $R9
 %s
       ${Default}
-        Call nyaSystemLangName
-        Pop $R9
+        StrCpy $R9 ""
         ${Break}
     ${EndSwitch}
     Exch $R9

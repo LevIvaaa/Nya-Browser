@@ -73,10 +73,11 @@ ManifestDPIAware true
 !define NYA_LABEL   0x50000080
 !define NYA_PATH    0x50008080
 !define NYA_HIT     0x5000010D   ; SS_OWNERDRAW|SS_NOTIFY: unpainted, clickable
-!define NYA_TXT_L   0x50000080   ; a line of live text, left-aligned
-!define NYA_TXT_C   0x50000081   ; the same, centred in its box
-!define NYA_TXT_LV  0x50000280   ; left, and centred on the box's own height
-!define NYA_TXT_CV  0x50000281   ; centred both ways — button captions
+!define NYA_TXT_L   0x50000280   ; a line of live text, left-aligned
+!define NYA_TXT_C   0x50000281   ; the same, centred in its box
+!define NYA_TXT_LV  0x50000280   ; the vertical centring is on all four
+!define NYA_TXT_CV  0x50000281   ; now; the names still say what the
+!define NYA_TXT_PAD 7            ; call meant. PAD is air for descenders
 !define NYA_IMAGE   0x5000004E
 !define NYA_ART     0x5000004E
 
@@ -196,8 +197,14 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
 ; A line of text the artwork no longer carries. The design measured the box;
 ; the language decides what goes in it, which is the whole reason these are
 ; controls and not pixels.
+; GDI draws a label from the top of its box, so a box the height of the
+; design's line clips every descender - the tail of the y in Nya was the
+; first to go. Each label gets air above and below and is centred in it.
 !macro NyaText OUT PARENT STYLE X Y W H FONT COLOUR
-  ${control} ${OUT} ${PARENT} ${STYLE} ${X} ${Y} ${W} ${H} ""
+  IntOp $R4 ${Y} - ${NYA_TXT_PAD}
+  IntOp $R5 ${H} + ${NYA_TXT_PAD}
+  IntOp $R5 $R5 + ${NYA_TXT_PAD}
+  ${control} ${OUT} ${PARENT} ${STYLE} ${X} $R4 ${W} $R5 ""
   SendMessage ${OUT} ${WM_SETFONT} ${FONT} 1
   SetCtlColors ${OUT} ${COLOUR} transparent
 !macroend
@@ -220,6 +227,29 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
   SendMessage ${HWND} ${WM_SETTEXT} 0 "STR:$R7"
 !macroend
 !define setstr "!insertmacro NyaSetStr"
+
+; Paints one line straight into a bitmap. The uninstall progress window is a
+; bare popup holding a picture, not a dialog, so nobody there answers
+; WM_CTLCOLORSTATIC and a child label would arrive on a white box. Words that
+; belong on that picture are drawn into the picture. Uses $2-$8.
+; FLAGS: 0x25 centres the line in its box, 0x24 leaves it at the left edge.
+!macro NyaDrawText DC FONT COLOUR FLAGS X Y W H TEXT
+  System::Call 'gdi32::SelectObject(p ${DC}, p ${FONT})'
+  System::Call 'gdi32::SetTextColor(p ${DC}, i ${COLOUR})'
+  ${px} $5 ${X}
+  IntOp $6 ${Y} - ${NYA_TXT_PAD}
+  ${px} $6 $6
+  ${px} $7 ${W}
+  IntOp $7 $5 + $7
+  IntOp $8 ${H} + ${NYA_TXT_PAD}
+  IntOp $8 $8 + ${NYA_TXT_PAD}
+  ${px} $8 $8
+  IntOp $8 $6 + $8
+  System::Call '*(i r5, i r6, i r7, i r8) p .r4'
+  System::Call 'user32::DrawTextW(p ${DC}, w "${TEXT}", i -1, p r4, i ${FLAGS})'
+  System::Free $4
+!macroend
+!define draw "!insertmacro NyaDrawText"
 
 !macro NyaHit PARENT RECT CALLBACK
   ${px} $0 ${${RECT}_X}
@@ -487,11 +517,9 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
     ${control} $nyaLangStrip $nyaDialog ${NYA_IMAGE} \
       ${ART_WELCOME_LANG_STRIP_X} ${ART_WELCOME_LANG_STRIP_Y} \
       ${ART_WELCOME_LANG_STRIP_W} ${ART_WELCOME_LANG_STRIP_H} ""
-    ${control} $nyaLangLabel $nyaDialog ${NYA_LABEL} \
+    ${text} $nyaLangLabel $nyaDialog ${NYA_TXT_L} \
       ${ART_WELCOME_LANG_X} ${ART_WELCOME_LANG_Y} \
-      ${ART_WELCOME_LANG_W} ${ART_WELCOME_LANG_H} ""
-    SendMessage $nyaLangLabel ${WM_SETFONT} $nyaFontSmall 1
-    SetCtlColors $nyaLangLabel ${NYA_DIM} transparent
+      ${ART_WELCOME_LANG_W} ${ART_WELCOME_LANG_H} $nyaFontSmall ${NYA_DIM}
     ${hit} $nyaDialog ART_WELCOME_LANG_HIT nyaLangClicked
     StrCpy $nyaLangHit $R1
 
@@ -499,14 +527,20 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
     ; second install opens the pill on the language the user is actually
     ; reading rather than on whatever Windows is set to. Left untouched the
     ; pill writes nothing back, and that choice survives the reinstall.
-    ReadRegStr $R5 HKCU "Software\Nya Browser" "language"
-    ${If} $R5 == ""
-    ${OrIf} $R5 == "system"
-      Call nyaSystemLangName
-      Pop $R5
-    ${Else}
-      Push $R5
+    ReadRegStr $R4 HKCU "Software\Nya Browser" "language"
+    StrCpy $R5 ""
+    ${If} $R4 != ""
+    ${AndIf} $R4 != "system"
+      Push $R4
       Call nyaLangNameOf
+      Pop $R5
+      StrCpy $nyaLang $R4
+    ${EndIf}
+    ; Nothing usable in the registry, or a code this installer does not
+    ; know: open on whatever Windows itself speaks and write nothing.
+    ${If} $R5 == ""
+      StrCpy $nyaLang ""
+      Call nyaSystemLangName
       Pop $R5
     ${EndIf}
     Call nyaLangFit
@@ -754,8 +788,7 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
         StrCpy $R9 "አማርኛ"
         ${Break}
       ${Default}
-        Call nyaSystemLangName
-        Pop $R9
+        StrCpy $R9 ""
         ${Break}
     ${EndSwitch}
     Exch $R9
@@ -1065,7 +1098,7 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
     Pop $R9
     ${str} $R7 "welcome.systemLang"
     System::Call 'user32::CreatePopupMenu() p .R0'
-    System::Call 'user32::AppendMenu(p R0, i 0, i 1, w "$R7")'
+    System::Call 'user32::AppendMenu(p R0, i 0, i 1, w "Язык системы")'
     System::Call 'user32::AppendMenu(p R0, i 0x800, i 0, w "")'
     System::Call 'user32::AppendMenu(p R0, i 0, i 2, w "Русский")'
     System::Call 'user32::AppendMenu(p R0, i 0, i 3, w "English")'
@@ -1506,9 +1539,12 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
     ; grows by the same amount: the chrome around the label is whatever the
     ; design measured, so the three can never drift apart.
     ${px} $0 ${ART_WELCOME_LANG_X}
-    ${px} $1 ${ART_WELCOME_LANG_Y}
+    IntOp $1 ${ART_WELCOME_LANG_Y} - ${NYA_TXT_PAD}
+    ${px} $1 $1
     ${px} $2 $R7
-    ${px} $3 ${ART_WELCOME_LANG_H}
+    IntOp $3 ${ART_WELCOME_LANG_H} + ${NYA_TXT_PAD}
+    IntOp $3 $3 + ${NYA_TXT_PAD}
+    ${px} $3 $3
     System::Call 'user32::MoveWindow(p $nyaLangLabel, i $0, i $1, i $2, i $3, i 1)'
     SendMessage $nyaLangLabel ${WM_SETTEXT} 0 "STR:$R5"
 
@@ -1736,16 +1772,26 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
     Pop $nyaUnShroud
     ${scaledImage} $nyaUnShroud "un-progress.bmp" $nyaW $nyaH
 
-    ${text} $R6 $nyaUnShroud ${NYA_TXT_C} 0 ${ART_UN_PROGRESS_TITLE_Y} 640 \
-      ${ART_UN_PROGRESS_TITLE_H} $nyaFontH20 ${NYA_TEXT}
-    ${setstr} $R6 "unprogress.title"
-    ${text} $R6 $nyaUnShroud ${NYA_TXT_C} 0 ${ART_UN_PROGRESS_SUBTITLE_Y} 640 \
-      ${ART_UN_PROGRESS_SUBTITLE_H} $nyaFontPath ${NYA_DIM}
-    ${setstr} $R6 "unprogress.subtitle"
-    ${text} $R6 $nyaUnShroud ${NYA_TXT_L} ${ART_UN_PROGRESS_HINT_X} \
-      ${ART_UN_PROGRESS_HINT_Y} 560 ${ART_UN_PROGRESS_HINT_H} \
-      $nyaFontPath ${NYA_DIM}
-    ${setstr} $R6 "unprogress.hint"
+    ; The words go into the picture, not on top of it — see NyaDrawText.
+    SendMessage $nyaUnShroud ${STM_GETIMAGE} 0 0 $R6
+    System::Call 'user32::GetDC(p 0) p .r0'
+    System::Call 'gdi32::CreateCompatibleDC(p r0) p .r1'
+    System::Call 'gdi32::SelectObject(p r1, p $R6) p .r2'
+    System::Call 'gdi32::SetBkMode(p r1, i 1)'
+    ${str} $R7 "unprogress.title"
+    ${draw} $1 $nyaFontH20 0x00F7F3F2 0x25 0 ${ART_UN_PROGRESS_TITLE_Y} 640 \
+      ${ART_UN_PROGRESS_TITLE_H} "$R7"
+    ${str} $R7 "unprogress.subtitle"
+    ${draw} $1 $nyaFontPath 0x00A09C9B 0x25 0 ${ART_UN_PROGRESS_SUBTITLE_Y} 640 \
+      ${ART_UN_PROGRESS_SUBTITLE_H} "$R7"
+    ${str} $R7 "unprogress.hint"
+    ${draw} $1 $nyaFontPath 0x00A09C9B 0x24 ${ART_UN_PROGRESS_HINT_X} \
+      ${ART_UN_PROGRESS_HINT_Y} 560 ${ART_UN_PROGRESS_HINT_H} "$R7"
+    System::Call 'gdi32::SelectObject(p r1, p r2)'
+    System::Call 'gdi32::DeleteDC(p r1)'
+    System::Call 'user32::ReleaseDC(p 0, p r0)'
+    SendMessage $nyaUnShroud ${STM_SETIMAGE} 0 $R6
+    System::Call 'user32::InvalidateRect(p $nyaUnShroud, p 0, i 1)'
 
     ; A marquee bar: the section cannot report progress to another thread's
     ; window, and a bar that animates on its own is honest about that.
