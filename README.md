@@ -180,14 +180,20 @@ Defender запрещает `node.exe` и `tsc` писать в эти папк�
 npm install
 npm run dev              # запуск с горячей перезагрузкой
 npm run typecheck        # проверка типов
-npm test                 # фильтры, распаковка расширений, валидация настроек
+npm test                 # фильтры, расширения, настройки, отсутствие секретов в дереве
+npm run check:locales    # словари против en.json и списка языков
+npm run check:installer  # 31 строка установщика × 65 языков и генерируемые .nsh
+npm run check            # всё перечисленное плюс сборка — то же, что гоняет CI
 npm run dist:win         # распакованная сборка в dist/win-unpacked
 npm run dist:portable    # один переносимый exe
 npm run dist:installer   # установщик NSIS (только из-под Windows: electron-builder
                          # запускает собранный установщик, чтобы сгенерировать деинсталлятор)
 npm run release          # собрать установщик и выложить релиз на GitHub (нужен GH_TOKEN)
 npm run release:signed   # то же плюс подпись Authenticode — см. docs/signing.md
+npm run release:check    # проверить, что в релизе лежат все три файла обновления
 ```
+
+Порядок выпуска версии — в [docs/release.md](docs/release.md).
 
 `npm install` тянет Electron с GitHub, а не из npm: нужен форк
 **castlabs/electron-releases** — единственный способ получить Widevine. Это тот же
