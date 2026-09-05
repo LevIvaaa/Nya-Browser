@@ -18,6 +18,8 @@ import type {
   SecurityStats,
   Settings,
   Suggestion,
+  SiteInfo,
+  SiteRules,
   TabGroup,
   TabState,
   Weather,
@@ -146,6 +148,13 @@ const api = {
   setLayout: (rect: ContentLayout) => ipcRenderer.invoke('ui:layout', rect),
   setOverlay: (mode: string | null) => ipcRenderer.invoke('ui:overlay', mode),
   openChromePage: (page: string) => ipcRenderer.invoke('ui:page', page),
+
+  /* ---- one site ---- */
+  siteInfo: (): Promise<SiteInfo | null> => ipcRenderer.invoke('site:info'),
+  setSite: (host: string, patch: Partial<SiteRules>, reload?: boolean) =>
+    ipcRenderer.invoke('site:set', host, patch, reload),
+  clearSite: (host: string) => ipcRenderer.invoke('site:clear', host),
+  siteList: (): Promise<Array<{ host: string; rules: SiteRules }>> => ipcRenderer.invoke('site:list'),
 
   /* ---- settings ---- */
   getSettings: (): Promise<Settings> => ipcRenderer.invoke('settings:get'),

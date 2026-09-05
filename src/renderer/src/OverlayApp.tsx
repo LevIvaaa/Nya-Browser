@@ -3,6 +3,7 @@ import { applyLanguage, onLanguageChange } from './i18n'
 import { useBrowser } from './state/useBrowser'
 import CommandPalette from './components/CommandPalette'
 import { AppMenu, ProfileMenu } from './components/Menus'
+import SitePanel from './components/SitePanel'
 import UpdateCard from './components/UpdateCard'
 import type { UpdateState } from '../../shared/types'
 
@@ -61,6 +62,7 @@ export default function OverlayApp() {
 
   return (
     <div className="relative h-full w-full">
+      {mode === 'site' && <SitePanel onClose={close} />}
       {mode === 'palette' && (
         <CommandPalette initialValue={active?.url ?? ''} engine={engine} onClose={close} />
       )}

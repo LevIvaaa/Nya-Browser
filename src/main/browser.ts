@@ -23,6 +23,7 @@ import { downloads } from './downloads'
 import { attachLog } from './log'
 import { looksLikePdf, pdfSource, pdfViewerUrl } from './pdf'
 import { WALLPAPER_EXTENSIONS, registerProtocols } from './protocol'
+import { sites } from './sites'
 import { groupContextMenu, pageContextMenu, tabContextMenu, uiContextMenu } from './menus'
 import { acceptLanguages, t } from './i18n'
 import {
@@ -44,6 +45,8 @@ import type {
   InternalPage,
   PermissionRequest,
   Profile,
+  SiteInfo,
+  SiteRules,
   Suggestion,
   TabGroup,
   TabState,
@@ -517,6 +520,7 @@ export class BrowserWindow {
     favicons.load(dir)
     history.setEnabled(settings.get().saveHistory)
     bookmarks.load(dir)
+    sites.load(dir)
     // Held shut on purpose when the setting says to ask: the OS keychain would
     // otherwise open the vault before anyone had been asked anything.
     vault.load(dir, settings.get().passwordsAskOnStart)
@@ -864,6 +868,9 @@ export class BrowserWindow {
     wc.on('did-navigate', (_e, raw) => {
       const url = pdfSource(raw) ?? raw
       tab.url = url
+      // A site that was left at a different zoom opens at it again.
+      const own = sites.get(hostOfUrl(url)).zoom
+      wc.setZoomLevel(own ?? settings.get().defaultZoom)
       documentHosts.set(wc.id, hostOfUrl(url))
       tab.progress = 0.7
       tab.upgraded = url.startsWith('https://')
@@ -1440,6 +1447,55 @@ export class BrowserWindow {
     if (!tab) return
     if (tab.sleeping) return this.switchTab(id)
     tab.wc?.reload()
+  }
+
+  /* ---------------------------------------------------------- one site */
+
+  /** Everything the padlock panel puts on screen about the current page. */
+  siteInfo(): SiteInfo | null {
+    const tab = this.getActive()
+    const wc = tab?.wc
+    if (!tab || !wc || wc.isDestroyed()) return null
+    let host = ''
+    try {
+      host = new URL(tab.url).host.replace(/^www\./, '')
+    } catch {
+      return null
+    }
+    if (!host) return null
+    return {
+      host,
+      url: tab.url,
+      secure: tab.url.startsWith('https://'),
+      blocked: perTabBlocked.get(wc.id) ?? 0,
+      zoom: Math.round(wc.getZoomLevel() * 10) / 10,
+      rules: sites.get(host),
+      defaults: settings.get().permissions
+    }
+  }
+
+  /**
+   * Changes one site's rules and makes them true right now: a permission
+   * taken away should not wait for a reload, and blocking turned off should
+   * show the page it was breaking.
+   */
+  setSiteRules(host: string, patch: Partial<SiteRules>, reload = false) {
+    sites.set(host, patch)
+    if (patch.zoom !== undefined) {
+      for (const tab of this.tabs) {
+        if (tab.wc && !tab.wc.isDestroyed() && hostOfUrl(tab.url) === host.replace(/^www\./, '')) {
+          tab.wc.setZoomLevel(patch.zoom)
+        }
+      }
+    }
+    if (reload) this.reload()
+    this.broadcast()
+  }
+
+  clearSiteRules(host: string) {
+    sites.reset(host)
+    this.reload()
+    this.broadcast()
   }
 
   showTabMenu(id: number) {

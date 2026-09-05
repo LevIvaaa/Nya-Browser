@@ -13,6 +13,39 @@ const GROUP_COLOUR_NAMES: Record<string, string> = {
   '#94a3b8': 'Серый'
 }
 
+/**
+ * Floats a video out of the page and over everything else.
+ *
+ * The element is found where the click was; a page that puts a transparent
+ * overlay over its player — most of them do — hands back the overlay instead,
+ * so the search also looks inside and around it, and settles for the largest
+ * video on the page rather than doing nothing.
+ *
+ * Run with userGesture, because Chromium will not float a video that nobody
+ * asked for, and a context-menu click is somebody asking.
+ */
+function detachVideo(wc: WebContents, x: number, y: number) {
+  const code = `(() => {
+    const at = document.elementFromPoint(${x}, ${y})
+    const near = at
+      ? at.closest('video') ||
+        at.querySelector('video') ||
+        (at.parentElement && at.parentElement.querySelector('video'))
+      : null
+    const biggest = [...document.querySelectorAll('video')]
+      .sort((a, b) => b.clientWidth * b.clientHeight - a.clientWidth * a.clientHeight)[0]
+    const video = near || biggest
+    if (!video || !video.requestPictureInPicture) return false
+    if (document.pictureInPictureElement === video) {
+      document.exitPictureInPicture()
+      return true
+    }
+    video.requestPictureInPicture().catch(() => {})
+    return true
+  })()`
+  void wc.executeJavaScript(code, true).catch(() => undefined)
+}
+
 /** Right-click menu inside a web page. */
 export function pageContextMenu(
   browser: BrowserWindow,
@@ -42,6 +75,12 @@ export function pageContextMenu(
   }
 
   if (params.mediaType === 'video' || params.mediaType === 'audio') {
+    if (params.mediaType === 'video') {
+      items.push({
+        label: t('Картинка в картинке'),
+        click: () => detachVideo(wc, params.x, params.y)
+      })
+    }
     items.push(
       { label: t('Сохранить файл'), click: () => wc.downloadURL(params.srcURL) },
       { label: t('Копировать адрес файла'), click: () => clipboard.writeText(params.srcURL) },

@@ -11,6 +11,7 @@ import {
 import { settings } from './settings'
 import { engine } from './filters'
 import { looksLikePdf } from './pdf'
+import { sites } from './sites'
 import type { PermissionRequest, PermissionSettings, SecurityStats } from '../shared/types'
 
 const ads = new DomainMatcher(AD_DOMAINS)
@@ -286,6 +287,16 @@ export function hardenSession(
     }
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return callback({})
 
+    // A site the reader has turned blocking off for: nothing on its page is
+    // touched, including what it loads from elsewhere. Sites break in ways
+    // nobody can debug from the outside, and this is the way out of that.
+    const pageOf =
+      details.resourceType === 'mainFrame'
+        ? url.hostname
+        : (details.webContentsId !== undefined ? documentHosts.get(details.webContentsId) : undefined) ??
+          hostOf(details.referrer || '')
+    if (pageOf && sites.get(pageOf).blocking === 'off') return callback({})
+
     let kind = classify(url.hostname, url.pathname)
 
     // The domain list stops whole ad networks; the filter lists catch what is
@@ -394,18 +405,20 @@ export function hardenSession(
   })
 
   // ---- capability permissions -------------------------------------------
-  const policyFor = (permission: string): PermissionPolicyResult => {
+  /**
+   * `host` is where the request came from. A site with its own answer for this
+   * permission gets that one; everything else falls through to the global
+   * setting, which is what an empty exception list means.
+   */
+  const policyFor = (permission: string, host: string): PermissionPolicyResult => {
     if (NEVER.has(permission)) return { policy: 'block', key: 'usb' }
     const key = PERMISSION_MAP[permission]
     if (!key) return { policy: 'block', key: 'usb' }
-    return { policy: settings.get().permissions[key], key }
+    const own = host ? sites.get(host).permissions?.[key] : undefined
+    return { policy: own ?? settings.get().permissions[key], key }
   }
 
   ses.setPermissionRequestHandler((wc, permission, callback, details) => {
-    const { policy, key } = policyFor(permission)
-    if (policy === 'allow') return callback(true)
-    if (policy === 'block') return callback(false)
-
     const origin = (() => {
       try {
         return new URL(details.requestingUrl || wc?.getURL() || '').host
@@ -413,11 +426,24 @@ export function hardenSession(
         return ''
       }
     })()
+    const { policy, key } = policyFor(permission, origin)
+    if (policy === 'allow') return callback(true)
+    if (policy === 'block') return callback(false)
+
     void askUser({ id: `${Date.now()}-${permission}`, origin, permission: key }).then(callback)
   })
 
-  // A silent check must never grant more than an explicit request would.
-  ses.setPermissionCheckHandler((_wc, permission) => policyFor(permission).policy === 'allow')
+  // A silent check must never grant more than an explicit request would, and it
+  // asks about the same host the request would have come from.
+  ses.setPermissionCheckHandler((_wc, permission, origin) => {
+    let host = ''
+    try {
+      host = new URL(origin).host
+    } catch {
+      host = ''
+    }
+    return policyFor(permission, host).policy === 'allow'
+  })
   ses.setDevicePermissionHandler(() => false)
   ses.setBluetoothPairingHandler((_details, callback) => callback({ confirmed: false }))
   ses.setDisplayMediaRequestHandler(() => {

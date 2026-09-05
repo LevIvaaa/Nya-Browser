@@ -117,11 +117,28 @@ export default function Toolbar({
           }}
         >
           {hasContent ? (
-            secure ? (
-              <Lock width={13} height={13} className="shrink-0" style={{ color: 'var(--good)' }} />
-            ) : (
-              <Unlock width={13} height={13} className="shrink-0" style={{ color: 'var(--warn)' }} />
-            )
+            <span
+              role="button"
+              tabIndex={0}
+              title={t('Настройки сайта')}
+              className="no-drag -ml-1 flex shrink-0 items-center rounded-[7px] px-1 py-1 hover:bg-[var(--line)]"
+              onClick={(event) => {
+                event.stopPropagation()
+                void window.browser.setOverlay('site')
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return
+                event.stopPropagation()
+                event.preventDefault()
+                void window.browser.setOverlay('site')
+              }}
+            >
+              {secure ? (
+                <Lock width={13} height={13} style={{ color: 'var(--good)' }} />
+              ) : (
+                <Unlock width={13} height={13} style={{ color: 'var(--warn)' }} />
+              )}
+            </span>
           ) : (
             <Search width={14} height={14} className="shrink-0 text-faint" />
           )}

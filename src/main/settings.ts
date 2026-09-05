@@ -1,7 +1,28 @@
 import { app } from 'electron'
 import { JsonStore, track } from './store'
+
+/**
+ * The resolvers offered by name, and the RFC 8484 template each one answers on.
+ * 'system' is not here: it means not resolving over HTTPS at all.
+ */
+export const DOH_TEMPLATES: Record<Exclude<DnsProvider, 'system' | 'custom'>, string> = {
+  cloudflare: 'https://cloudflare-dns.com/dns-query',
+  google: 'https://dns.google/dns-query',
+  quad9: 'https://dns.quad9.net/dns-query',
+  adguard: 'https://dns.adguard-dns.com/dns-query'
+}
+
+export const DNS_PROVIDERS: DnsProvider[] = [
+  'system',
+  'cloudflare',
+  'google',
+  'quad9',
+  'adguard',
+  'custom'
+]
 import type {
   BackgroundSettings,
+  DnsProvider,
   Favorite,
   PermissionSettings,
   Settings,
@@ -116,6 +137,9 @@ export const DEFAULT_SETTINGS: Settings = {
   hardwareAcceleration: true,
   preconnect: true,
   prefetchDns: true,
+  dnsProvider: 'system',
+  dohCustom: '',
+  dohFallback: true,
   smoothScrolling: true,
   sleepBackgroundTabs: true,
   sleepAfterMinutes: 20,
@@ -329,6 +353,15 @@ export function sanitize(input: Partial<Settings>): Settings {
     hardwareAcceleration: bool(input.hardwareAcceleration, d.hardwareAcceleration),
     preconnect: bool(input.preconnect, d.preconnect),
     prefetchDns: bool(input.prefetchDns, d.prefetchDns),
+    dnsProvider: DNS_PROVIDERS.includes(input.dnsProvider as DnsProvider)
+      ? (input.dnsProvider as DnsProvider)
+      : d.dnsProvider,
+    // Only an https template is worth keeping: anything else would be the
+    // plain resolver wearing the name of a secure one.
+    dohCustom: /^https:\/\/\S+$/i.test(String(input.dohCustom ?? ''))
+      ? String(input.dohCustom).slice(0, 300)
+      : d.dohCustom,
+    dohFallback: bool(input.dohFallback, d.dohFallback),
     smoothScrolling: bool(input.smoothScrolling, d.smoothScrolling),
     sleepBackgroundTabs: bool(input.sleepBackgroundTabs, d.sleepBackgroundTabs),
     sleepAfterMinutes: clamp(input.sleepAfterMinutes, 1, 240, d.sleepAfterMinutes),
