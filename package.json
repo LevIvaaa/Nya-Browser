@@ -18,8 +18,9 @@
     "dist:win": "electron-vite build && electron-builder --win --dir",
     "dist:portable": "electron-vite build && electron-builder --win portable",
     "dist:installer": "npm run art && electron-vite build && electron-builder --win nsis",
-    "release": "npm run art && electron-vite build && electron-builder --win nsis --publish always",
-    "release:signed": "npm run art && electron-vite build && electron-builder --win nsis --publish always --config.win.verifyUpdateCodeSignature=true"
+    "release": "node build/tools/gh-release.mjs && npm run art && electron-vite build && electron-builder --win nsis --publish always && npm run release:check",
+    "release:signed": "node build/tools/gh-release.mjs && npm run art && electron-vite build && electron-builder --win nsis --publish always --config.win.verifyUpdateCodeSignature=true && npm run release:check",
+    "release:check": "node build/tools/gh-release.mjs --verify"
   },
   "build": {
     "appId": "com.nya.browser",
