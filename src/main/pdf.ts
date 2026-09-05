@@ -398,6 +398,8 @@ const countLabel = document.getElementById('count')
 const zoomLabel = document.getElementById('zoom-label')
 
 const STEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4]
+/** Pending fit-to-width, cancelled the moment a scale is chosen by hand. */
+let resizeTimer = null
 let pdf = null
 let scale = 1
 let fitMode = 'width'
@@ -530,7 +532,11 @@ function updateZoomLabel() {
 
 async function setScale(next, keepFit) {
   scale = Math.max(0.1, Math.min(8, next))
-  if (!keepFit) fitMode = null
+  if (!keepFit) {
+    fitMode = null
+    // A fit that was already queued would land after this one and undo it.
+    clearTimeout(resizeTimer)
+  }
   const anchor = current
   await sizeAll()
   updateZoomLabel()
@@ -645,7 +651,6 @@ scroll.addEventListener(
 // Watching the scroller rather than the window: a tab gets its width when it
 // is first shown, which is not a window resize and can happen long after the
 // document has been read.
-let resizeTimer = null
 let lastWidth = 0
 new ResizeObserver(() => {
   if (!fitMode || !pages[0]?.page) return
