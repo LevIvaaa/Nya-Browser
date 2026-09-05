@@ -3,12 +3,30 @@
 Usage: python check_locale.py [code ...]  (no args = all)"""
 import json, io, os, re, sys
 
-LOCALES = r'c:\Dev\Nya-Browser\src\shared\locales'
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+LOCALES = os.path.join(ROOT, 'src', 'shared', 'locales')
 ref = json.load(io.open(os.path.join(LOCALES, 'en.json'), encoding='utf-8'))
 ref_keys = set(ref)
 ph = lambda s: sorted(re.findall(r'\{\w+\}', s))
 
-codes = sys.argv[1:] or [f[:-5] for f in os.listdir(LOCALES) if f.endswith('.json')]
+on_disk = sorted(f[:-5] for f in os.listdir(LOCALES) if f.endswith('.json'))
+codes = sys.argv[1:] or on_disk
+
+# The picker's list is the contract: Russian is the source language and needs
+# no file, every other language it offers must have one, and a file nobody
+# offers is dead weight.
+ts = io.open(os.path.join(ROOT, 'src', 'shared', 'i18n.ts'), encoding='utf-8').read()
+offered = [c for c in re.findall(r"\{ code: '([\w-]+)', name:", ts) if c != 'ru']
+orphan = sorted(set(on_disk) - set(offered))
+absent = [c for c in offered if c not in set(on_disk)]
+if orphan or absent:
+    print('locales do not match LANGUAGES: %d offered without a file, %d files nobody offers'
+          % (len(absent), len(orphan)))
+    for c in absent:
+        print('  no dictionary: ' + c)
+    for c in orphan:
+        print('  not offered:   ' + c)
+    sys.exit(1)
 bad = 0
 for code in codes:
     path = os.path.join(LOCALES, code + '.json')

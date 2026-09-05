@@ -1,8 +1,11 @@
-# Types and tests on every push and pull request.
+# Everything that can be checked without a screen, on every push and pull request.
 #
-# Only the checks that run without a display: electron-vite builds and
-# electron-builder packaging need Windows and a lot of minutes, and the
-# installer is cut by hand from a tagged release rather than by CI.
+# What is deliberately not here: electron-builder packaging. Cutting the
+# installer needs Windows, the rendered artwork and a lot of minutes, and it is
+# done from a tagged release by hand. Everything that would make that installer
+# wrong — a language with no dictionary, an installer string nobody translated,
+# a generated .nsh block that has drifted from LANGUAGES — is caught here
+# instead, long before anyone waits on a build.
 name: check
 
 on:
@@ -21,11 +24,31 @@ jobs:
           node-version: 22
           cache: npm
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       # The Electron binary is a ~100 MB download this job never runs, and on
       # Linux it is the wrong one anyway.
       - run: npm ci --ignore-scripts
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
 
-      - run: npm run typecheck
-      - run: npm test
+      - name: Types
+        run: npm run typecheck
+
+      # Includes tests/secrets.mjs: the release token lives outside the tree and
+      # this is what says so out loud on every push.
+      - name: Tests
+        run: npm test
+
+      - name: Dictionaries
+        run: npm run check:locales
+
+      - name: Installer words
+        run: npm run check:installer
+
+      # esbuild and vite only — no Electron binary needed — but it is the step
+      # that catches an import that typechecks and still cannot be bundled.
+      - name: Build
+        run: npm run build
