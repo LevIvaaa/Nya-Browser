@@ -3,6 +3,7 @@ import { createReadStream, statSync } from 'fs'
 import { basename, extname, join } from 'path'
 import { Readable } from 'stream'
 import { profiles } from './profiles'
+import { servePdf } from './pdf'
 import { securityPage } from './selftest'
 
 const MIME: Record<string, string> = {
@@ -53,6 +54,9 @@ export function registerProtocols(ses: Session = session.defaultSession) {
 
   proto.handle('nya', async (request) => {
     const url = new URL(request.url)
+    // The PDF viewer needs the session it is answering for: a document behind a
+    // login is only fetchable with that session's cookies.
+    if (url.host === 'pdf') return servePdf(request, ses)
     if (url.host === 'security') {
       return new Response(securityPage(), {
         headers: {

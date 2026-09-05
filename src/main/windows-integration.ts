@@ -10,6 +10,8 @@
 
 import { app, shell } from 'electron'
 import { execFile } from 'child_process'
+import { statSync } from 'fs'
+import { pathToFileURL } from 'url'
 import { log } from './log'
 import type { DefaultBrowserState } from '../shared/types'
 
@@ -21,7 +23,7 @@ const CLIENT = 'NyaBrowser'
 const CAPABILITIES = `Software\\Clients\\StartMenuInternet\\${CLIENT}\\Capabilities`
 
 const URL_SCHEMES = ['http', 'https'] as const
-const FILE_TYPES = ['.htm', '.html', '.shtml', '.xht', '.xhtml'] as const
+const FILE_TYPES = ['.htm', '.html', '.shtml', '.xht', '.xhtml', '.pdf', '.svg'] as const
 
 export const isWindows = process.platform === 'win32'
 
@@ -150,13 +152,28 @@ export async function requestDefaultBrowser(): Promise<DefaultBrowserState> {
 }
 
 /**
- * The URL Windows handed us on launch, if any. Covers both the plain
- * `app.exe https://…` form and the `app.exe -- https://…` form we register.
+ * What Windows handed us on launch, if anything. Three shapes reach here:
+ * `app.exe https://…`, the `app.exe -- https://…` form we register for URL
+ * schemes, and `app.exe C:\path\to\file.pdf` — which is what every
+ * "Open with" and every double-clicked file looks like. Only the first two
+ * used to be understood, so opening a file with the browser opened a blank
+ * window and nothing else.
+ *
+ * In development argv carries the path to our own entry script, which is a
+ * real file and would otherwise be opened as a page on every start.
  */
 export function urlFromArgv(argv: readonly string[]): string | null {
-  for (const arg of argv.slice(1)) {
+  for (const arg of argv.slice(app.isPackaged ? 1 : 2)) {
     if (arg === '--' || arg.startsWith('--')) continue
-    if (/^https?:\/\//i.test(arg)) return arg
+    if (/^(https?|file):\/\//i.test(arg)) return arg
+    // A path, not a switch and not an address. It has to be a file that is
+    // actually there: Chromium passes positional arguments of its own, and
+    // a browser that opens them is a browser that opens surprises.
+    try {
+      if (statSync(arg).isFile()) return pathToFileURL(arg).toString()
+    } catch {
+      /* not a path we can open */
+    }
   }
   return null
 }

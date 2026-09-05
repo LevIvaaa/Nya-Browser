@@ -10,6 +10,7 @@ import {
 } from './blocklist'
 import { settings } from './settings'
 import { engine } from './filters'
+import { looksLikePdf } from './pdf'
 import type { PermissionRequest, PermissionSettings, SecurityStats } from '../shared/types'
 
 const ads = new DomainMatcher(AD_DOMAINS)
@@ -221,7 +222,43 @@ let hardenedSessions = new WeakSet<Session>()
  * call again when settings change: the request filters read live settings, and
  * the listeners are only installed once per session.
  */
-export function hardenSession(ses: Session, onBlocked?: (webContentsId: number) => void) {
+/**
+ * A response that a tab would show as a PDF: the type says so and nothing asks
+ * for it to be saved instead. A download is left alone — the reader asked for a
+ * file, not for a page.
+ */
+function isPdfResponse(details: {
+  url: string
+  responseHeaders?: Record<string, string[]>
+}): boolean {
+  const headers = details.responseHeaders ?? {}
+  let type = ''
+  let disposition = ''
+  for (const [key, value] of Object.entries(headers)) {
+    const name = key.toLowerCase()
+    if (name === 'content-type') type = String(value?.[0] ?? '').toLowerCase()
+    else if (name === 'content-disposition') disposition = String(value?.[0] ?? '').toLowerCase()
+  }
+  if (!type.startsWith('application/pdf')) return false
+  if (disposition.includes('attachment')) return false
+  // Addresses that end in .pdf are sent to the viewer before the request is
+  // even made; this is only for the ones that hide it.
+  return !looksLikePdf(details.url)
+}
+
+/**
+ * `onPdfDocument` is told when a top-level navigation turns out to be a PDF
+ * whose address does not say so. Electron has no PDF plugin, so such a
+ * navigation would commit as a blank document; the response is refused here and
+ * the caller sends the tab to the browser's own viewer instead. Refusing rather
+ * than swapping afterwards keeps the blank page out of the tab's history, so
+ * Back still goes where the reader expects.
+ */
+export function hardenSession(
+  ses: Session,
+  onBlocked?: (webContentsId: number) => void,
+  onPdfDocument?: (webContentsId: number, url: string) => void
+) {
   refreshCustomLists()
 
   // A stock Chrome UA: keeps the fingerprint common and avoids "unsupported
@@ -330,7 +367,14 @@ export function hardenSession(ses: Session, onBlocked?: (webContentsId: number) 
   // ---- incoming headers --------------------------------------------------
   ses.webRequest.onHeadersReceived({ urls: ['<all_urls>'] }, (details, callback) => {
     const s = settings.get()
-    if (!s.blockThirdPartyCookies || details.resourceType === 'mainFrame') return callback({})
+    if (details.resourceType === 'mainFrame') {
+      if (onPdfDocument && details.webContentsId !== undefined && isPdfResponse(details)) {
+        onPdfDocument(details.webContentsId, details.url)
+        return callback({ cancel: true })
+      }
+      return callback({})
+    }
+    if (!s.blockThirdPartyCookies) return callback({})
 
     const target = hostOf(details.url)
     const initiator = hostOf(details.referrer || '')
