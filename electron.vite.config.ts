@@ -1,10 +1,23 @@
 import { resolve } from 'path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
+import { copyPdfjs } from './build/tools/copy-pdfjs.mjs'
+
+/**
+ * PDF.js is not bundled — it is copied beside the built main process, because
+ * the viewer serves it over nya:// as ordinary files and its worker has to stay
+ * a separate script. See build/tools/copy-pdfjs.mjs.
+ */
+const pdfjs = () => ({
+  name: 'nya-pdfjs',
+  buildStart() {
+    copyPdfjs()
+  }
+})
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin(), pdfjs()],
     build: {
       rollupOptions: {
         input: { index: resolve(__dirname, 'src/main/index.ts') }

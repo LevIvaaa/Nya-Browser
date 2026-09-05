@@ -21,6 +21,7 @@ import { vault } from './vault'
 import { profiles } from './profiles'
 import { downloads } from './downloads'
 import { attachLog } from './log'
+import { looksLikePdf, pdfSource, pdfViewerUrl } from './pdf'
 import { WALLPAPER_EXTENSIONS, registerProtocols } from './protocol'
 import { pageContextMenu, tabContextMenu, uiContextMenu } from './menus'
 import { acceptLanguages, t } from './i18n'
@@ -183,12 +184,20 @@ class Tab {
     return true
   }
 
-  load(url: string) {
+  /**
+   * `target` is what the view is actually sent to. It differs from `url` only
+   * for the PDF viewer: the address stays what the reader asked for, so the
+   * address bar, bookmarks, history and the restored session all carry the
+   * document rather than the machinery that opens it. Callers that already know
+   * a response is a PDF pass the viewer explicitly — the address alone cannot
+   * always tell.
+   */
+  load(url: string, target = looksLikePdf(url) ? pdfViewerUrl(url) : url) {
     this.hasContent = true
     this.url = url
     this.error = null
-    if (this.wc) void this.wc.loadURL(url)
-    else this.pendingUrl = url
+    if (this.wc) void this.wc.loadURL(target)
+    else this.pendingUrl = target
   }
 
   /** Frees the renderer process but keeps the tab in the strip. */
@@ -492,9 +501,23 @@ export class BrowserWindow {
       : session.fromPartition(profiles.partition())
     registerProtocols(this.ses)
     this.applyAcceptLanguage()
-    hardenSession(this.ses, (id) => {
-      if (this.getActive()?.wc?.id === id) this.broadcast()
-    })
+    hardenSession(
+      this.ses,
+      (id) => {
+        if (this.getActive()?.wc?.id === id) this.broadcast()
+      },
+      // A PDF at an address that does not end in .pdf: the response was refused
+      // before it could commit as a blank page, so the tab goes to the viewer
+      // with no dead entry left behind it in the history.
+      (id, url) => {
+        const tab = this.tabs.find((t) => t.wc?.id === id)
+        if (!tab) return
+        // Explicitly the viewer: the address says nothing about being a PDF, so
+        // loading it again would only be refused again, forever.
+        tab.load(url, pdfViewerUrl(url))
+        this.broadcast()
+      }
+    )
     downloads.attach(this.ses)
 
     // Extensions belong to the profile, and Chromium keeps no registry of them,
@@ -786,7 +809,8 @@ export class BrowserWindow {
     wc.on('did-stop-loading', () => {
       tab.loading = false
       tab.progress = 1
-      tab.url = wc.getURL() || tab.url
+      // The viewer's own address never reaches the address bar; see Tab.load.
+      tab.url = pdfSource(wc.getURL()) ?? wc.getURL() ?? tab.url
       this.broadcast()
       setTimeout(() => {
         tab.progress = 0
@@ -809,7 +833,8 @@ export class BrowserWindow {
       // Much of the ad furniture arrives after DOMContentLoaded.
       setTimeout(() => void this.applyCosmetic(wc), 1500)
     })
-    wc.on('did-navigate', (_e, url) => {
+    wc.on('did-navigate', (_e, raw) => {
+      const url = pdfSource(raw) ?? raw
       tab.url = url
       documentHosts.set(wc.id, hostOfUrl(url))
       tab.progress = 0.7
@@ -888,6 +913,16 @@ export class BrowserWindow {
       }
       this.layout()
       this.sendWindowState()
+    })
+
+    // A link to a PDF, clicked on a page. Chromium would navigate to it and
+    // hand us a blank document, so the tab goes to the viewer instead and the
+    // address bar keeps saying the document.
+    wc.on('will-navigate', (event, url) => {
+      if (!looksLikePdf(url)) return
+      event.preventDefault()
+      tab.load(url)
+      this.broadcast()
     })
 
     wc.on('context-menu', (_e, params) => pageContextMenu(this, wc, params))
