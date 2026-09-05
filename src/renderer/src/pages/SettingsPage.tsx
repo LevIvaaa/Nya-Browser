@@ -178,6 +178,8 @@ export default function SettingsPage({
   }, [section])
   const [info, setInfo] = useState<AppInfo | null>(null)
   const [vault, setVault] = useState<VaultState | null>(null)
+  // Asked once: whether this machine has a PIN or a biometric enrolled at all.
+  const [helloAvailable, setHelloAvailable] = useState(false)
   const [notice, setNotice] = useState('')
   const [newDomain, setNewDomain] = useState('')
   const [newAllowed, setNewAllowed] = useState('')
@@ -194,6 +196,7 @@ export default function SettingsPage({
   useEffect(() => {
     void window.browser.appInfo().then(setInfo)
     void window.browser.vaultState().then(setVault)
+    void window.browser.vaultHelloAvailable().then(setHelloAvailable)
     void window.browser.updateState().then(setUpdate)
     // Download progress arrives on its own, so the panel must not have to poll.
     return window.browser.onUpdate(setUpdate)
@@ -901,6 +904,31 @@ export default function SettingsPage({
                   {t('Открыть')}
                 </button>
               </Row>
+              <Row
+                title={t('Спрашивать при запуске браузера')}
+                hint={t('Хранилище остаётся закрытым, пока вы не подтвердите, что это вы')}
+              >
+                <Toggle
+                  checked={settings.passwordsAskOnStart}
+                  onChange={(passwordsAskOnStart) => onPatch({ passwordsAskOnStart })}
+                />
+              </Row>
+              {helloAvailable && (
+                <Row
+                  title={t('Открывать через Windows Hello')}
+                  hint={t('PIN-код, отпечаток или лицо вместо мастер-пароля')}
+                >
+                  <Toggle
+                    checked={vault?.hello === true}
+                    onChange={async (on) => {
+                      // The prompt happens in the main process; the switch only
+                      // moves once it has actually been answered.
+                      const ok = await window.browser.vaultHelloEnable(on)
+                      if (ok) setVault(await window.browser.vaultState())
+                    }}
+                  />
+                </Row>
+              )}
             </Section>
           )}
 

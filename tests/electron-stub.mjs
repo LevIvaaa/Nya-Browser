@@ -15,6 +15,18 @@ export const net = {
   }
 }
 
+// The vault asks whether the OS keychain is there before it uses it; in a test
+// it is not, and saying so keeps the tests off the real keychain.
+export const safeStorage = {
+  isEncryptionAvailable: () => false,
+  encryptString: () => {
+    throw new Error('no keychain in the tests')
+  },
+  decryptString: () => {
+    throw new Error('no keychain in the tests')
+  }
+}
+
 export const dialog = {
   showOpenDialog: async () => ({ canceled: true, filePaths: [] })
 }

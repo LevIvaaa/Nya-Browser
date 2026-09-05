@@ -216,6 +216,10 @@ export interface Settings {
   permissions: PermissionSettings
   saveHistory: boolean
   clearOnExit: boolean
+  /** ask for the vault when the browser starts, instead of opening it silently */
+  passwordsAskOnStart: boolean
+  /** let Windows Hello answer that question */
+  passwordsHello: boolean
   webrtcPolicy: WebRtcPolicy
   /** off by default costs nothing; on, Chromium downloads dictionaries from Google */
   spellcheck: boolean

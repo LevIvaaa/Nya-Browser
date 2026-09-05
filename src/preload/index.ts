@@ -47,12 +47,14 @@ export interface VaultState {
   locked: boolean
   count: number
   osEncryption: boolean
+  /** a key is put aside for Windows Hello to open */
+  hello: boolean
 }
 
 export interface AutofillOffer {
   host: string
   locked: boolean
-  entries: Array<{ id: string; username: string }>
+  entries: Array<{ id: string; username: string; origin: string }>
 }
 
 export interface SavePasswordOffer {
@@ -197,6 +199,9 @@ const api = {
   vaultState: (): Promise<VaultState> => ipcRenderer.invoke('vault:state'),
   vaultList: (): Promise<Credential[]> => ipcRenderer.invoke('vault:list'),
   vaultUnlock: (password: string): Promise<boolean> => ipcRenderer.invoke('vault:unlock', password),
+  vaultHelloAvailable: (): Promise<boolean> => ipcRenderer.invoke('vault:hello-available'),
+  vaultHelloUnlock: (): Promise<boolean> => ipcRenderer.invoke('vault:hello-unlock'),
+  vaultHelloEnable: (on: boolean): Promise<boolean> => ipcRenderer.invoke('vault:hello-enable', on),
   vaultLock: () => ipcRenderer.invoke('vault:lock'),
   vaultSave: (input: { origin: string; username: string; password: string; note?: string }): Promise<boolean> =>
     ipcRenderer.invoke('vault:save', input),

@@ -43,6 +43,12 @@ interface VaultFile {
   salt: string
   /** encrypted probe used to verify a typed master password */
   verifier: Sealed | null
+  /**
+   * The master key sealed by the OS keychain, kept only so Windows Hello can
+   * open the vault: Hello proves who is at the keyboard, it does not derive
+   * anything. Present in either mode, absent unless Hello is turned on.
+   */
+  helloKey: string
   entries: VaultEntry[]
 }
 
@@ -51,8 +57,46 @@ const emptyVault = (): VaultFile => ({
   osKey: '',
   salt: '',
   verifier: null,
+  helloKey: '',
   entries: []
 })
+
+/**
+ * Suffixes under which a name is somebody else's site, not a subdomain of
+ * yours. Chromium carries the whole public suffix list for this; a browser that
+ * only needs to decide whether two hosts are the same place can do with the
+ * shapes that actually occur — a two-letter country code with a second level
+ * under it, and the handful of generic ones that work the same way.
+ *
+ * Getting this wrong in the loose direction would offer a password saved on
+ * one co.uk site while standing on another, so the rule errs the other way: an
+ * unrecognised shape is treated as its own site and nothing is shared.
+ */
+const SECOND_LEVEL = new Set([
+  'co', 'com', 'net', 'org', 'gov', 'edu', 'ac', 'mil', 'sch', 'or', 'ne', 'go',
+  'in', 'nic', 'web', 'info', 'biz', 'name', 'pp', 'me', 'ltd', 'plc', 'firm',
+  'gen', 'k12', 'lg', 'priv'
+])
+
+/**
+ * The registrable name two hosts have to share to count as one site:
+ * mail.example.com and accounts.example.com are both 'example.com'.
+ * Returns '' for anything that is not a name — an address, or a bare label.
+ */
+export function siteOf(host: string): string {
+  const name = host.toLowerCase().replace(/\.+$/, '')
+  if (!name || !name.includes('.')) return ''
+  // An IP address is only ever itself.
+  if (/^[0-9.]+$/.test(name) || name.includes(':')) return ''
+  const parts = name.split('.')
+  if (parts.length < 2) return ''
+  const tld = parts[parts.length - 1]
+  const second = parts[parts.length - 2]
+  // 'example.co.uk' keeps three labels; 'example.com' keeps two.
+  const keep = tld.length === 2 && SECOND_LEVEL.has(second) && parts.length >= 3 ? 3 : 2
+  if (parts.length < keep) return ''
+  return parts.slice(-keep).join('.')
+}
 
 const b64 = (b: Buffer) => b.toString('base64')
 const unb64 = (s: string) => Buffer.from(s, 'base64')
@@ -101,6 +145,7 @@ class Vault {
         osKey: typeof data?.osKey === 'string' ? data.osKey : '',
         salt: typeof data?.salt === 'string' ? data.salt : '',
         verifier: data?.verifier ?? null,
+        helloKey: typeof data?.helloKey === 'string' ? data.helloKey : '',
         entries: Array.isArray(data?.entries)
           ? data.entries.filter(
               (e) => e && typeof e.origin === 'string' && typeof e.username === 'string' && e.secret
@@ -113,10 +158,15 @@ class Vault {
   /** In-memory only. Cleared on lock and never serialised. */
   private key: Buffer | null = null
 
-  load(dir: string) {
+  /**
+   * `hold` keeps the vault shut even in OS-keychain mode, which is what the
+   * "ask when the browser starts" setting means: the keychain would otherwise
+   * open it before anyone had been asked anything.
+   */
+  load(dir: string, hold = false) {
     this.key = null
     this.store.open(dir)
-    if (this.store.get().mode === 'os') this.unlockWithOs()
+    if (!hold && this.store.get().mode === 'os') this.unlockWithOs()
   }
 
   get mode() {
@@ -133,6 +183,11 @@ class Vault {
 
   get encryptionAvailable() {
     return safeStorage.isEncryptionAvailable()
+  }
+
+  /** Whether this vault has a key put aside for Windows Hello to open. */
+  get helloEnabled() {
+    return this.store.get().helloKey !== ''
   }
 
   /* ------------------------------------------------------------ unlocking */
@@ -177,6 +232,47 @@ class Vault {
     this.key = null
   }
 
+  /* --------------------------------------------------------- Windows Hello */
+
+  /**
+   * Puts a copy of the master key aside, sealed by the OS keychain, so a Hello
+   * verification can open the vault without a password being typed. The vault
+   * has to be open already: this stores what is there, it does not find it.
+   *
+   * The copy is no weaker than the keychain that holds it — the same protection
+   * OS mode already relies on — and reaching it in this process additionally
+   * costs a PIN, a fingerprint or a face.
+   */
+  enableHello(): boolean {
+    if (!this.key || !safeStorage.isEncryptionAvailable()) return false
+    this.store.set({ helloKey: b64(safeStorage.encryptString(b64(this.key))) })
+    this.store.flush()
+    return true
+  }
+
+  disableHello() {
+    this.store.set({ helloKey: '' })
+    this.store.flush()
+  }
+
+  /**
+   * Opens the vault with the key Hello guards. The caller does the verifying —
+   * this is only reached once someone has actually answered the prompt.
+   */
+  unlockWithHelloKey(): boolean {
+    const file = this.store.get()
+    if (!file.helloKey || !safeStorage.isEncryptionAvailable()) return false
+    try {
+      const decoded = unb64(safeStorage.decryptString(unb64(file.helloKey)))
+      if (decoded.length !== KEY_LEN) return false
+      this.key?.fill(0)
+      this.key = decoded
+      return true
+    } catch {
+      return false
+    }
+  }
+
   /* -------------------------------------------------- master password mode */
   /** Turns on master-password mode, re-encrypting every stored secret. */
   setMasterPassword(current: string | null, next: string): boolean {
@@ -202,6 +298,9 @@ class Vault {
       osKey: '',
       salt: b64(salt),
       verifier: seal(key, 'nya-vault', 'verifier'),
+      // The key changed, so any copy Hello was holding is stale. Turning Hello
+      // back on re-seals the new one.
+      helloKey: '',
       entries
     })
     this.store.flush()
@@ -229,6 +328,7 @@ class Vault {
       osKey: b64(safeStorage.encryptString(b64(key))),
       salt: '',
       verifier: null,
+      helloKey: '',
       entries
     })
     this.store.flush()
@@ -245,10 +345,32 @@ class Vault {
       .sort((a, b) => b.used - a.used)
   }
 
-  /** Entries saved for a host (exact match only — no wildcard sharing). */
+  /**
+   * Entries worth offering on a host: the ones saved for exactly it first, then
+   * the ones saved elsewhere on the same site.
+   *
+   * Exact-only matching was too strict to be useful — a password saved on
+   * accounts.example.com was not offered on mail.example.com, which is one
+   * sign-in as far as anyone using it is concerned. Nothing is filled without
+   * being picked, and the offer says which address a credential was saved for
+   * when it is not this one.
+   */
   forOrigin(origin: string): Credential[] {
     const host = origin.toLowerCase().replace(/^www\./, '')
-    return this.list().filter((e) => e.origin === host)
+    if (!host) return []
+    const site = siteOf(host)
+    return this.list()
+      .filter((e) => e.origin === host || (site !== '' && siteOf(e.origin) === site))
+      .sort((a, b) => Number(b.origin === host) - Number(a.origin === host) || b.used - a.used)
+  }
+
+  /** True when a credential may be filled into this host. */
+  matches(origin: string, entry: Credential): boolean {
+    const host = origin.toLowerCase().replace(/^www\./, '')
+    if (!host) return false
+    if (entry.origin === host) return true
+    const site = siteOf(host)
+    return site !== '' && siteOf(entry.origin) === site
   }
 
   save(origin: string, username: string, password: string, note?: string): boolean {

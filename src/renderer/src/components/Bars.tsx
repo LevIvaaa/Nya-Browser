@@ -188,6 +188,11 @@ export function AutofillBar({
             }}
           >
             {entry.username || t('без имени')}
+            {/* Saved somewhere else on the same site: say so rather than let a
+                credential appear from nowhere. */}
+            {entry.origin && entry.origin !== offer.host.replace(/^www\./, '') && (
+              <span className="text-2xs text-faint">{entry.origin}</span>
+            )}
           </button>
         ))}
       </div>

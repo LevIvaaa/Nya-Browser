@@ -4,6 +4,7 @@ import Wallpaper from './components/Wallpaper'
 import Toolbar from './components/Toolbar'
 import BookmarksBar from './components/BookmarksBar'
 import Toasts from './components/Toasts'
+import UnlockVault from './components/UnlockVault'
 import Welcome from './components/Welcome'
 import { applyLanguage, onLanguageChange } from './i18n'
 import { AutofillBar, FindBar, PermissionBar, SavePasswordBar } from './components/Bars'
@@ -38,6 +39,23 @@ export default function App() {
   // Which part of the settings page to open at, when asked for one.
   const [section, setSection] = useState('')
   const [findOpen, setFindOpen] = useState(false)
+  // The vault question, asked once when the browser starts and only when the
+  // setting says the vault should stay shut until it is answered.
+  const [unlock, setUnlock] = useState<{ mode: 'os' | 'password'; hello: boolean } | null>(null)
+  const asked = useRef(false)
+
+  useEffect(() => {
+    if (asked.current || !settings?.passwordsAskOnStart) return
+    asked.current = true
+    void Promise.all([window.browser.vaultState(), window.browser.vaultHelloAvailable()]).then(
+      ([state, canHello]) => {
+        if (!state.locked) return
+        // Hello is offered when the machine has it and this vault has something
+        // for it to open: its own key, or the keychain in OS mode.
+        setUnlock({ mode: state.mode, hello: canHello && (state.hello || state.mode === 'os') })
+      }
+    )
+  }, [settings?.passwordsAskOnStart])
   // Language: load the dictionary the settings name, and re-render the whole
   // tree when it lands or changes. t() reads the active dictionary at render
   // time, so one state bump repaints every label.
@@ -401,6 +419,15 @@ export default function App() {
       </div>
 
       <Toasts items={toasts} />
+
+      {unlock && (
+        <UnlockVault
+          mode={unlock.mode}
+          hello={unlock.hello}
+          onDone={() => setUnlock(null)}
+          onSkip={() => setUnlock(null)}
+        />
+      )}
 
       {welcome && (
         <Welcome

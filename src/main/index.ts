@@ -12,6 +12,7 @@ import { downloads } from './downloads'
 import { initLog, log } from './log'
 import { flushAll, installExitHooks } from './store'
 import { registerProtocols, registerSchemes } from './protocol'
+import { helloAvailable, helloVerify } from './hello'
 import { BLOCKLIST_SIZE, blockedLog, clearBrowsingData, hardenApp, hardenSession, resetStats, stats } from './security'
 import { detectSources, importBookmarks, importPasswordsCsv } from './import'
 import { engine, filterStatus, hideCss, loadFilters } from './filters'
@@ -562,8 +563,38 @@ function registerIpc() {
     mode: vault.mode,
     locked: vault.locked,
     count: vault.count,
-    osEncryption: vault.encryptionAvailable
+    osEncryption: vault.encryptionAvailable,
+    hello: vault.helloEnabled
   }))
+  ipcMain.handle('vault:hello-available', () => helloAvailable())
+  /**
+   * The prompt itself. Verifying and unlocking are one call: a renderer that
+   * could ask for the key after someone else's verification would be no gate
+   * at all.
+   */
+  ipcMain.handle('vault:hello-unlock', async () => {
+    if (!vault.locked) return true
+    if (!(await helloVerify(t('Разблокировать пароли Nya Browser')))) return false
+    // Hello proves who is at the keyboard; what opens the vault after that is
+    // whichever key this vault has. A master-password vault has none unless
+    // Hello was turned on for it, and then there is nothing to open.
+    if (vault.unlockWithHelloKey()) return true
+    return vault.mode === 'os' && vault.unlock('')
+  })
+  ipcMain.handle('vault:hello-enable', async (event, on: unknown) => {
+    if (!flag(on)) {
+      vault.disableHello()
+      settings.patch({ passwordsHello: false })
+      return true
+    }
+    // Turning it on needs the vault open — this puts aside what is already
+    // there rather than going looking for it.
+    if (vault.locked) return false
+    if (!(await helloVerify(t('Включить вход по Windows Hello')))) return false
+    if (!vault.enableHello()) return false
+    settings.patch({ passwordsHello: true })
+    return true
+  })
   ipcMain.handle('vault:list', (event) => vault.list())
   ipcMain.handle('vault:unlock', (event, password: unknown) => vault.unlock(str(password, 400)))
   ipcMain.handle('vault:lock', (event) => vault.lock())

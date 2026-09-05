@@ -517,7 +517,9 @@ export class BrowserWindow {
     favicons.load(dir)
     history.setEnabled(settings.get().saveHistory)
     bookmarks.load(dir)
-    vault.load(dir)
+    // Held shut on purpose when the setting says to ask: the OS keychain would
+    // otherwise open the vault before anyone had been asked anything.
+    vault.load(dir, settings.get().passwordsAskOnStart)
     refreshCustomLists()
 
     // No "persist:" prefix means Chromium keeps it in memory and throws it
@@ -1742,7 +1744,9 @@ export class BrowserWindow {
     this.send('state:autofill', {
       host,
       locked: vault.locked,
-      entries: matches.map(({ id, username }) => ({ id, username }))
+      // `origin` travels so the offer can say where a credential came from when
+      // it was not saved on this exact address.
+      entries: matches.map(({ id, username, origin }) => ({ id, username, origin }))
     })
   }
 
@@ -1786,8 +1790,10 @@ export class BrowserWindow {
     } catch {
       return false
     }
-    // A credential is only ever handed to the exact host it was saved for.
-    if (host.replace(/^www\./, '') !== entry.origin) return false
+    // A credential is only handed to a host it belongs to: the one it was
+    // saved for, or another name on the same site. vault.matches decides, and
+    // tests/vault.mjs is where the edges of that are pinned down.
+    if (!vault.matches(host, entry)) return false
     const password = vault.reveal(id)
     if (!password) return false
     wc.send('autofill:fill', { host, username: entry.username, password })
