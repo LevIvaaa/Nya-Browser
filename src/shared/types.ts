@@ -401,9 +401,17 @@ export interface WindowState {
 export interface TabGroup {
   id: number
   name: string
-  /** one of GROUP_COLOURS */
+  /** one of GROUP_COLOURS, or any #rrggbb someone picked themselves */
   color: string
   collapsed: boolean
+  /** the whole group is pinned: it and its tabs sit at the front */
+  pinned: boolean
+}
+
+/** What the strip asks the chip to do after a menu item was chosen. */
+export interface GroupEdit {
+  id: number
+  action: 'rename' | 'colour'
 }
 
 /** The resolvers the settings page offers; see DOH_TEMPLATES. */

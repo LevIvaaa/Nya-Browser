@@ -377,6 +377,13 @@ function registerIpc() {
     current(event).addToGroup(num(id), num(groupId))
   )
   ipcMain.handle('tab:group-remove', (event, id: unknown) => current(event).removeFromGroup(num(id)))
+  ipcMain.handle('group:move', (event, id: unknown, to: unknown) =>
+    current(event).moveGroup(num(id), num(to))
+  )
+  ipcMain.handle('group:pin', (event, id: unknown) => current(event).pinGroup(num(id)))
+  ipcMain.handle('group:drop', (event, tabId: unknown, groupId: unknown) =>
+    current(event).dropOnGroup(num(tabId), num(groupId))
+  )
   ipcMain.handle('group:rename', (event, groupId: unknown, name: unknown) =>
     current(event).renameGroup(num(groupId), str(name, 40))
   )
