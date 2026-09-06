@@ -1375,6 +1375,25 @@ export default function SettingsPage({
                 <Row title="Electron"><span className="text-sm text-dim">{info?.electron ?? '—'}</span></Row>
                 <Row title="Node / V8"><span className="text-sm text-dim">{info?.node ?? '—'} · {info?.v8 ?? '—'}</span></Row>
                 <Row title={t('Платформа')}><span className="text-sm text-dim">{info?.platform ?? '—'} {info?.arch ?? ''}</span></Row>
+                <Row
+                  title={t('Видеокарта')}
+                  hint={
+                    info?.gpu.software
+                      ? t('Рисует процессор, а не карта — размытие, стекло и плавные обои могут не показываться')
+                      : t('Отрисовка идёт на карте')
+                  }
+                >
+                  <span
+                    className="text-right text-sm"
+                    style={{ color: info?.gpu.software ? 'var(--warn)' : 'var(--dim)' }}
+                  >
+                    {info?.gpu.adapter || '—'}
+                    <span className="block text-2xs text-faint">
+                      {t('Композитинг')}: {info?.gpu.compositing ?? '—'} · {t('Растеризация')}:{' '}
+                      {info?.gpu.rasterization ?? '—'}
+                    </span>
+                  </span>
+                </Row>
                 <Row title={t('Правил в списке блокировки')}><span className="text-sm text-dim">{info?.blocklistSize ?? '—'}</span></Row>
                 <Row title={t('Проверка безопасности')} hint={t('Живые тесты изоляции, блокировки и разрешений')}>
                   <button className="btn btn-primary" onClick={() => window.browser.newTab('nya://security')}>

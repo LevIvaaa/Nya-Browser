@@ -11,20 +11,16 @@
 // and honest about what is happening.
 // ---------------------------------------------------------------------------
 
-import { dialog } from 'electron'
-import { readFileSync, existsSync, readdirSync } from 'fs'
+import { app, dialog } from 'electron'
+import { copyFileSync, existsSync, readdirSync, readFileSync, rmSync } from 'fs'
 import { join } from 'path'
+import { DatabaseSync } from 'node:sqlite'
 import { bookmarks } from './bookmarks'
+import { history } from './history'
 import { vault } from './vault'
 import { log } from './log'
 
-export interface ImportSource {
-  /** stable id: "<browser>:<profile dir>" */
-  id: string
-  browser: string
-  profile: string
-  bookmarks: number
-}
+import type { ImportResult, ImportSource } from '../shared/types'
 
 interface Candidate {
   name: string
@@ -111,25 +107,23 @@ export function detectSources(): ImportSource[] {
   for (const candidate of candidates()) {
     for (const dir of profileDirs(candidate)) {
       const file = join(dir, 'Bookmarks')
-      if (!existsSync(file)) continue
-      const count = parseBookmarksFile(file).length
-      if (count === 0) continue
+      const marks = existsSync(file) ? parseBookmarksFile(file).length : 0
+      const visits = countHistory(dir)
+      // A profile with neither is a profile nobody used.
+      if (marks === 0 && visits === 0) continue
       sources.push({
         id: `${candidate.name}::${dir}`,
         browser: candidate.name,
         profile: candidate.flat ? 'Основной' : dir.split(/[\\/]/).pop() ?? '',
-        bookmarks: count
+        bookmarks: marks,
+        history: visits,
+        passwords: existsSync(join(dir, 'Login Data'))
       })
     }
   }
   return sources
 }
 
-export interface ImportResult {
-  added: number
-  skipped: number
-  error?: string
-}
 
 export function importBookmarks(sourceId: string): ImportResult {
   const dir = sourceId.split('::')[1]
@@ -147,6 +141,110 @@ export function importBookmarks(sourceId: string): ImportResult {
     bookmarks.add(item) ? added++ : skipped++
   }
   log('import: bookmarks', sourceId, added, 'added', skipped, 'skipped')
+  return { added, skipped }
+}
+
+/* ----------------------------------------------------------------- history */
+
+/**
+ * Chromium keeps history in SQLite and holds the file open, so it is copied
+ * before it is read. The copy goes next to our own data and is deleted
+ * afterwards; the original is never opened for writing.
+ */
+function withHistoryDb<T>(dir: string, use: (db: DatabaseSync) => T, fallback: T): T {
+  const file = join(dir, 'History')
+  if (!existsSync(file)) return fallback
+  const copy = join(app.getPath('userData'), `import-history-${Date.now()}.db`)
+  let db: DatabaseSync | null = null
+  try {
+    copyFileSync(file, copy)
+    db = new DatabaseSync(copy, { readOnly: true })
+    return use(db)
+  } catch (error) {
+    log('import: history unreadable', dir, String(error))
+    return fallback
+  } finally {
+    try {
+      db?.close()
+    } catch {
+      /* already closed */
+    }
+    try {
+      rmSync(copy, { force: true })
+    } catch {
+      /* the copy outlives us at worst */
+    }
+  }
+}
+
+/**
+ * Chromium counts microseconds from 1601; everyone else counts milliseconds
+ * from 1970. The conversion is done in the query rather than here on purpose:
+ * a raw Chromium timestamp is about 1.3e16, which is past the largest integer
+ * JavaScript can hold exactly, and node:sqlite refuses to hand one over rather
+ * than quietly rounding it — `Value is too large to be represented as a
+ * JavaScript number`, which is the right thing to do and took a real history
+ * file to discover. Divided and shifted in SQL it comes back an ordinary date.
+ */
+const CHROME_EPOCH_OFFSET = 11644473600000
+
+interface HistoryRow {
+  url: string
+  title: string
+  visit_count: number
+  /** already milliseconds since 1970 */
+  last_ms: number
+}
+
+function readHistory(dir: string, limit: number): HistoryRow[] {
+  return withHistoryDb(
+    dir,
+    (db) =>
+      db
+        .prepare(
+          `SELECT url, title, visit_count,
+                  last_visit_time / 1000 - ${CHROME_EPOCH_OFFSET} AS last_ms
+           FROM urls
+           WHERE hidden = 0 AND url LIKE 'http%'
+           ORDER BY last_visit_time DESC LIMIT ?`
+        )
+        .all(limit) as unknown as HistoryRow[],
+    []
+  )
+}
+
+function countHistory(dir: string): number {
+  return withHistoryDb(
+    dir,
+    (db) => {
+      const row = db
+        .prepare("SELECT COUNT(*) AS n FROM urls WHERE hidden = 0 AND url LIKE 'http%'")
+        .get() as { n?: number } | undefined
+      return Number(row?.n ?? 0)
+    },
+    0
+  )
+}
+
+/** The most recent 20 000 pages: enough to make the address bar useful. */
+const HISTORY_LIMIT = 20_000
+
+export function importHistory(sourceId: string): ImportResult {
+  const dir = sourceId.split('::')[1]
+  if (!dir) return { added: 0, skipped: 0, error: 'Источник не найден' }
+  let added = 0
+  let skipped = 0
+  for (const row of readHistory(dir, HISTORY_LIMIT)) {
+    const last = Number(row.last_ms)
+    const ok = history.adopt({
+      url: String(row.url),
+      title: String(row.title || row.url),
+      visits: Math.max(1, Number(row.visit_count) || 1),
+      last: last > 0 ? last : Date.now()
+    })
+    ok ? added++ : skipped++
+  }
+  log('import: history', sourceId, added, 'added', skipped, 'skipped')
   return { added, skipped }
 }
 

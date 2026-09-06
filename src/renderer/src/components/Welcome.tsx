@@ -1,8 +1,9 @@
 import { t } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
 import type { Profile, SearchEngine, Settings } from '../../../shared/types'
+import type { ImportSource } from '../../../preload/index'
 import logoUrl from '../assets/logo.png'
-import { Check, Cross, Film, Image, Palette, Shield, Sparkles, Zap } from './Icons'
+import { Check, Clock, Cross, Film, Image, Key, Palette, Shield, Sparkles, Star, Zap } from './Icons'
 import { Avatar, Slider, TextField, Toggle, cx } from './ui'
 import WindowControls from './WindowControls'
 
@@ -11,10 +12,20 @@ import WindowControls from './WindowControls'
 const ACCENTS = ['#7C6CFF', '#0A84FF', '#00B8A9', '#2FBF71', '#F5A524', '#FF6B6B', '#E255A1', '#8E8E93']
 const AVATARS = ['🐱', '🦊', '🐼', '🦉', '🐧', '🐙', '🦄', '🐝', '🌙', '⭐', '🔥', '🌿']
 
-type StepId = 'hello' | 'profile' | 'look' | 'glass' | 'wallpaper' | 'search' | 'privacy' | 'done'
+type StepId =
+  | 'hello'
+  | 'import'
+  | 'profile'
+  | 'look'
+  | 'glass'
+  | 'wallpaper'
+  | 'search'
+  | 'privacy'
+  | 'done'
 
 const STEPS: { id: StepId; title: string }[] = [
   { id: 'hello', title: 'Знакомство' },
+  { id: 'import', title: 'Перенос' },
   { id: 'profile', title: 'Профиль' },
   { id: 'look', title: 'Тема' },
   { id: 'glass', title: 'Прозрачность' },
@@ -141,6 +152,7 @@ export default function Welcome({
           {step.id === 'search' && (
             <SearchStep settings={settings} engines={engines} onPatch={onPatch} />
           )}
+          {step.id === 'import' && <ImportStep />}
           {step.id === 'privacy' && <PrivacyStep settings={settings} onPatch={onPatch} />}
           {step.id === 'done' && <Done settings={settings} engines={engines} profile={profile} />}
         </div>
@@ -607,6 +619,259 @@ function SearchStep({
         ))}
       </div>
     </div>
+  )
+}
+
+/**
+ * Bringing the bookmarks over from whatever browser was here first.
+ *
+ * Offered on the way in because this is when it matters: a browser with
+ * none of your things in it is one you go back from. Nothing is taken
+ * without being asked for, each source is imported by its own button, and
+ * the count says what is there before anything is decided. A machine with
+ * nothing to import says so and the step steps aside.
+ */
+function ImportStep() {
+  const [sources, setSources] = useState<ImportSource[] | null>(null)
+  const [pick, setPick] = useState<string | null>(null)
+  const [kinds, setKinds] = useState({ bookmarks: true, history: true })
+  const [result, setResult] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    void window.browser.importSources().then((found) => {
+      setSources(found)
+      // One browser is the ordinary case; choosing it for them saves a click
+      // and shows what is about to happen straight away.
+      if (found.length > 0) setPick(found[0].id)
+    })
+  }, [])
+
+  const source = sources?.find((item) => item.id === pick) ?? null
+
+  const bring = async () => {
+    if (!source) return
+    setBusy(true)
+    const done: string[] = []
+    try {
+      if (kinds.bookmarks && source.bookmarks > 0) {
+        const r = await window.browser.importBookmarksFrom(source.id)
+        done.push(r.error ?? t('закладок: {n}', { n: r.added }))
+      }
+      if (kinds.history && source.history > 0) {
+        const r = await window.browser.importHistoryFrom(source.id)
+        done.push(r.error ?? t('страниц истории: {n}', { n: r.added }))
+      }
+      setResult(done.length ? t('Перенесено — {what}', { what: done.join(', ') }) : t('Нечего переносить'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const rows = [
+    {
+      key: 'bookmarks' as const,
+      title: t('Закладки'),
+      hint: t('Вместе с папками, в которых они лежали'),
+      icon: <Star width={16} height={16} />,
+      count: source?.bookmarks ?? 0
+    },
+    {
+      key: 'history' as const,
+      title: t('История'),
+      hint: t('Чтобы адресная строка сразу знала ваши сайты'),
+      icon: <Clock width={16} height={16} />,
+      count: source?.history ?? 0
+    }
+  ]
+
+  return (
+    <div>
+      <Title
+        title={t('Перенести из другого браузера')}
+        hint={t('Там всё останется на месте — здесь появится копия')}
+      />
+
+      {sources === null && (
+        <p className="text-center text-sm text-faint">{t('Ищем установленные браузеры…')}</p>
+      )}
+
+      {sources !== null && sources.length === 0 && (
+        <div
+          className="rounded-card p-4 text-center text-sm text-faint"
+          style={{ background: 'var(--surface)' }}
+        >
+          {t('Других браузеров с данными на этом компьютере не нашлось. Перенести можно и позже — «Настройки → Система».')}
+        </div>
+      )}
+
+      {/* Which browser this is coming out of. With one it is a statement; with
+          several it is the choice, and the same card carries both. */}
+      {sources !== null && sources.length > 1 && (
+        <div className="mb-3 flex flex-wrap justify-center gap-2">
+          {sources.map((item) => (
+            <button
+              key={item.id}
+              className="flex items-center gap-2 rounded-pill px-3 py-1.5 text-sm"
+              onClick={() => {
+                setPick(item.id)
+                setResult(null)
+              }}
+              style={{
+                background:
+                  item.id === pick
+                    ? 'color-mix(in srgb, var(--accent) 22%, transparent)'
+                    : 'var(--surface)',
+                color: item.id === pick ? 'var(--accent)' : 'var(--dim)',
+                border: `1px solid ${item.id === pick ? 'color-mix(in srgb, var(--accent) 45%, transparent)' : 'transparent'}`
+              }}
+            >
+              <Badge name={item.browser} />
+              {item.browser}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {source && (
+        <div className="flex flex-col gap-2">
+          {sources && sources.length === 1 && (
+            <div
+              className="mb-1 flex items-center gap-3 rounded-card p-3.5"
+              style={{
+                background: 'color-mix(in srgb, var(--accent) 10%, var(--surface))',
+                border: '1px solid color-mix(in srgb, var(--accent) 24%, transparent)'
+              }}
+            >
+              <Badge name={source.browser} big />
+              <span className="min-w-0">
+                <span className="block truncate text-base font-medium">{source.browser}</span>
+                <span className="block truncate text-sm text-faint">{source.profile}</span>
+              </span>
+            </div>
+          )}
+
+          {rows.map((row) => {
+            const on = kinds[row.key] && row.count > 0
+            return (
+              <label
+                key={row.key}
+                className="flex cursor-pointer items-center gap-3 rounded-card p-3.5"
+                style={{
+                  background: on
+                    ? 'color-mix(in srgb, var(--accent) 9%, var(--surface))'
+                    : 'var(--surface)',
+                  border: `1px solid ${on ? 'color-mix(in srgb, var(--accent) 22%, transparent)' : 'transparent'}`,
+                  opacity: row.count === 0 ? 0.45 : 1,
+                  cursor: row.count === 0 ? 'default' : 'pointer',
+                  transition: 'background var(--t-base) linear, border-color var(--t-base) linear'
+                }}
+              >
+                <span
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px]"
+                  style={{
+                    background: on ? 'color-mix(in srgb, var(--accent) 20%, transparent)' : 'var(--field-idle)',
+                    color: on ? 'var(--accent)' : 'var(--dim)'
+                  }}
+                >
+                  {row.icon}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-baseline gap-2">
+                    <span className="text-base font-medium">{row.title}</span>
+                    {row.count > 0 && (
+                      <span
+                        className="rounded-pill px-1.5 py-[1px] text-2xs font-semibold text-dim"
+                        style={{ background: 'var(--field-idle)' }}
+                      >
+                        {row.count}
+                      </span>
+                    )}
+                  </span>
+                  <span className="block truncate text-sm text-faint">
+                    {row.count === 0 ? t('Здесь этого нет') : row.hint}
+                  </span>
+                </span>
+                <Toggle
+                  checked={on}
+                  disabled={row.count === 0}
+                  onChange={(value) => setKinds((was) => ({ ...was, [row.key]: value }))}
+                />
+              </label>
+            )
+          })}
+
+          {/* Passwords are the one thing that cannot simply be copied: the other
+              browser seals them so that another program cannot read them, which
+              is the point of sealing them. Its own export is the way in. */}
+          <div
+            className="flex items-center gap-3 rounded-card p-3.5"
+            style={{ background: 'var(--surface)', opacity: source.passwords ? 1 : 0.45 }}
+          >
+            <span
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px]"
+              style={{ background: 'var(--field-idle)', color: 'var(--dim)' }}
+            >
+              <Key width={16} height={16} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-base font-medium">{t('Пароли')}</span>
+              <span className="block text-sm text-faint">
+                {source.passwords
+                  ? t('Их шифрует другой браузер — принесите файл CSV из него')
+                  : t('Сохранённых паролей там не нашлось')}
+              </span>
+            </span>
+            {source.passwords && (
+              <button
+                className="btn shrink-0"
+                onClick={async () => {
+                  const r = await window.browser.importPasswordsCsv()
+                  setResult(r.error ?? t('Перенесено паролей: {n}', { n: r.added }))
+                }}
+              >
+                {t('Выбрать файл')}
+              </button>
+            )}
+          </div>
+
+          <div className="mt-3 flex flex-col items-center gap-2">
+            <button
+              className="btn btn-primary px-6"
+              disabled={busy || (!kinds.bookmarks && !kinds.history)}
+              onClick={() => void bring()}
+            >
+              {busy ? t('Переносим…') : t('Перенести выбранное')}
+            </button>
+            {result && (
+              <span className="flex items-center gap-1.5 text-sm" style={{ color: 'var(--good)' }}>
+                <Check width={14} height={14} />
+                {result}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** A browser's initial in a tile, since we ship no logos but our own. */
+function Badge({ name, big }: { name: string; big?: boolean }) {
+  const size = big ? 38 : 18
+  return (
+    <span
+      className="flex shrink-0 items-center justify-center rounded-[11px] font-semibold"
+      style={{
+        width: size,
+        height: size,
+        fontSize: big ? 17 : 10,
+        background: 'color-mix(in srgb, var(--accent) 26%, transparent)',
+        color: 'var(--accent)'
+      }}
+    >
+      {name.slice(0, 1).toUpperCase()}
+    </span>
   )
 }
 

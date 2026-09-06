@@ -16,7 +16,7 @@ import { helloAvailable, helloVerify } from './hello'
 import { apps, appIdFromArgv } from './apps'
 import { sites } from './sites'
 import { BLOCKLIST_SIZE, blockedLog, clearBrowsingData, hardenApp, hardenSession, resetStats, stats } from './security'
-import { detectSources, importBookmarks, importPasswordsCsv } from './import'
+import { detectSources, importBookmarks, importHistory, importPasswordsCsv } from './import'
 import { engine, filterStatus, hideCss, loadFilters } from './filters'
 import { addExtension, listExtensions, removeExtension, revealExtension } from './extensions'
 import { favicons } from './favicons'
@@ -735,6 +735,7 @@ function registerIpc() {
 
   /* ---- import from another browser ---- */
   ipcMain.handle('import:sources', (event) => detectSources())
+  ipcMain.handle('import:history', (event, id: unknown) => importHistory(str(id, 400)))
   ipcMain.handle('import:bookmarks', (event, id: unknown) => {
     const result = importBookmarks(str(id, 512))
     if (result.added > 0) current(event).sendBookmarks()
@@ -750,6 +751,41 @@ function registerIpc() {
   })
   ipcMain.handle('dev:tools', (event) => current(event).openDevTools())
   ipcMain.handle('shell:open', (event, url: unknown) => current(event).openExternal(str(url)))
+  /**
+   * What Chromium says about the graphics card, in the words it uses itself.
+   * `basic` info is a promise, so the last answer is kept and refreshed in the
+   * background: the About page should not wait on the GPU process to paint.
+   */
+  let gpuAdapter = { adapter: '', driver: '' }
+
+  const gpuStatus = (): AppInfo['gpu'] => {
+    const status = app.getGPUFeatureStatus() as unknown as Record<string, string>
+    const of = (key: string) => String(status[key] ?? 'unknown')
+    const compositing = of('gpu_compositing')
+    return {
+      ...gpuAdapter,
+      compositing,
+      rasterization: of('rasterization'),
+      canvas: of('2d_canvas'),
+      webgl: of('webgl'),
+      // Chromium says "enabled" only when the card is really doing the work;
+      // everything else means it is being drawn on the processor.
+      software: !compositing.startsWith('enabled')
+    }
+  }
+  const refreshGpu = () =>
+    void app
+      .getGPUInfo('basic')
+      .then((info) => {
+        const device = (info as { gpuDevice?: Array<Record<string, unknown>> }).gpuDevice?.[0] ?? {}
+        gpuAdapter = {
+          adapter: String(device.deviceString || device.vendorString || ''),
+          driver: String(device.driverVersion || '')
+        }
+      })
+      .catch(() => undefined)
+  refreshGpu()
+
   ipcMain.handle('app:info', (): AppInfo => ({
     version: app.getVersion(),
     electron: process.versions.electron,
@@ -761,7 +797,8 @@ function registerIpc() {
     userData: app.getPath('userData'),
     profileDir: profiles.dir(),
     blocklistSize: BLOCKLIST_SIZE,
-    sandboxed: app.commandLine.hasSwitch('enable-sandbox') || true
+    sandboxed: app.commandLine.hasSwitch('enable-sandbox') || true,
+    gpu: gpuStatus()
   }))
 
   /* ---- autofill: page → main (send/on, not invoke) ---- */

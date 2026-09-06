@@ -65,6 +65,28 @@ class History {
     this.persist()
   }
 
+  /**
+   * Takes in an entry from somewhere else — another browser's history, brought
+   * across on the way in. Unlike record(), it keeps the visit count and the time
+   * the page was really last opened, and it never overwrites what is already
+   * here: the copy is older than anything this browser did itself.
+   */
+  adopt(entry: HistoryEntry): boolean {
+    if (!/^https?:/i.test(entry.url) || this.index.has(entry.url)) return false
+    this.index.set(entry.url, {
+      url: entry.url.slice(0, 2048),
+      title: (entry.title || entry.url).slice(0, 300),
+      visits: Math.max(1, Math.floor(entry.visits) || 1),
+      last: Number.isFinite(entry.last) ? entry.last : Date.now()
+    })
+    if (this.index.size > MAX_ENTRIES) {
+      const oldest = [...this.index.values()].sort((a, b) => a.last - b.last)
+      for (const e of oldest.slice(0, this.index.size - MAX_ENTRIES)) this.index.delete(e.url)
+    }
+    this.persist()
+    return true
+  }
+
   updateTitle(url: string, title: string) {
     const entry = this.index.get(url)
     if (entry && title && entry.title !== title) {
