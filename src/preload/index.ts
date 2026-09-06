@@ -136,6 +136,7 @@ const api = {
   home: () => ipcRenderer.invoke('nav:home'),
   zoom: (delta: number | 'reset') => ipcRenderer.invoke('nav:zoom', delta),
   continueOverHttp: () => ipcRenderer.invoke('nav:http-fallback'),
+  proceedPastCertificate: () => ipcRenderer.invoke('nav:proceed-certificate'),
   print: () => ipcRenderer.invoke('nav:print'),
 
   /* ---- find ---- */

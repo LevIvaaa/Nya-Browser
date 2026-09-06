@@ -25,6 +25,7 @@ import { looksLikePdf, pdfSource, pdfViewerUrl } from './pdf'
 import { WALLPAPER_EXTENSIONS, registerProtocols } from './protocol'
 import { sites } from './sites'
 import { apps, inScope, readManifest } from './apps'
+import { allowCertificateOnce, installCertificateTrust, refusedCertificate } from './trust'
 import { groupContextMenu, pageContextMenu, tabContextMenu, uiContextMenu } from './menus'
 import { acceptLanguages, t } from './i18n'
 import {
@@ -544,6 +545,7 @@ export class BrowserWindow {
       ? session.fromPartition(`nya-private-${++BrowserWindow.privateSeq}`)
       : session.fromPartition(profiles.partition())
     registerProtocols(this.ses)
+    installCertificateTrust(this.ses)
     this.applyAcceptLanguage()
     hardenSession(
       this.ses,
@@ -700,8 +702,12 @@ export class BrowserWindow {
       height: Math.round(r.height || Math.max(0, h - r.y))
     }
     active.view.setBounds(rect)
-    const radius = settings.get().radius
-    active.view.setBorderRadius(rect.y > 4 ? Math.min(radius, 18) : 0)
+    // Square. The page is flush against the left and right edges of the window,
+    // so rounding its corners cut two notches out of it — one under the first
+    // tab, and a second one on the right whenever the window is not maximised.
+    // The window's own rounded corners are the shell's, and the shell clips the
+    // page to them; the page does not need corners of its own.
+    active.view.setBorderRadius(0)
     active.view.setVisible(r.visible && active.hasContent && !active.sleeping)
   }
 
@@ -928,7 +934,15 @@ export class BrowserWindow {
         return
       }
       tab.loading = false
-      tab.error = { code, description: description || t('Не удалось загрузить страницу'), url }
+      // A certificate is the one failure someone can answer for themselves, so
+      // the page is told what was wrong with it and offers the choice.
+      const certificate = host ? refusedCertificate(host) : null
+      tab.error = {
+        code,
+        description: description || t('Не удалось загрузить страницу'),
+        url,
+        certificate: certificate ?? undefined
+      }
       this.broadcast()
     })
     wc.on('render-process-gone', (_e, details) => {
@@ -1601,6 +1615,22 @@ export class BrowserWindow {
     if (url === START_URL) return this.goHome(id)
     this.leaveInternal(tab)
     this.wake(tab)
+    tab.load(url)
+    this.showActive()
+    this.broadcast()
+  }
+
+  /**
+   * Opens a site whose certificate the browser refused, after its holder was
+   * shown what was wrong with it. The exception is this host, this certificate
+   * and this run of the browser: nothing is written down.
+   */
+  proceedPastCertificate(id = this.activeId): void {
+    const tab = this.tabs.find((t) => t.id === id)
+    if (!tab?.error?.certificate) return
+    if (!allowCertificateOnce(tab.error.certificate.host)) return
+    const url = tab.error.url
+    tab.error = null
     tab.load(url)
     this.showActive()
     this.broadcast()
