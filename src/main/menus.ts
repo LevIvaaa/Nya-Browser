@@ -244,14 +244,23 @@ export function groupContextMenu(browser: BrowserWindow, groupId: number) {
     },
     { label: t('Новая вкладка в группе'), click: () => browser.newTabInGroup(groupId) },
     { type: 'separator' },
+    { label: t('Переименовать'), click: () => browser.editGroup(groupId, 'rename') },
+    {
+      label: group.pinned ? t('Открепить группу') : t('Закрепить группу'),
+      click: () => browser.pinGroup(groupId)
+    },
     {
       label: t('Цвет'),
-      submenu: GROUP_COLOURS.map((colour) => ({
-        label: t(GROUP_COLOUR_NAMES[colour]),
-        type: 'radio' as const,
-        checked: group.color === colour,
-        click: () => browser.setGroupColour(groupId, colour)
-      }))
+      submenu: [
+        ...GROUP_COLOURS.map((colour) => ({
+          label: t(GROUP_COLOUR_NAMES[colour]),
+          type: 'radio' as const,
+          checked: group.color === colour,
+          click: () => browser.setGroupColour(groupId, colour)
+        })),
+        { type: 'separator' as const },
+        { label: t('Свой цвет…'), click: () => browser.editGroup(groupId, 'colour') }
+      ]
     },
     { type: 'separator' },
     { label: t('Разгруппировать'), click: () => browser.ungroup(groupId) },

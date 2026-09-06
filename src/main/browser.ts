@@ -1362,6 +1362,7 @@ export class BrowserWindow {
       id: ++this.groupSeq,
       name: name ?? t('Новая группа'),
       color: GROUP_COLOURS[this.groups.length % GROUP_COLOURS.length],
+      pinned: false,
       collapsed: false
     }
     this.groups.push(group)
@@ -1404,12 +1405,76 @@ export class BrowserWindow {
     this.sendGroups()
   }
 
+  /**
+   * The seven offered colours are a starting point, not the whole of it:
+   * anything that is a colour is allowed. The shape is checked because this
+   * value is interpolated straight into the strip's styles.
+   */
   setGroupColour(groupId: number, color: string) {
     const group = this.groups.find((g) => g.id === groupId)
-    if (!group || !(GROUP_COLOURS as readonly string[]).includes(color)) return
-    group.color = color
+    if (!group || !/^#[0-9a-f]{6}$/i.test(color)) return
+    group.color = color.toLowerCase()
     this.persistSession()
     this.sendGroups()
+  }
+
+  /**
+   * Pins or unpins a group as one thing. A pinned tab normally leaves its
+   * group — a group whose members are not together is not one — but a whole
+   * group moving to the front stays together, so here the members keep it.
+   */
+  pinGroup(groupId: number, pinned?: boolean) {
+    const group = this.groups.find((g) => g.id === groupId)
+    if (!group) return
+    group.pinned = pinned ?? !group.pinned
+    for (const tab of this.tabs) if (tab.groupId === groupId) tab.pinned = group.pinned
+    this.reorderStrip()
+    this.persistSession()
+    this.sendGroups()
+    this.broadcast()
+  }
+
+  /**
+   * Moves a whole group. Its tabs are one run in the strip, so the run comes
+   * out, the target is measured against what is left, and the run goes back
+   * in there — which is what dragging the name over a group looks like it
+   * should do.
+   */
+  moveGroup(groupId: number, toIndex: number) {
+    const members = this.tabs.filter((tab) => tab.groupId === groupId)
+    if (members.length === 0) return
+    const rest = this.tabs.filter((tab) => tab.groupId !== groupId)
+    const at = Math.max(0, Math.min(rest.length, toIndex))
+    this.tabs = [...rest.slice(0, at), ...members, ...rest.slice(at)]
+    this.reorderStrip()
+    this.persistSession()
+    this.sendGroups()
+    this.broadcast()
+  }
+
+  /** A tab dropped on a group's name joins it, wherever it came from. */
+  dropOnGroup(tabId: number, groupId: number) {
+    const tab = this.tabs.find((t) => t.id === tabId)
+    const group = this.groups.find((g) => g.id === groupId)
+    if (!tab || !group || tab.groupId === groupId) return
+    tab.pinned = group.pinned
+    tab.groupId = groupId
+    group.collapsed = false
+    this.reorderStrip()
+    this.persistSession()
+    this.sendGroups()
+    this.broadcast()
+  }
+
+  /**
+   * Renaming happens in the chip itself, which is where the name is. Choosing
+   * a colour needs a panel, and a panel drawn by the strip would be behind the
+   * page — so that one goes to the overlay, which is what the overlay is for.
+   */
+  editGroup(groupId: number, action: 'rename' | 'colour') {
+    if (!this.groups.some((g) => g.id === groupId)) return
+    if (action === 'colour') this.setOverlayMode(`group-colour:${groupId}`)
+    else this.send('state:group-edit', { id: groupId, action })
   }
 
   /**
@@ -1452,13 +1517,16 @@ export class BrowserWindow {
     const clamped = Math.max(0, Math.min(this.tabs.length - 1, toIndex))
     const [tab] = this.tabs.splice(from, 1)
     this.tabs.splice(clamped, 0, tab)
-    // Dropped between two tabs of the same group, it joins them; dropped
-    // anywhere else, it leaves whatever group it was in. Which is what the
-    // drop looked like it meant.
+    // What the drop looked like it meant. Landing between two tabs of one
+    // group joins it. Landing anywhere else takes the tab out of whatever
+    // group it was in and leaves it standing on its own — unless it did not
+    // really leave, which is a drop still touching its own group.
     if (!tab.pinned) {
       const before = this.tabs[clamped - 1]?.groupId ?? null
       const after = this.tabs[clamped + 1]?.groupId ?? null
-      tab.groupId = before !== null && before === after ? before : tab.groupId === before || tab.groupId === after ? tab.groupId : null
+      const inside = before !== null && before === after
+      const stayed = tab.groupId !== null && (tab.groupId === before || tab.groupId === after)
+      tab.groupId = inside ? before : stayed ? tab.groupId : null
     }
     this.reorderStrip()
     this.persistSession()
@@ -2112,7 +2180,9 @@ export class BrowserWindow {
 
     // Groups first: a restored tab needs its group to exist before it can
     // point at it, and the ids have to keep meaning what they meant.
-    this.groups = (payload.groups ?? []).map((group) => ({ ...group }))
+    // `pinned` is newer than the first sessions written, so a group saved
+    // before it existed comes back unpinned rather than undefined.
+    this.groups = (payload.groups ?? []).map((group) => ({ ...group, pinned: group.pinned === true }))
     this.groupSeq = this.groups.reduce((top, group) => Math.max(top, group.id), 0)
     const knownGroup = new Set(this.groups.map((group) => group.id))
 

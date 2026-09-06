@@ -234,20 +234,29 @@ function TabItem({
 
 /**
  * The name over a run of tabs. Clicking folds the run away; right-clicking
- * opens the group's own menu, where it is renamed, recoloured or closed.
- * Double-clicking renames it in place, which is how a folder gets a name
- * without a dialog in the way.
+ * opens the group's own menu, where it is renamed, recoloured, pinned or
+ * closed. Double-clicking renames it in place, which is how a folder gets a
+ * name without a dialog in the way.
+ *
+ * The chip is also the group's handle: dragging it carries the whole run, and
+ * dropping a tab on it puts that tab in the group.
  */
 function GroupChip({
   group,
   count,
-  vertical
+  index,
+  vertical,
+  reorder
 }: {
   group: TabGroup
   count: number
+  /** where this group's first tab sits in the real list */
+  index: number
   vertical: boolean
+  reorder: Reorder
 }) {
   const [editing, setEditing] = useState(false)
+  const [over, setOver] = useState(false)
   const field = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -257,6 +266,16 @@ function GroupChip({
     }
   }, [editing])
 
+  // The menu cannot hold a text field, so "Rename" asks the chip to open one.
+  // Choosing a colour needs more room and goes to the overlay instead.
+  useEffect(
+    () =>
+      window.browser.onGroupEdit((edit) => {
+        if (edit.id === group.id && edit.action === 'rename') setEditing(true)
+      }),
+    [group.id]
+  )
+
   const commit = () => {
     const name = field.current?.value ?? ''
     setEditing(false)
@@ -265,15 +284,17 @@ function GroupChip({
 
   return (
     <div
+      draggable={!editing}
       className={cx(
-        'no-drag flex shrink-0 items-center gap-1.5 rounded-[8px] px-2',
+        'no-drag relative flex shrink-0 items-center gap-1.5 rounded-[8px] px-2',
         vertical ? 'w-full' : ''
       )}
       style={{
         height: vertical ? 24 : 26,
-        background: `color-mix(in srgb, ${group.color} 22%, transparent)`,
-        border: `1px solid color-mix(in srgb, ${group.color} 45%, transparent)`,
-        cursor: 'pointer'
+        background: `color-mix(in srgb, ${group.color} ${over ? 42 : 22}%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${group.color} ${over ? 90 : 45}%, transparent)`,
+        cursor: 'pointer',
+        transition: 'background var(--t-fast) linear, border-color var(--t-fast) linear'
       }}
       title={group.collapsed ? t('Развернуть группу') : t('Свернуть группу')}
       onClick={() => !editing && void window.browser.toggleGroup(group.id)}
@@ -284,6 +305,19 @@ function GroupChip({
       onContextMenu={(event) => {
         event.preventDefault()
         void window.browser.groupMenu(group.id)
+      }}
+      onDragStart={() => reorder.onGroupDragStart(group.id)}
+      onDragOver={(event) => {
+        event.preventDefault()
+        // A tab being carried lands in the group; a group being carried lands
+        // where this one starts.
+        if (reorder.carryingTab()) setOver(true)
+        else reorder.onDragOver(index)
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={() => {
+        setOver(false)
+        reorder.onDropOnGroup(group.id, index)
       }}
     >
       <span
@@ -308,7 +342,9 @@ function GroupChip({
           {group.name}
         </span>
       )}
+      {group.pinned && <Pin width={11} height={11} className='shrink-0 text-dim' />}
       {group.collapsed && <span className='shrink-0 text-2xs text-dim'>{count}</span>}
+
     </div>
   )
 }
@@ -317,7 +353,7 @@ function GroupChip({
 
 type Row =
   | { kind: 'tab'; tab: TabState; index: number; group?: TabGroup; first?: boolean; last?: boolean }
-  | { kind: 'group'; group: TabGroup; count: number }
+  | { kind: 'group'; group: TabGroup; count: number; index: number }
 
 /**
  * The strip is a flat list of tabs with names laid over runs of them. This
@@ -337,6 +373,7 @@ function rowsOf(tabs: TabState[], groups: TabGroup[]): Row[] {
         rows.push({
           kind: 'group',
           group,
+          index,
           count: tabs.filter((t) => t.groupId === group.id).length
         })
       }
@@ -356,29 +393,54 @@ function rowsOf(tabs: TabState[], groups: TabGroup[]): Row[] {
 }
 
 /* ------------------------------------------------------------ reorder glue */
+/**
+ * One drag at a time, and it is carrying either a tab or a whole group. Both
+ * end in the same place — an index in the real list of tabs — so the strip
+ * only has to say where the pointer is and what it was let go of.
+ */
 function useReorder() {
-  const dragId = useRef<number | null>(null)
+  const dragTab = useRef<number | null>(null)
+  const dragGroup = useRef<number | null>(null)
   const [dropIndex, setDropIndex] = useState<number | null>(null)
+
+  const clear = () => {
+    dragTab.current = null
+    dragGroup.current = null
+    setDropIndex(null)
+  }
 
   return {
     dropIndex,
+    carryingTab: () => dragTab.current !== null,
     onDragStart: (id: number) => {
-      dragId.current = id
+      dragTab.current = id
+      dragGroup.current = null
+    },
+    onGroupDragStart: (id: number) => {
+      dragGroup.current = id
+      dragTab.current = null
     },
     onDragOver: (index: number) => setDropIndex(index),
     onDrop: () => {
-      if (dragId.current !== null && dropIndex !== null) {
-        void window.browser.moveTab(dragId.current, dropIndex)
+      if (dropIndex !== null) {
+        if (dragTab.current !== null) void window.browser.moveTab(dragTab.current, dropIndex)
+        else if (dragGroup.current !== null) void window.browser.moveGroup(dragGroup.current, dropIndex)
       }
-      dragId.current = null
-      setDropIndex(null)
+      clear()
     },
-    onDragEnd: () => {
-      dragId.current = null
-      setDropIndex(null)
-    }
+    /** Let go over a group's name: a tab joins it, a group takes its place. */
+    onDropOnGroup: (groupId: number, index: number) => {
+      if (dragTab.current !== null) void window.browser.dropOnGroup(dragTab.current, groupId)
+      else if (dragGroup.current !== null && dragGroup.current !== groupId) {
+        void window.browser.moveGroup(dragGroup.current, index)
+      }
+      clear()
+    },
+    onDragEnd: clear
   }
 }
+
+type Reorder = ReturnType<typeof useReorder>
 
 /* -------------------------------------------------------------- horizontal */
 export function TabStrip({
@@ -402,7 +464,14 @@ export function TabStrip({
       <div className="flex min-w-0 items-center gap-1" style={{ flex: '0 1 auto' }}>
         {rows.map((row) =>
           row.kind === 'group' ? (
-            <GroupChip key={`g${row.group.id}`} group={row.group} count={row.count} vertical={false} />
+            <GroupChip
+              key={`g${row.group.id}`}
+              group={row.group}
+              count={row.count}
+              index={row.index}
+              vertical={false}
+              reorder={reorder}
+            />
           ) : (
             <TabItem
               key={row.tab.id}
@@ -466,7 +535,14 @@ export function TabRail({
       <div className="flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto overflow-x-hidden pr-0.5">
         {rows.map((row) =>
           row.kind === 'group' ? (
-            <GroupChip key={`g${row.group.id}`} group={row.group} count={row.count} vertical />
+            <GroupChip
+              key={`g${row.group.id}`}
+              group={row.group}
+              count={row.count}
+              index={row.index}
+              vertical
+              reorder={reorder}
+            />
           ) : (
             <TabItem
               key={row.tab.id}

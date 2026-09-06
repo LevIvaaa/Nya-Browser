@@ -3,6 +3,7 @@ import { applyLanguage, onLanguageChange } from './i18n'
 import { useBrowser } from './state/useBrowser'
 import CommandPalette from './components/CommandPalette'
 import { AppMenu, ProfileMenu } from './components/Menus'
+import GroupColour from './components/GroupColour'
 import SitePanel from './components/SitePanel'
 import UpdateCard from './components/UpdateCard'
 import type { UpdateState } from '../../shared/types'
@@ -16,7 +17,7 @@ import type { UpdateState } from '../../shared/types'
  * itself stays visible underneath.
  */
 export default function OverlayApp() {
-  const { settings, profiles, active, engine } = useBrowser()
+  const { settings, profiles, active, engine, groups } = useBrowser()
   const [mode, setMode] = useState<string | null>(null)
   const [update, setUpdate] = useState<UpdateState | null>(null)
   const [, setLangVersion] = useState(0)
@@ -63,6 +64,12 @@ export default function OverlayApp() {
   return (
     <div className="relative h-full w-full">
       {mode === 'site' && <SitePanel onClose={close} />}
+      {mode.startsWith('group-colour:') && (
+        <GroupColour
+          group={groups.find((g) => g.id === Number(mode.slice('group-colour:'.length))) ?? null}
+          onClose={close}
+        />
+      )}
       {mode === 'palette' && (
         <CommandPalette initialValue={active?.url ?? ''} engine={engine} onClose={close} />
       )}
