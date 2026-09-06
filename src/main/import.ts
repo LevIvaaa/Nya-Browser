@@ -13,6 +13,7 @@
 
 import { app, dialog } from 'electron'
 import { copyFileSync, existsSync, readdirSync, readFileSync, rmSync } from 'fs'
+import { homedir } from 'os'
 import { join } from 'path'
 import { DatabaseSync } from 'node:sqlite'
 import { bookmarks } from './bookmarks'
@@ -31,6 +32,7 @@ interface Candidate {
 }
 
 function candidates(): Candidate[] {
+  if (process.platform === 'linux') return linuxCandidates()
   const local = process.env.LOCALAPPDATA ?? ''
   const roaming = process.env.APPDATA ?? ''
   if (!local) return []
@@ -41,6 +43,29 @@ function candidates(): Candidate[] {
     { name: 'Vivaldi', root: join(local, 'Vivaldi', 'User Data') },
     { name: 'Yandex', root: join(local, 'Yandex', 'YandexBrowser', 'User Data') },
     { name: 'Opera', root: join(roaming, 'Opera Software', 'Opera Stable'), flat: true }
+  ]
+}
+
+/**
+ * The same browsers on Linux, where the profile folder is the config folder and
+ * there is no "User Data" level in between. Flatpak keeps its own copy of that
+ * folder under ~/.var/app, so both are looked at: someone can have Chrome from
+ * the .deb and Chromium from Flathub, and both are real.
+ */
+function linuxCandidates(): Candidate[] {
+  const config = join(homedir(), '.config')
+  const flatpak = join(homedir(), '.var', 'app')
+  return [
+    { name: 'Google Chrome', root: join(config, 'google-chrome') },
+    { name: 'Chromium', root: join(config, 'chromium') },
+    { name: 'Microsoft Edge', root: join(config, 'microsoft-edge') },
+    { name: 'Brave', root: join(config, 'BraveSoftware', 'Brave-Browser') },
+    { name: 'Vivaldi', root: join(config, 'vivaldi') },
+    { name: 'Yandex', root: join(config, 'yandex-browser') },
+    { name: 'Opera', root: join(config, 'opera'), flat: true },
+    { name: 'Google Chrome', root: join(flatpak, 'com.google.Chrome', 'config', 'google-chrome') },
+    { name: 'Chromium', root: join(flatpak, 'org.chromium.Chromium', 'config', 'chromium') },
+    { name: 'Brave', root: join(flatpak, 'com.brave.Browser', 'config', 'BraveSoftware', 'Brave-Browser') }
   ]
 }
 
