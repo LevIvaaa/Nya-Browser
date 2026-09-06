@@ -105,7 +105,7 @@ function TabItem({
   onDrop
 }: ItemProps) {
   const [hover, setHover] = useState(false)
-  const height = settings.compact ? 30 : 34
+  const height = tabHeight(settings)
   const audio = tab.audible || tab.muted
   const title = tab.title || tab.origin || t('Новая вкладка')
   const showClose =
@@ -230,6 +230,9 @@ function TabItem({
   )
 }
 
+/** How tall anything that stands in the strip is. */
+const tabHeight = (settings: Settings) => (settings.compact ? 30 : 34)
+
 /* ------------------------------------------------------------ group chip */
 
 /**
@@ -245,6 +248,7 @@ function GroupChip({
   group,
   count,
   index,
+  settings,
   vertical,
   reorder
 }: {
@@ -252,6 +256,7 @@ function GroupChip({
   count: number
   /** where this group's first tab sits in the real list */
   index: number
+  settings: Settings
   vertical: boolean
   reorder: Reorder
 }) {
@@ -286,11 +291,15 @@ function GroupChip({
     <div
       draggable={!editing}
       className={cx(
-        'no-drag relative flex shrink-0 items-center gap-1.5 rounded-[8px] px-2',
+        'no-drag relative flex shrink-0 items-center gap-1.5 px-2.5',
         vertical ? 'w-full' : ''
       )}
       style={{
-        height: vertical ? 24 : 26,
+        // The same height and the same corners as a tab, compact or not: the
+        // chip stands in the strip beside them, and a name that is shorter than
+        // what it names reads as something that fell short.
+        height: tabHeight(settings),
+        borderRadius: 11,
         background: `color-mix(in srgb, ${group.color} ${over ? 42 : 22}%, transparent)`,
         border: `1px solid color-mix(in srgb, ${group.color} ${over ? 90 : 45}%, transparent)`,
         cursor: 'pointer',
@@ -469,6 +478,7 @@ export function TabStrip({
               group={row.group}
               count={row.count}
               index={row.index}
+              settings={settings}
               vertical={false}
               reorder={reorder}
             />
@@ -540,6 +550,7 @@ export function TabRail({
               group={row.group}
               count={row.count}
               index={row.index}
+              settings={settings}
               vertical
               reorder={reorder}
             />
