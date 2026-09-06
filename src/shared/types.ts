@@ -542,6 +542,9 @@ export interface WidevineState {
 }
 
 /** Where the self-update stands. */
+/** Where releases live, for the builds that cannot install one themselves. */
+export const RELEASES_PAGE = 'https://github.com/LevIvaaa/Nya-Browser/releases/latest'
+
 export interface UpdateState {
   /** 'available' means found but not fetched: downloading is the user's call */
   stage:
@@ -557,6 +560,12 @@ export interface UpdateState {
   version: string
   /** the version found on GitHub, when there is a newer one */
   available: string | null
+  /**
+   * The build cannot install an update itself — a .deb is the package
+   * manager's business — so the offer is a link to the download rather than a
+   * button that would download into a directory dpkg owns.
+   */
+  manual?: boolean
   /** download progress, 0-100 */
   percent: number
   /** size of the update in bytes, known as soon as it is found */

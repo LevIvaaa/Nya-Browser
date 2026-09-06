@@ -16,7 +16,8 @@
 import { app, nativeImage, shell, type Session } from 'electron'
 import { createHash } from 'crypto'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { dirname, join } from 'path'
+import { appEntryPath, appIconPath, isLinux, writeAppEntry } from './linux-integration'
 import { JsonStore, track } from './store'
 import { log } from './log'
 import type { InstalledApp, WebAppCandidate } from '../shared/types'
@@ -172,6 +173,18 @@ function writeIco(png: Buffer, file: string) {
   writeFileSync(file, Buffer.concat([header, ...entries, ...images.map((i) => i.data)]))
 }
 
+/**
+ * A launcher icon on Linux: the manifest's own image, kept as it came. It is
+ * only decoded to check that it is an image at all — a launcher pointing at a
+ * file that is not one shows nothing and says nothing about why.
+ */
+function writePng(bytes: Buffer, file: string) {
+  const image = nativeImage.createFromBuffer(bytes)
+  if (image.isEmpty()) throw new Error('the icon is not an image')
+  mkdirSync(dirname(file), { recursive: true })
+  writeFileSync(file, image.resize({ width: 512, height: 512, quality: 'best' }).toPNG())
+}
+
 /* ------------------------------------------------------------------- store */
 
 class Apps {
@@ -217,12 +230,16 @@ class Apps {
    * which is what opens it in a window of its own.
    */
   async install(candidate: WebAppCandidate, ses: Session): Promise<InstalledApp | null> {
-    if (process.platform !== 'win32') return null
-    const file = join(iconDir(), `${candidate.id}.ico`)
+    if (process.platform !== 'win32' && !isLinux) return null
+    // Windows wants an .ico for a shortcut; a Linux launcher wants a PNG at a
+    // size the icon theme knows, and the manifest already gave us one.
+    const file = isLinux ? appIconPath(candidate.id) : join(iconDir(), `${candidate.id}.ico`)
     try {
       const response = await ses.fetch(candidate.icon)
       if (!response.ok) throw new Error(`icon HTTP ${response.status}`)
-      writeIco(Buffer.from(await response.arrayBuffer()), file)
+      const bytes = Buffer.from(await response.arrayBuffer())
+      if (isLinux) writePng(bytes, file)
+      else writeIco(bytes, file)
     } catch (error) {
       log('apps: icon failed', String(error))
       return null
@@ -239,27 +256,36 @@ class Apps {
       installed: Date.now()
     }
 
-    // In development the executable is Electron itself, which needs to be told
-    // which app to run before it is told which web app to open.
-    const args = app.isPackaged
-      ? `--nya-app=${record.id}`
-      : `"${app.getAppPath()}" --nya-app=${record.id}`
-    const safeName = record.name.replace(/[\\/:*?"<>|]/g, ' ').trim() || 'App'
-
-    for (const dir of [app.getPath('desktop'), startMenuDir()]) {
-      if (!dir) continue
+    if (isLinux) {
       try {
-        mkdirSync(dir, { recursive: true })
-        shell.writeShortcutLink(join(dir, `${safeName}.lnk`), 'create', {
-          target: process.execPath,
-          args,
-          icon: file,
-          iconIndex: 0,
-          description: record.name,
-          appUserModelId: `com.nya.browser.app.${record.id}`
-        })
+        writeAppEntry(record.id, record.name, file)
       } catch (error) {
-        log('apps: shortcut failed', dir, String(error))
+        log('apps: desktop entry failed', String(error))
+        return null
+      }
+    } else {
+      // In development the executable is Electron itself, which needs to be told
+      // which app to run before it is told which web app to open.
+      const args = app.isPackaged
+        ? `--nya-app=${record.id}`
+        : `"${app.getAppPath()}" --nya-app=${record.id}`
+      const safeName = record.name.replace(/[\\/:*?"<>|]/g, ' ').trim() || 'App'
+
+      for (const dir of [app.getPath('desktop'), startMenuDir()]) {
+        if (!dir) continue
+        try {
+          mkdirSync(dir, { recursive: true })
+          shell.writeShortcutLink(join(dir, `${safeName}.lnk`), 'create', {
+            target: process.execPath,
+            args,
+            icon: file,
+            iconIndex: 0,
+            description: record.name,
+            appUserModelId: `com.nya.browser.app.${record.id}`
+          })
+        } catch (error) {
+          log('apps: shortcut failed', dir, String(error))
+        }
       }
     }
 
@@ -273,13 +299,21 @@ class Apps {
   remove(id: string) {
     const record = this.get(id)
     if (!record) return
-    const safeName = record.name.replace(/[\\/:*?"<>|]/g, ' ').trim() || 'App'
-    for (const dir of [app.getPath('desktop'), startMenuDir()]) {
-      if (!dir) continue
+    if (isLinux) {
       try {
-        rmSync(join(dir, `${safeName}.lnk`), { force: true })
+        rmSync(appEntryPath(id), { force: true })
       } catch {
-        /* the shortcut may have been moved or deleted by hand */
+        /* the entry may have been deleted by hand */
+      }
+    } else {
+      const safeName = record.name.replace(/[\\/:*?"<>|]/g, ' ').trim() || 'App'
+      for (const dir of [app.getPath('desktop'), startMenuDir()]) {
+        if (!dir) continue
+        try {
+          rmSync(join(dir, `${safeName}.lnk`), { force: true })
+        } catch {
+          /* the shortcut may have been moved or deleted by hand */
+        }
       }
     }
     try {

@@ -7,7 +7,7 @@
 // you plainly that it cannot update in place.
 // ---------------------------------------------------------------------------
 
-import { app } from 'electron'
+import { app, net } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { log } from './log'
 import type { UpdateState } from '../shared/types'
@@ -48,14 +48,54 @@ export function onUpdateState(listener: Listener) {
  */
 function canUpdate(): boolean {
   if (!app.isPackaged) return false
+  // A .deb is updated by the package manager, not by us: replacing files under
+  // /opt behind dpkg's back would leave the system's idea of what is installed
+  // disagreeing with what is there. So on Linux the browser only says that a
+  // version exists and points at it.
+  if (process.platform === 'linux') return false
   // electron-builder sets this for the portable target only.
   return !process.env.PORTABLE_EXECUTABLE_DIR
+}
+
+
+/**
+ * What the newest release is called, asked of GitHub directly. Used only where
+ * electron-updater cannot run: it answers the one question that is still worth
+ * answering there — is there something newer than this.
+ */
+async function newestPublished(): Promise<string> {
+  const response = await net.fetch(
+    'https://api.github.com/repos/LevIvaaa/Nya-Browser/releases/latest',
+    { headers: { accept: 'application/vnd.github+json' } }
+  )
+  if (!response.ok) throw new Error(`GitHub ${response.status}`)
+  const body = (await response.json()) as { tag_name?: string }
+  return String(body.tag_name ?? '').replace(/^v/, '')
+}
+
+/** Compares two dotted versions without pretending to know semver. */
+function isNewer(candidate: string, current: string): boolean {
+  const parts = (value: string) => value.split('.').map((n) => parseInt(n, 10) || 0)
+  const a = parts(candidate)
+  const b = parts(current)
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0)
+  }
+  return false
 }
 
 let wired = false
 
 export function initUpdates() {
   state = { ...state, supported: canUpdate() }
+  if (process.platform === 'linux' && app.isPackaged) {
+    // No auto-download and no install, but the first check still happens: a
+    // browser that never mentions a new version is a browser people stay behind
+    // on without knowing it.
+    log('updates: package-managed build, checking only')
+    setTimeout(() => void checkByHand(), 8000)
+    return
+  }
   if (!canUpdate()) {
     log('updates: not supported for this build')
     return
@@ -101,7 +141,30 @@ export function initUpdates() {
   setInterval(() => void check(), RECHECK_EVERY)
 }
 
+/**
+ * Where the browser cannot install an update, it can still notice one. The
+ * answer says `manual` so the button offers the download page rather than a
+ * download that would go nowhere.
+ */
+async function checkByHand(): Promise<UpdateState> {
+  emit({ stage: 'checking', error: '' })
+  try {
+    const newest = await newestPublished()
+    if (newest && isNewer(newest, app.getVersion())) {
+      emit({ stage: 'available', available: newest, manual: true, error: '' })
+    } else {
+      emit({ stage: 'current', available: '', manual: true, error: '' })
+    }
+  } catch (error) {
+    emit({ stage: 'error', error: String(error), manual: true })
+  }
+  return state
+}
+
 export async function check(): Promise<UpdateState> {
+  // A packaged Linux copy cannot install an update, but it can find out that
+  // one exists, which is the half that is still worth doing.
+  if (process.platform === 'linux' && app.isPackaged) return checkByHand()
   if (!canUpdate()) {
     return {
       ...state,

@@ -20,7 +20,8 @@
     "dist:installer": "npm run art && electron-vite build && electron-builder --win nsis",
     "release": "node build/tools/gh-release.mjs && npm run art && electron-vite build && electron-builder --win nsis --publish always && npm run release:check",
     "release:signed": "node build/tools/gh-release.mjs && npm run art && electron-vite build && electron-builder --win nsis --publish always --config.win.verifyUpdateCodeSignature=true && npm run release:check",
-    "release:check": "node build/tools/gh-release.mjs --verify"
+    "release:check": "node build/tools/gh-release.mjs --verify",
+    "dist:deb": "npm run art && electron-vite build && electron-builder --linux deb"
   },
   "build": {
     "appId": "com.nya.browser",
@@ -81,7 +82,47 @@
       "repo": "Nya-Browser",
       "releaseType": "release"
     },
-    "afterPack": "build/afterPack.cjs"
+    "afterPack": "build/afterPack.cjs",
+    "linux": {
+      "target": [
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Network;WebBrowser",
+      "icon": "build/icon.png",
+      "synopsis": "Быстрый приватный браузер",
+      "description": "Браузер с блокировщиком рекламы и трекеров, своим просмотрщиком PDF и настраиваемой главной страницей.",
+      "desktop": {
+        "entry": {
+          "Name": "Nya Browser",
+          "GenericName": "Web Browser",
+          "Comment": "Быстрый приватный браузер",
+          "Categories": "Network;WebBrowser;",
+          "StartupWMClass": "Nya Browser",
+          "MimeType": "text/html;text/xml;application/xhtml+xml;application/pdf;image/svg+xml;x-scheme-handler/http;x-scheme-handler/https;x-scheme-handler/about;x-scheme-handler/unknown;",
+          "Actions": "new-window;new-private-window;"
+        }
+      }
+    },
+    "deb": {
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1",
+        "libsecret-1-0"
+      ],
+      "afterInstall": "build/linux/after-install.sh",
+      "afterRemove": "build/linux/after-remove.sh"
+    }
   },
   "devDependencies": {
     "@types/node": "22.20.1",

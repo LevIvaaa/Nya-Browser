@@ -38,7 +38,7 @@ import {
   requestDefaultBrowser,
   unregisterAsBrowser,
   urlFromArgv
-} from './windows-integration'
+} from './integration'
 import { SEARCH_ENGINES } from '../shared/search'
 import type { AppInfo, Settings, SiteRules } from '../shared/types'
 

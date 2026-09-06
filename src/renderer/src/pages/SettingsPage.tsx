@@ -23,6 +23,7 @@ import type {
 import { DEFAULT_LAYOUT } from '../../../shared/startPage'
 import { LANGUAGES } from '../../../shared/i18n'
 import type { ImportSource, VaultState } from '../../../preload/index'
+import { RELEASES_PAGE } from '../../../shared/types'
 import logoUrl from '../assets/logo.png'
 import {
   Alert,
@@ -131,14 +132,18 @@ function drmHint(state: (WidevineState & { needsRestart: boolean }) | null, want
 /** One line describing where the updater has got to. */
 function updateHint(state: UpdateState | null): string {
   if (!state) return t('Проверяем состояние…')
-  if (!state.supported) {
+  // A package-managed build says nothing about being unsupported: it checks, it
+  // just cannot install. The stages below say the rest.
+  if (!state.supported && !state.manual) {
     return state.error || t('Обновляться умеет только установленная версия, не портативная')
   }
   switch (state.stage) {
     case 'checking':
       return t('Спрашиваем GitHub…')
     case 'available':
-      return t('Доступна версия {v} — загрузить?', { v: state.available ?? '' })
+      return state.manual
+        ? t('Доступна версия {v} — скачайте пакет и установите его', { v: state.available ?? '' })
+        : t('Доступна версия {v} — загрузить?', { v: state.available ?? '' })
     case 'downloading':
       return t('Скачиваем {v} — {p}%', { v: state.available ?? '', p: state.percent })
     case 'ready':
@@ -1130,6 +1135,13 @@ export default function SettingsPage({
                   {update?.stage === 'ready' ? (
                     <button className="btn btn-primary" onClick={() => window.browser.installUpdate()}>
                       {t('Перезапустить и обновить')}
+                    </button>
+                  ) : update?.stage === 'available' && update.manual ? (
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => window.browser.openExternal(RELEASES_PAGE)}
+                    >
+                      {t('Открыть страницу загрузки')}
                     </button>
                   ) : update?.stage === 'available' ? (
                     <button className="btn btn-primary" onClick={() => window.browser.downloadUpdate()}>
