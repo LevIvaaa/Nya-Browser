@@ -21,7 +21,7 @@
     "release": "node build/tools/gh-release.mjs && npm run art && electron-vite build && electron-builder --win nsis --publish always && npm run release:check",
     "release:signed": "node build/tools/gh-release.mjs && npm run art && electron-vite build && electron-builder --win nsis --publish always --config.win.verifyUpdateCodeSignature=true && npm run release:check",
     "release:check": "node build/tools/gh-release.mjs --verify",
-    "dist:deb": "npm run art && electron-vite build && electron-builder --linux deb"
+    "dist:deb": "electron-vite build && electron-builder --linux deb"
   },
   "build": {
     "appId": "com.nya.browser",
