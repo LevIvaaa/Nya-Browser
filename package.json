@@ -93,7 +93,7 @@
         }
       ],
       "category": "Network;WebBrowser",
-      "icon": "build/icon.png",
+      "icon": "build/icons",
       "synopsis": "Быстрый приватный браузер",
       "description": "Браузер с блокировщиком рекламы и трекеров, своим просмотрщиком PDF и настраиваемой главной страницей.",
       "desktop": {
@@ -103,10 +103,23 @@
           "Comment": "Быстрый приватный браузер",
           "Categories": "Network;WebBrowser;",
           "StartupWMClass": "Nya Browser",
-          "MimeType": "text/html;text/xml;application/xhtml+xml;application/pdf;image/svg+xml;x-scheme-handler/http;x-scheme-handler/https;x-scheme-handler/about;x-scheme-handler/unknown;",
-          "Actions": "new-window;new-private-window;"
-        }
-      }
+          "MimeType": "text/html;text/xml;application/xhtml+xml;application/pdf;image/svg+xml;x-scheme-handler/http;x-scheme-handler/https;x-scheme-handler/about;x-scheme-handler/unknown;"
+        },
+        "desktopActions": [
+          {
+            "id": "new-window",
+            "name": "Новое окно",
+            "args": "--new-window"
+          },
+          {
+            "id": "new-private-window",
+            "name": "Приватное окно",
+            "args": "--new-private-window"
+          }
+        ]
+      },
+      "desktopName": "nya-browser.desktop",
+      "syncDesktopName": true
     },
     "deb": {
       "depends": [

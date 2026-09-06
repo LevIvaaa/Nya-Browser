@@ -201,6 +201,10 @@ if (!app.requestSingleInstanceLock()) {
   applyStartupSwitches()
   installExitHooks()
 
+  /** The launcher's own menu entries, and the flags they pass. */
+  const wantsWindow = (argv: readonly string[]) =>
+    argv.includes('--new-window') ? 'normal' : argv.includes('--new-private-window') ? 'private' : null
+
   app.on('second-instance', (_event, argv) => {
     // A shortcut for an installed app: raise the window it already has, or
     // open one. It is a separate window, not a tab in this one.
@@ -213,6 +217,13 @@ if (!app.requestSingleInstanceLock()) {
       } else {
         openWindow(false, appId)
       }
+      return
+    }
+    // "New window" from the launcher means a window, not another tab in the
+    // one that happens to be open.
+    const wanted = wantsWindow(argv)
+    if (wanted) {
+      openWindow(wanted === 'private')
       return
     }
     if (!browser) return
@@ -279,7 +290,7 @@ if (!app.requestSingleInstanceLock()) {
     await applyMainLanguage(settings.get().language)
 
     const launchApp = appIdFromArgv(process.argv)
-    const first = openWindow(false, launchApp)
+    const first = openWindow(wantsWindow(process.argv) === 'private', launchApp)
     registerIpc()
     buildMenu(first)
 
