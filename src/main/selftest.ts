@@ -91,6 +91,20 @@ export function securityPage(): string {
     results.push({ group: group, title: title, detail: detail, status: status, evidence: evidence || '' });
   }
 
+  /**
+   * A promise that gives up rather than waiting forever. Some of the checks
+   * below are meant to be refused, and a browser that refuses by *asking* —
+   * which is the right answer — leaves the call pending until somebody clicks.
+   * Nobody is going to: this page is the thing being measured. So the wait is
+   * bounded, and running out of time is itself the result.
+   */
+  function within(ms, promise, onTimeout) {
+    return Promise.race([
+      promise,
+      new Promise(function (resolve) { setTimeout(function () { resolve(onTimeout); }, ms); })
+    ]);
+  }
+
   function loadTest(url, kind) {
     return new Promise(function (resolve) {
       var done = false;
@@ -181,16 +195,27 @@ export function securityPage(): string {
       fb === 'loaded' ? 'fail' : (online ? 'pass' : 'warn'),
       'connect.facebook.net → ' + fb);
 
-    add('Блокировка слежки', 'Заголовок Do Not Track включён',
-      'Браузер сообщает сайтам об отказе от отслеживания.',
-      navigator.doNotTrack === '1' ? 'pass' : 'warn',
-      'navigator.doNotTrack = ' + navigator.doNotTrack);
+    // Chromium dropped navigator.doNotTrack, so a page can no longer see the
+    // setting from the inside. The browser still sends the header — that is in
+    // security.ts — but this page reports only what it can measure itself, and
+    // this is not one of those things. Saying so is better than reading a
+    // removed property and implying the setting is off.
+    add('Блокировка слежки', 'Заголовок Do Not Track',
+      'Браузер отправляет DNT: 1 с каждым запросом, если настройка включена. Со страницы это не проверить.',
+      'warn',
+      'navigator.doNotTrack удалён из Chromium (= ' + navigator.doNotTrack + '), заголовок виден только на стороне сервера');
 
     /* ---- transport security ---- */
     var upgraded = 'нет данных';
     var upgradeStatus = 'warn';
     try {
-      await fetch('http://example.com/?nya=' + Date.now(), { mode: 'no-cors', cache: 'no-store' }).catch(function () {});
+      await within(
+        6000,
+        fetch('http://example.com/?nya=' + Date.now(), { mode: 'no-cors', cache: 'no-store' }).catch(
+          function () {}
+        ),
+        null
+      );
       var entries = performance.getEntriesByType('resource').map(function (e) { return e.name; });
       var https = entries.filter(function (n) { return n.indexOf('https://example.com') === 0; });
       var http = entries.filter(function (n) { return n.indexOf('http://example.com') === 0; });
@@ -205,7 +230,8 @@ export function securityPage(): string {
     async function perm(name, label, detail) {
       var state = 'нет данных';
       try {
-        var res = await navigator.permissions.query({ name: name });
+        var res = await within(3000, navigator.permissions.query({ name: name }), null);
+        if (!res) { add(group, title, detail, 'warn', name + ': ответа нет'); return; }
         state = res.state;
       } catch (e) { state = 'query недоступен: ' + e.name; }
       add('Доступ к устройствам', label, detail,
@@ -224,21 +250,53 @@ export function securityPage(): string {
     var usb = 'нет API';
     try { usb = navigator.usb ? 'API есть, устройства скрыты' : 'нет API'; } catch (e) {}
     var usbDevices = 'n/a';
-    try { if (navigator.usb) { var list = await navigator.usb.getDevices(); usbDevices = list.length + ' устройств'; } } catch (e) { usbDevices = 'отказ: ' + e.name; }
+    try {
+      if (navigator.usb) {
+        var list = await within(3000, navigator.usb.getDevices(), null);
+        usbDevices = list ? list.length + ' устройств' : 'ответа нет';
+      }
+    } catch (e) { usbDevices = 'отказ: ' + e.name; }
     add('Доступ к устройствам', 'USB-устройства не перечисляются',
       'Страница не получает список подключённого оборудования.',
       /^0 устройств|отказ|n\\/a/.test(usbDevices) ? 'pass' : 'fail', usb + ', getDevices → ' + usbDevices);
 
     var media = 'нет данных';
     try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
-      media = 'поток выдан';
+      // A stream that arrives is a failure; a refusal is a pass; and a
+      // question left on screen is also a pass — the page did not get the
+      // microphone, it got asked about. Waiting for that answer is what used
+      // to stop this page ever showing its results.
+      media = await within(
+        4000,
+        navigator.mediaDevices
+          .getUserMedia({ audio: true })
+          .then(function (stream) {
+            try { stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+            return 'поток выдан';
+          })
+          .catch(function (e) { return 'отказ: ' + e.name; }),
+        'браузер спросил разрешение'
+      );
     } catch (e) { media = 'отказ: ' + e.name; }
     add('Доступ к устройствам', 'Микрофон не включается сам',
-      'getUserMedia без разрешения завершается отказом.',
+      'getUserMedia без разрешения завершается отказом или вопросом.',
       media === 'поток выдан' ? 'fail' : 'pass', media);
 
     render();
+  }
+
+  /**
+   * Whatever happens, the page says something. A check that throws used to
+   * take the whole report down with it and leave four zeroes on screen, which
+   * reads exactly like "nothing is protected".
+   */
+  async function runSafely() {
+    try {
+      await run();
+    } catch (e) {
+      add('Проверка', 'Проверка прервалась', 'Часть проверок не выполнилась — показано то, что успело.', 'warn', String(e));
+      render();
+    }
   }
 
   function render() {
@@ -271,9 +329,9 @@ export function securityPage(): string {
     }).join('\\n');
     navigator.clipboard.writeText(text).catch(function () {});
   });
-  document.getElementById('again').addEventListener('click', function () { run(); });
+  document.getElementById('again').addEventListener('click', function () { runSafely(); });
 
-  run();
+  runSafely();
 })();
 </script>
 </body>

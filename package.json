@@ -140,7 +140,7 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "5.2.0",
     "autoprefixer": "^10.4.19",
-    "electron": "github:castlabs/electron-releases#v43.2.0+wvcus",
+    "electron": "github:castlabs/electron-releases#v43.5.0+wvcus",
     "electron-builder": "26.15.3",
     "electron-vite": "4.0.1",
     "pdfjs-dist": "^6.3.289",
