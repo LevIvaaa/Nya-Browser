@@ -85,6 +85,24 @@ export interface SiteRules {
  * A site that says it is an app: what its manifest claims, before anything is
  * installed. `icon` is still a URL here — it becomes a file on install.
  */
+/** One browser profile on this machine, and what it has worth bringing over. */
+export interface ImportSource {
+  /** stable id: "<browser>::<profile dir>" */
+  id: string
+  browser: string
+  profile: string
+  bookmarks: number
+  history: number
+  /** the browser has saved passwords, which still have to come by CSV */
+  passwords: boolean
+}
+
+export interface ImportResult {
+  added: number
+  skipped: number
+  error?: string
+}
+
 export interface WebAppCandidate {
   id: string
   name: string
@@ -482,6 +500,25 @@ export interface AppInfo {
   profileDir: string
   blocklistSize: number
   sandboxed: boolean
+  /**
+   * What the graphics card is actually doing for us. Without this there is no
+   * way to answer the only question a report like "the blur does not show on my
+   * machine" really asks: is the browser drawing on the card at all, or has it
+   * quietly fallen back to the processor, where large blurs and blend modes are
+   * the first thing to go.
+   */
+  gpu: {
+    /** the adapter, as the driver names it */
+    adapter: string
+    driver: string
+    /** 'enabled', 'software', 'disabled', … straight from Chromium */
+    compositing: string
+    rasterization: string
+    canvas: string
+    webgl: string
+    /** true when nothing is running on the card */
+    software: boolean
+  }
 }
 
 export interface SecurityCheck {

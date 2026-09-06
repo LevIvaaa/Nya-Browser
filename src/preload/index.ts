@@ -68,18 +68,11 @@ export interface SavePasswordOffer {
   known: boolean
 }
 
-export interface ImportSource {
-  id: string
-  browser: string
-  profile: string
-  bookmarks: number
-}
-
-export interface ImportResult {
-  added: number
-  skipped: number
-  error?: string
-}
+// Defined once in shared/types and re-exported here, because the renderer has
+// always reached for these through the preload — and because two copies of the
+// same shape is how one of them quietly stops matching the other.
+import type { ImportResult, ImportSource } from '../shared/types'
+export type { ImportResult, ImportSource }
 
 export interface BlockedEntry {
   time: number
@@ -277,6 +270,7 @@ const api = {
   refreshFilters: (): Promise<FilterStatus> => ipcRenderer.invoke('filters:refresh'),
   importSources: (): Promise<ImportSource[]> => ipcRenderer.invoke('import:sources'),
   importBookmarksFrom: (id: string): Promise<ImportResult> => ipcRenderer.invoke('import:bookmarks', id),
+  importHistoryFrom: (id: string): Promise<ImportResult> => ipcRenderer.invoke('import:history', id),
   importPasswordsCsv: (): Promise<ImportResult> => ipcRenderer.invoke('import:passwords'),
   defaultBrowser: (): Promise<DefaultBrowserState> => ipcRenderer.invoke('app:default-browser'),
   makeDefaultBrowser: (): Promise<DefaultBrowserState> => ipcRenderer.invoke('app:make-default'),
