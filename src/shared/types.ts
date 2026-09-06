@@ -372,6 +372,15 @@ export interface TabError {
   url: string
   /** set when the page failed only because it has no HTTPS endpoint */
   httpsFallbackAvailable?: boolean
+  /** set when a certificate is what stopped the page, so it can be answered */
+  certificate?: {
+    host: string
+    fingerprint: string
+    issuer: string
+    subject: string
+    expires: number
+    problem: string
+  }
 }
 
 export interface WindowState {

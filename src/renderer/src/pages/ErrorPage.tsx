@@ -29,6 +29,9 @@ export default function ErrorPage({ error }: { error: TabError }) {
     }
   })()
   const certificate = error.code <= -200 && error.code >= -299
+  // Only a certificate the browser actually looked at can be answered for:
+  // the details below are the ones it refused, not a guess from the code.
+  const refused = error.certificate
 
   return (
     <div className="relative z-10 flex h-full items-center justify-center overflow-y-auto px-6 py-10">
@@ -60,6 +63,19 @@ export default function ErrorPage({ error }: { error: TabError }) {
           <div className="font-mono text-xs text-dim">
             {error.code} · {error.description}
           </div>
+
+          {refused && (
+            <>
+              <div className="mt-2 text-2xs uppercase tracking-wider text-faint">
+                {t('Кем выдан')}
+              </div>
+              <div className="truncate text-sm text-dim">{refused.issuer || t('Неизвестно')}</div>
+              <div className="mt-2 text-2xs uppercase tracking-wider text-faint">
+                {t('Отпечаток сертификата')}
+              </div>
+              <div className="break-all font-mono text-2xs text-dim">{refused.fingerprint}</div>
+            </>
+          )}
         </div>
 
         <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
@@ -75,7 +91,18 @@ export default function ErrorPage({ error }: { error: TabError }) {
               {t('Открыть без шифрования')}
             </button>
           )}
+          {refused && (
+            <button className="btn" onClick={() => window.browser.proceedPastCertificate()}>
+              {t('Всё равно перейти')}
+            </button>
+          )}
         </div>
+
+        {refused && (
+          <p className="mx-auto mt-4 max-w-[440px] text-sm text-faint">
+            {t('Браузер не смог подтвердить, что этот сертификат принадлежит сайту. Так выглядит и обычная ошибка настройки, и попытка встать между вами и сайтом. Если перейдёте, исключение будет только для этого адреса и только до перезапуска браузера.')}
+          </p>
+        )}
 
         {error.httpsFallbackAvailable && (
           <p className="mx-auto mt-4 max-w-[440px] text-sm text-faint">

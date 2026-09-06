@@ -424,6 +424,7 @@ function registerIpc() {
   ipcMain.handle('nav:home', (event) => current(event).goHome())
   ipcMain.handle('nav:zoom', (event, delta: unknown) => current(event).setZoom(delta === 'reset' ? 'reset' : num(delta)))
   ipcMain.handle('nav:http-fallback', (event) => current(event).continueOverHttp())
+  ipcMain.handle('nav:proceed-certificate', (event) => current(event).proceedPastCertificate())
   ipcMain.handle('nav:print', (event) => current(event).print())
 
   /* ---- find ---- */
