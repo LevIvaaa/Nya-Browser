@@ -102,24 +102,20 @@
           "GenericName": "Web Browser",
           "Comment": "Быстрый приватный браузер",
           "Categories": "Network;WebBrowser;",
-          "StartupWMClass": "Nya Browser",
+          "StartupWMClass": "nya-browser",
           "MimeType": "text/html;text/xml;application/xhtml+xml;application/pdf;image/svg+xml;x-scheme-handler/http;x-scheme-handler/https;x-scheme-handler/about;x-scheme-handler/unknown;"
         },
-        "desktopActions": [
-          {
-            "id": "new-window",
-            "name": "Новое окно",
-            "args": "--new-window"
+        "desktopActions": {
+          "NewWindow": {
+            "Name": "Новое окно",
+            "Exec": "/opt/Nya Browser/nya-browser --new-window"
           },
-          {
-            "id": "new-private-window",
-            "name": "Приватное окно",
-            "args": "--new-private-window"
+          "NewPrivateWindow": {
+            "Name": "Приватное окно",
+            "Exec": "/opt/Nya Browser/nya-browser --new-private-window"
           }
-        ]
-      },
-      "desktopName": "nya-browser.desktop",
-      "syncDesktopName": true
+        }
+      }
     },
     "deb": {
       "depends": [
