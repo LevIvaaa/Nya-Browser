@@ -310,6 +310,47 @@ function prettyUrl(raw: string): string {
 /* ========================================================================= */
 /* Window                                                                     */
 /* ========================================================================= */
+/**
+ * The window to give a page that asked for one: the size it asked for, kept
+ * inside the screen and above the size a login form needs, centred on the
+ * window it came from. The preferences are the ones a tab gets — a popup is a
+ * page like any other and is trusted no further.
+ */
+function popupOptions(features: string, parent: BaseWindow) {
+  const asked = (name: string) => {
+    const match = new RegExp(name + String.raw`\s*=\s*(\d+)`).exec(features ?? '')
+    return match ? parseInt(match[1], 10) : 0
+  }
+  const bounds = parent.getBounds()
+  const area = screen.getDisplayMatching(bounds).workAreaSize
+  const width = Math.min(Math.max(asked('width') || 520, 380), area.width)
+  const height = Math.min(Math.max(asked('height') || 660, 400), area.height)
+  return {
+    width,
+    height,
+    x: Math.round(bounds.x + (bounds.width - width) / 2),
+    y: Math.round(bounds.y + (bounds.height - height) / 2),
+    frame: true,
+    backgroundColor: '#0c0d12',
+    icon: appIcon(),
+    fullscreenable: false,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      nodeIntegrationInSubFrames: false,
+      webviewTag: false,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      experimentalFeatures: false,
+      safeDialogs: true,
+      safeDialogsMessage: t('Страница показывает диалоги слишком часто'),
+      autoplayPolicy: 'document-user-activation-required' as const,
+      navigateOnDragDrop: false
+    }
+  }
+}
+
 export class BrowserWindow {
   win: BaseWindow
   chrome: WebContentsView
@@ -353,6 +394,14 @@ export class BrowserWindow {
    * real browser window instead of quietly turning the app into one.
    */
   readonly appMode: InstalledApp | null
+  /**
+   * Windows pages opened for themselves. A sign-in or a payment opens one and
+   * closes it again; a page opening them without end is doing something else,
+   * and past this many the rest arrive as tabs, where they are a nuisance
+   * rather than a thing covering the screen.
+   */
+  private readonly popups = new Set<Electron.BrowserWindow>()
+  private static readonly MAX_POPUPS = 4
   /** the app a page could be installed as, for the toolbar to offer */
   private candidate: WebAppCandidate | null = null
   /** window was windowed when a page went HTML-fullscreen; restore on leave */
@@ -626,6 +675,53 @@ export class BrowserWindow {
   }
 
   /* ------------------------------------------------------- window bounds */
+  /**
+   * A window a page opened has no address bar of ours, and a sign-in form in a
+   * window that says nothing about whose it is would be a phishing tool. So the
+   * title bar carries the origin, the page is not allowed to write over it, and
+   * it is rewritten again on every navigation.
+   */
+  private dressPopup(win: Electron.BrowserWindow, opened: string) {
+    const wc = win.webContents
+    this.popups.add(win)
+    win.on('closed', () => this.popups.delete(win))
+    const retitle = () => {
+      if (win.isDestroyed()) return
+      try {
+        win.setTitle(new URL(wc.getURL() || opened).origin)
+      } catch {
+        win.setTitle('Nya Browser')
+      }
+    }
+    retitle()
+    wc.on('page-title-updated', (event) => {
+      event.preventDefault()
+      retitle()
+    })
+    wc.on('did-navigate', retitle)
+    wc.on('did-navigate-in-page', retitle)
+    wc.on('context-menu', (_e, params) => pageContextMenu(this, wc, params))
+    // A flow can take another step into a window of its own, and the step after
+    // that is where a bank's confirmation usually lives.
+    wc.setWindowOpenHandler(({ url, disposition, features }) => {
+      const blank = url === '' || url === 'about:blank'
+      if (!blank && !/^https?:/i.test(url)) {
+        if (/^(mailto|tel):/i.test(url)) void shell.openExternal(url)
+        return { action: 'deny' as const }
+      }
+      if (disposition === 'foreground-tab' || disposition === 'background-tab') {
+        this.newTab(url, disposition === 'background-tab')
+        return { action: 'deny' as const }
+      }
+      if (this.popups.size >= BrowserWindow.MAX_POPUPS) return { action: 'deny' as const }
+      return {
+        action: 'allow' as const,
+        outlivesOpener: false,
+        overrideBrowserWindowOptions: popupOptions(features, this.win)
+      }
+    })
+    wc.on('did-create-window', (child, details) => this.dressPopup(child, details.url))
+  }
   private readBounds() {
     const fallback = { width: 1360, height: 880 }
     try {
@@ -1006,26 +1102,44 @@ export class BrowserWindow {
       if (this.handleInput(input, false)) event.preventDefault()
     })
 
-    wc.setWindowOpenHandler(({ url, disposition }) => {
+    wc.setWindowOpenHandler(({ url, disposition, features }) => {
       if (this.appMode && /^https?:/i.test(url) && !inScope(this.appMode, url)) {
         void shell.openExternal(url).catch(() => undefined)
         return { action: 'deny' }
       }
-      if (!/^https?:/i.test(url)) {
+      // Half the sign-in libraries open the window first and decide where to
+      // send it a moment later, so a window with nothing in it yet is a real
+      // request and not a mistake.
+      const blank = url === '' || url === 'about:blank'
+      if (!blank && !/^https?:/i.test(url)) {
         if (/^(mailto|tel):/i.test(url)) void shell.openExternal(url)
         return { action: 'deny' }
       }
       // A popup aimed at an ad network is a popunder; it does not get a tab.
-      if (isBlockedPopup(url, documentHosts.get(wc.id) ?? '')) return { action: 'deny' }
-      // A page that asked for a window gets a window; everything else is a
-      // tab, which is what people mean by "open in new tab" anyway.
-      if (disposition === 'new-window') {
-        this.chrome.webContents.send('shortcut', `new-window:${url}`)
-        return { action: 'deny' }
+      if (!blank && isBlockedPopup(url, documentHosts.get(wc.id) ?? '')) return { action: 'deny' }
+      // A page that asks for a window of its own size is running something
+      // that talks back to that window: signing in with an account from
+      // another site, or a bank confirming a payment. Both hold on to what
+      // window.open returned and post messages to it, and a refused window
+      // returns null — which is where those flows used to stop. So this opens
+      // one. Everything else is a tab, which is what people mean by "open in
+      // new tab" anyway.
+      if (disposition === 'new-window' || blank) {
+        // Four windows at once is more than any sign-in or payment needs. A
+        // page still asking gets nothing — turning the rest into tabs only
+        // moved the flood into the tab strip.
+        if (this.popups.size >= BrowserWindow.MAX_POPUPS) return { action: 'deny' }
+        return {
+          action: 'allow',
+          outlivesOpener: false,
+          overrideBrowserWindowOptions: popupOptions(features, this.win)
+        }
       }
       this.newTab(url, disposition === 'background-tab')
       return { action: 'deny' }
     })
+
+    wc.on('did-create-window', (child, details) => this.dressPopup(child, details.url))
 
     // Warm up the connection while the user is still deciding to click.
     wc.on('update-target-url', (_e, url) => {

@@ -193,11 +193,6 @@ export default function App() {
 
   useEffect(() => {
     return window.browser.onShortcut((action) => {
-      // A page asking for a window arrives as "new-window:<url>".
-      if (action.startsWith('new-window:')) {
-        void window.browser.newWindow().then(() => window.browser.newTab(action.slice(11)))
-        return
-      }
       switch (action) {
         case 'focus-address':
           openPalette()
