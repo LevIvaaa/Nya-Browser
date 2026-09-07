@@ -1,4 +1,5 @@
 import { t } from '../i18n'
+import { useState } from 'react'
 import type { TabState } from '../../../shared/types'
 import { Copy, Download, Globe, Grid, Minus, Plus, Printer, Search } from './Icons'
 
@@ -23,6 +24,8 @@ export default function PageMenu({
   onClose: () => void
   onFind: () => void
 }) {
+  // What is being typed into the zoom box, while it is being typed.
+  const [typed, setTyped] = useState<string | null>(null)
   const width = 300
   const left = Math.max(8, Math.min(x - width + 28, window.innerWidth - width - 8))
   const usable = Boolean(tab?.hasContent) && /^https?:/i.test(tab?.url ?? '')
@@ -84,24 +87,43 @@ export default function PageMenu({
             <span className="flex items-center gap-1">
               <button
                 className="flex h-7 w-7 items-center justify-center rounded-[7px] hover:bg-[var(--surface-hover)]"
-                onClick={() => void window.browser.zoom(-1)}
+                onClick={() => void window.browser.zoomTo(percent - 5)}
                 aria-label={t('Мельче')}
               >
                 <Minus width={13} height={13} />
               </button>
-              <button
-                className="min-w-[52px] rounded-[7px] px-1 py-1 text-center text-sm tabular-nums hover:bg-[var(--surface-hover)]"
-                onClick={() => void window.browser.zoom('reset')}
-                title={t('Обычный размер')}
-              >
-                {percent}%
-              </button>
+              {/* Typed as well as pressed: the steps get you there, and when you
+                  know the number you want, you write it. */}
+              <span className="flex items-center rounded-[7px] hover:bg-[var(--surface-hover)]">
+                <input
+                  className="w-[38px] bg-transparent py-1 text-right text-sm tabular-nums outline-none"
+                  style={{ color: 'var(--ink)' }}
+                  value={typed ?? String(percent)}
+                  onChange={(event) => setTyped(event.target.value.replace(/[^\d]/g, '').slice(0, 3))}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter') return
+                    const wanted = Number(typed)
+                    if (wanted > 0) void window.browser.zoomTo(wanted)
+                    setTyped(null)
+                  }}
+                  onBlur={() => setTyped(null)}
+                  aria-label={t('Масштаб')}
+                />
+                <span className="pr-1 text-sm text-dim">%</span>
+              </span>
               <button
                 className="flex h-7 w-7 items-center justify-center rounded-[7px] hover:bg-[var(--surface-hover)]"
-                onClick={() => void window.browser.zoom(1)}
+                onClick={() => void window.browser.zoomTo(percent + 5)}
                 aria-label={t('Крупнее')}
               >
                 <Plus width={13} height={13} />
+              </button>
+              <button
+                className="ml-0.5 rounded-[7px] px-1.5 py-1 text-2xs text-faint hover:bg-[var(--surface-hover)]"
+                onClick={() => void window.browser.zoom('reset')}
+                title={t('Обычный размер')}
+              >
+                100%
               </button>
             </span>
           </div>
@@ -127,7 +149,12 @@ export default function PageMenu({
             () => void window.browser.savePage(),
             usable
           )}
-          {item(<Printer width={15} height={15} />, t('Печать'), () => void window.browser.print(), usable)}
+          {item(
+            <Printer width={15} height={15} />,
+            t('Печать'),
+            () => void window.browser.setOverlay('print'),
+            usable
+          )}
         </div>
       </div>
     </>

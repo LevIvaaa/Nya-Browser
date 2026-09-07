@@ -19,6 +19,7 @@ import type {
   Settings,
   Suggestion,
   InstalledApp,
+  PrintOptions,
   SiteInfo,
   SiteRules,
   GroupEdit,
@@ -135,7 +136,15 @@ const api = {
   zoom: (delta: number | 'reset') => ipcRenderer.invoke('nav:zoom', delta),
   continueOverHttp: () => ipcRenderer.invoke('nav:http-fallback'),
   proceedPastCertificate: () => ipcRenderer.invoke('nav:proceed-certificate'),
-  print: () => ipcRenderer.invoke('nav:print'),
+  printers: (): Promise<Array<{ name: string; description: string; isDefault: boolean }>> =>
+    ipcRenderer.invoke('nav:printers'),
+  printTo: (name: string, options: PrintOptions): Promise<void> =>
+    ipcRenderer.invoke('nav:print-to', name, options),
+  printPreview: (options: PrintOptions): Promise<Uint8Array | null> =>
+    ipcRenderer.invoke('nav:print-preview', options),
+  printPdf: (options: PrintOptions): Promise<boolean> =>
+    ipcRenderer.invoke('nav:print-pdf', options),
+  zoomTo: (percent: number) => ipcRenderer.invoke('nav:zoom-percent', percent),
   savePage: (): Promise<boolean> => ipcRenderer.invoke('nav:save-page'),
   uiAction: (action: 'find'): Promise<void> => ipcRenderer.invoke('ui:action', action),
   translatePage: (): Promise<boolean> => ipcRenderer.invoke('nav:translate'),

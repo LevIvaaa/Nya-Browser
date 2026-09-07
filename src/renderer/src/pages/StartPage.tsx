@@ -446,8 +446,10 @@ export default function StartPage({
           gridTemplateColumns: `repeat(${COLUMNS}, minmax(0, 1fr))`,
           gridAutoRows: `${ROW}px`,
           gap: GAP,
-          // Room to drop a widget below everything without the page jumping.
-          paddingBottom: editing ? 220 : 40
+          // Room to drop a widget below everything without the page jumping —
+          // while arranging them. The rest of the time it is forty pixels of
+          // nothing that made a page which fits on screen scroll anyway.
+          paddingBottom: editing ? 220 : 0
         }}
       >
         {ORDER.filter(visible).map((id) => (
