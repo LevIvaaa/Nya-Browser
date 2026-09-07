@@ -20,7 +20,7 @@ import { favicons } from './favicons'
 import { vault } from './vault'
 import { profiles } from './profiles'
 import { downloads } from './downloads'
-import { attachLog } from './log'
+import { attachLog, log } from './log'
 import { looksLikePdf, pdfSource, pdfViewerUrl } from './pdf'
 import { WALLPAPER_EXTENSIONS, registerProtocols } from './protocol'
 import { sites } from './sites'
@@ -436,9 +436,26 @@ export class BrowserWindow {
       backgroundColor: '#0c0d12',
       roundedCorners: true,
       show: false,
-      title: 'Nya Browser',
+      title: appMode ? appMode.name : 'Nya Browser',
       icon: appIcon()
     })
+
+    // An installed app gets its own identity in the shell: its own button on
+    // the taskbar with its own icon, pinnable on its own, and a relaunch that
+    // reopens the app rather than the browser. Without this the app's window is
+    // just another one of the browser's, stacked under the browser's icon,
+    // which is most of what made an "installed app" feel like a bookmark.
+    if (process.platform === 'win32' && appMode) {
+      try {
+        this.win.setAppDetails({
+          appId: `com.nya.browser.app.${appMode.id}`,
+          relaunchCommand: `"${process.execPath}" --nya-app=${appMode.id}`,
+          relaunchDisplayName: appMode.name
+        })
+      } catch (error) {
+        log('apps: window identity', String(error))
+      }
+    }
 
     this.chrome = new WebContentsView({
       webPreferences: {

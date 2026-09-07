@@ -13,7 +13,7 @@ import { initLog, log } from './log'
 import { flushAll, installExitHooks } from './store'
 import { registerProtocols, registerSchemes } from './protocol'
 import { helloAvailable, helloVerify } from './hello'
-import { apps, appIdFromArgv } from './apps'
+import { apps, appIdFromArgv, appRemoveFromArgv } from './apps'
 import { sites } from './sites'
 import { BLOCKLIST_SIZE, blockedLog, clearBrowsingData, hardenApp, hardenSession, resetStats, stats } from './security'
 import { detectSources, importBookmarks, importHistory, importPasswordsCsv } from './import'
@@ -206,6 +206,14 @@ if (!app.requestSingleInstanceLock()) {
     argv.includes('--new-window') ? 'normal' : argv.includes('--new-private-window') ? 'private' : null
 
   app.on('second-instance', (_event, argv) => {
+    // Windows asking us to uninstall one of the installed apps while the
+    // browser happens to be running.
+    const removeId = appRemoveFromArgv(argv)
+    if (removeId) {
+      for (const win of [...windows]) if (win.appMode?.id === removeId) win.win.close()
+      apps.remove(removeId)
+      return
+    }
     // A shortcut for an installed app: raise the window it already has, or
     // open one. It is a separate window, not a tab in this one.
     const appId = appIdFromArgv(argv)
@@ -240,6 +248,16 @@ if (!app.requestSingleInstanceLock()) {
     // Installed apps belong to the machine, not to a profile: a shortcut on the
     // desktop cannot know which profile was last used, and should not care.
     apps.load(app.getPath('userData'))
+
+    // Uninstalling from Windows' own list of installed apps runs us with the
+    // app's id and nothing else to do. No window opens.
+    const removeApp = appRemoveFromArgv(process.argv)
+    if (removeApp) {
+      apps.remove(removeApp)
+      flushAll()
+      app.quit()
+      return
+    }
     // Deliberately not awaited. The CDM is a ~10 MB download from Google's
     // component server on first use, and waiting for it would leave the window
     // unpainted for as long as that takes. The cost is that a DRM page opened in
