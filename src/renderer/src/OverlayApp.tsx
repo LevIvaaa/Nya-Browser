@@ -6,6 +6,7 @@ import { AppMenu, ProfileMenu } from './components/Menus'
 import GroupColour from './components/GroupColour'
 import AutofillCard from './components/AutofillOffer'
 import InstallApp from './components/InstallApp'
+import PageMenu from './components/PageMenu'
 import SitePanel from './components/SitePanel'
 import UpdateCard from './components/UpdateCard'
 import type { UpdateState } from '../../shared/types'
@@ -67,6 +68,14 @@ export default function OverlayApp() {
     <div className="relative h-full w-full">
       {mode === 'site' && <SitePanel onClose={close} />}
       {mode === 'autofill' && <AutofillCard offer={autofill} onClose={close} />}
+      {mode.startsWith('page-menu:') && (
+        <PageMenu
+          tab={active}
+          x={Number(mode.slice('page-menu:'.length)) || 0}
+          onClose={close}
+          onFind={() => void window.browser.uiAction('find')}
+        />
+      )}
       {mode === 'install-app' && <InstallApp candidate={appCandidate} onClose={close} />}
       {mode.startsWith('group-colour:') && (
         <GroupColour

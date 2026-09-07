@@ -382,6 +382,8 @@ export interface TabState {
   canGoForward: boolean
   active: boolean
   hasContent: boolean
+  /** the page is showing a translation of itself right now */
+  translated: boolean
   secure: boolean
   upgraded: boolean
   blocked: number

@@ -192,6 +192,110 @@ window.addEventListener('keydown', (event) => {
   if (command) ipcRenderer.send('edit:command', command)
 })
 
+/* --------------------------------------------------------------- translate */
+
+/**
+ * Translating what is on the page, in place.
+ *
+ * Only text nodes are touched, and only their contents — no markup is built
+ * from what comes back, so a translation can never turn into a script. What
+ * was there before is kept beside each node, which is the whole of showing the
+ * original again.
+ */
+if (isTop && httpOrigin) {
+  const SKIP = /^(script|style|noscript|code|pre|kbd|samp|textarea|svg|math)$/i
+  /** No page needs more than this translated, and no service wants it. */
+  const MAX_NODES = 1500
+  const CHUNK = 1400
+
+  let original: Array<{ node: Text; text: string }> | null = null
+  let busy = false
+
+  const worthIt = (value: string) => {
+    const text = value.trim()
+    // A stray bullet or a number is not language.
+    return text.length > 1 && /[\p{L}]/u.test(text)
+  }
+
+  function collect(): Text[] {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const parent = (node as Text).parentElement
+        if (!parent || SKIP.test(parent.tagName)) return NodeFilter.FILTER_REJECT
+        if (parent.isContentEditable) return NodeFilter.FILTER_REJECT
+        if (!worthIt(node.nodeValue ?? '')) return NodeFilter.FILTER_REJECT
+        return NodeFilter.FILTER_ACCEPT
+      }
+    })
+    const out: Text[] = []
+    for (let node = walker.nextNode(); node && out.length < MAX_NODES; node = walker.nextNode()) {
+      out.push(node as Text)
+    }
+    return out
+  }
+
+  async function translate(to: string) {
+    if (busy) return
+    busy = true
+    try {
+      const nodes = collect()
+      if (nodes.length === 0) {
+        ipcRenderer.send('translate:done', { count: 0 })
+        return
+      }
+      // Remember the page as it was before the first word changes.
+      if (!original) original = nodes.map((node) => ({ node, text: node.nodeValue ?? '' }))
+
+      let batch: Text[] = []
+      let size = 0
+      let done = 0
+      const flush = async () => {
+        if (batch.length === 0) return
+        const sending = batch
+        batch = []
+        size = 0
+        const answer: string[] = await ipcRenderer.invoke(
+          'translate:batch',
+          sending.map((node) => (node.nodeValue ?? '').trim()),
+          to
+        )
+        sending.forEach((node, index) => {
+          const text = answer[index]
+          // Nodes carry the spacing around them; putting a trimmed answer back
+          // where a padded original was would run words together.
+          if (!text || !node.isConnected) return
+          const source = node.nodeValue ?? ''
+          const lead = source.match(/^\s*/)?.[0] ?? ''
+          const tail = source.match(/\s*$/)?.[0] ?? ''
+          node.nodeValue = lead + text + tail
+        })
+        done += sending.length
+        ipcRenderer.send('translate:progress', { done, total: nodes.length })
+      }
+
+      for (const node of nodes) {
+        const text = (node.nodeValue ?? '').trim()
+        if (size + text.length > CHUNK && batch.length > 0) await flush()
+        batch.push(node)
+        size += text.length
+      }
+      await flush()
+      ipcRenderer.send('translate:done', { count: nodes.length })
+    } finally {
+      busy = false
+    }
+  }
+
+  ipcRenderer.on('translate:start', (_event, data: { to?: string }) => {
+    void translate(typeof data?.to === 'string' && data.to ? data.to : 'ru')
+  })
+
+  ipcRenderer.on('translate:restore', () => {
+    if (!original) return
+    for (const item of original) if (item.node.isConnected) item.node.nodeValue = item.text
+    original = null
+  })
+}
 if (isTop && httpOrigin) {
   const PASSWORD = 'input[type="password"]:not([disabled]):not([readonly])'
   const USERNAME_HINTS = /user|login|email|mail|phone|tel|account|логин|почта|телефон/i
