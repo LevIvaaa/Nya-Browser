@@ -136,6 +136,10 @@ const api = {
   continueOverHttp: () => ipcRenderer.invoke('nav:http-fallback'),
   proceedPastCertificate: () => ipcRenderer.invoke('nav:proceed-certificate'),
   print: () => ipcRenderer.invoke('nav:print'),
+  savePage: (): Promise<boolean> => ipcRenderer.invoke('nav:save-page'),
+  uiAction: (action: 'find'): Promise<void> => ipcRenderer.invoke('ui:action', action),
+  translatePage: (): Promise<boolean> => ipcRenderer.invoke('nav:translate'),
+  addToHome: (): Promise<boolean> => ipcRenderer.invoke('nav:add-to-home'),
 
   /* ---- find ---- */
   find: (text: string, forward?: boolean) => ipcRenderer.invoke('find:query', text, forward),

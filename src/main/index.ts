@@ -17,6 +17,7 @@ import { apps, appIdFromArgv, appRemoveFromArgv } from './apps'
 import { sites } from './sites'
 import { BLOCKLIST_SIZE, blockedLog, clearBrowsingData, hardenApp, hardenSession, resetStats, stats } from './security'
 import { detectSources, importBookmarks, importHistory, importPasswordsCsv } from './import'
+import { translateBatch } from './translate'
 import { engine, filterStatus, hideCss, loadFilters } from './filters'
 import { addExtension, listExtensions, removeExtension, revealExtension } from './extensions'
 import { favicons } from './favicons'
@@ -462,6 +463,25 @@ function registerIpc() {
   ipcMain.handle('nav:http-fallback', (event) => current(event).continueOverHttp())
   ipcMain.handle('nav:proceed-certificate', (event) => current(event).proceedPastCertificate())
   ipcMain.handle('nav:print', (event) => current(event).print())
+  ipcMain.handle('nav:save-page', (event) => current(event).savePage())
+  ipcMain.handle('ui:action', (event, action: unknown) => current(event).requestUiAction(str(action, 32)))
+  ipcMain.handle('nav:translate', (event) => current(event).translatePage())
+
+  /* ---- translation: the page asks, the main process fetches ---- */
+  ipcMain.handle('translate:batch', async (_event, items: unknown, to: unknown) => {
+    const list = Array.isArray(items) ? items : []
+    // A page cannot make this into a firehose: a bounded number of bounded
+    // strings, and nothing at all if it sends something else.
+    const texts = list.slice(0, 200).map((item) => str(item, 5000))
+    return translateBatch(texts, str(to, 8) || 'ru')
+  })
+  ipcMain.on('translate:done', (event, payload: unknown) => {
+    const data = (payload ?? {}) as { count?: unknown }
+    const count = typeof data.count === 'number' ? data.count : 0
+    current(event).translationDone(event.sender.id, count)
+  })
+  ipcMain.on('translate:progress', () => {})
+  ipcMain.handle('nav:add-to-home', (event) => current(event).addToHome())
 
   /* ---- find ---- */
   ipcMain.handle('find:query', (event, text: unknown, forward?: unknown) =>

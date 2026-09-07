@@ -173,6 +173,33 @@ export default function Toolbar({
             </span>
           )}
 
+          {/* Everything you can do to the page itself: translate it, resize it,
+              search it, keep it. The menu further right is about the browser,
+              and mixing the two made one list nobody could scan. */}
+          {canBookmark && (
+            <span
+              role="button"
+              tabIndex={0}
+              title={t('Действия со страницей')}
+              aria-label={t('Действия со страницей')}
+              className="no-drag flex shrink-0 items-center rounded-[7px] p-1 hover:bg-[var(--line)]"
+              onClick={(event) => {
+                event.stopPropagation()
+                const box = (event.currentTarget as HTMLElement).getBoundingClientRect()
+                void window.browser.setOverlay(`page-menu:${Math.round(box.right)}`)
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return
+                event.stopPropagation()
+                event.preventDefault()
+                const box = (event.currentTarget as HTMLElement).getBoundingClientRect()
+                void window.browser.setOverlay(`page-menu:${Math.round(box.right)}`)
+              }}
+            >
+              <More width={14} height={14} />
+            </span>
+          )}
+
           {/* What was blocked here is counted under the lock on the left, with
               the rest of what this site is allowed to do. This end of the field
               is for the one thing a reader does to a page they like. */}

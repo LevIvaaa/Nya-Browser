@@ -22,6 +22,7 @@ import { profiles } from './profiles'
 import { downloads } from './downloads'
 import { attachLog, log } from './log'
 import { looksLikePdf, pdfSource, pdfViewerUrl } from './pdf'
+import { translateBatch } from './translate'
 import { WALLPAPER_EXTENSIONS, registerProtocols } from './protocol'
 import { sites } from './sites'
 import { apps, inScope, readManifest } from './apps'
@@ -167,6 +168,9 @@ class Tab {
     return wc && !wc.isDestroyed() ? wc.isAudioMuted() : false
   }
 
+  /** Whether this page is currently showing a translation of itself. */
+  translated = false
+
   /** Creates the native view on demand: restored tabs cost nothing until used. */
   ensureView(wire: (tab: Tab) => void): boolean {
     // A settings tab has nothing to render in a web view, and giving it one
@@ -292,9 +296,19 @@ class Tab {
       muted: this.muted,
       audible: wc ? wc.isCurrentlyAudible() : false,
       zoom: wc ? Math.round(wc.getZoomLevel() * 10) / 10 : 0,
+      translated: this.translated,
       error: this.error
     }
   }
+}
+
+/**
+ * The language a page gets translated into: the one the browser is in, and
+ * when that is the system's, whatever the system says without its region.
+ */
+function translateTarget(): string {
+  const code = settings.get().language || app.getLocale()
+  return (code.split('-')[0] || 'ru').toLowerCase()
 }
 
 function prettyUrl(raw: string): string {
@@ -1061,6 +1075,8 @@ export class BrowserWindow {
     wc.on('did-navigate', (_e, raw) => {
       const url = pdfSource(raw) ?? raw
       tab.url = url
+      // A different page is not the translated one.
+      tab.translated = false
       // A site that was left at a different zoom opens at it again.
       const own = sites.get(hostOfUrl(url)).zoom
       wc.setZoomLevel(own ?? settings.get().defaultZoom)
@@ -1337,6 +1353,16 @@ export class BrowserWindow {
   private run(fn: () => void): boolean {
     fn()
     return true
+  }
+
+  /**
+   * The overlay asking for something that lives in the other renderer — the
+   * find bar is drawn with the toolbar, not over the page.
+   */
+  requestUiAction(action: string) {
+    if (action !== 'find') return
+    this.setOverlayMode(null)
+    this.uiShortcut(action)
   }
 
   private uiShortcut(action: string) {
@@ -1975,6 +2001,87 @@ export class BrowserWindow {
 
   print() {
     this.withActive((wc) => wc.print({}))
+  }
+
+  /* ------------------------------------------------------------ translate */
+
+  /**
+   * Translates the open page, or puts it back if it is already translated.
+   *
+   * The reader is told where the text goes before it goes: the engine has no
+   * translator of its own, so this is a public Google endpoint, and the text
+   * of the page is what it receives.
+   */
+  translatePage() {
+    const tab = this.getActive()
+    const wc = tab?.wc
+    if (!tab || !wc || wc.isDestroyed() || !/^https?:/i.test(tab.url)) return false
+    if (tab.translated) {
+      wc.send('translate:restore')
+      tab.translated = false
+      this.send('toast', t('Показан оригинал'))
+      this.broadcast()
+      return true
+    }
+    this.send('toast', t('Переводим — текст страницы уходит в Google Переводчик'))
+    wc.send('translate:start', { to: translateTarget() })
+    return true
+  }
+
+  /** A page finished translating itself. */
+  translationDone(webContentsId: number, count: number) {
+    const tab = this.tabs.find((t) => t.wc?.id === webContentsId)
+    if (!tab) return
+    tab.translated = count > 0
+    if (tab.id === this.activeId) {
+      this.send('toast', count > 0 ? t('Страница переведена') : t('Переводить нечего'))
+    }
+    this.broadcast()
+  }
+
+  /**
+   * Saves the page as a file. HTMLComplete rather than the single .html:
+   * a page saved without its images and stylesheets is a page nobody can
+   * read later, which is the only reason to save one.
+   */
+  async savePage() {
+    const tab = this.getActive()
+    const wc = tab?.wc
+    if (!tab || !wc || wc.isDestroyed()) return false
+    const safe = (tab.title || 'page').replace(/[\\/:*?"<>|]/g, ' ').trim().slice(0, 80)
+    const picked = await dialog.showSaveDialog(this.win, {
+      title: t('Сохранить страницу'),
+      defaultPath: join(app.getPath('downloads'), `${safe || 'page'}.html`),
+      filters: [{ name: 'HTML', extensions: ['html'] }]
+    })
+    if (picked.canceled || !picked.filePath) return false
+    try {
+      await wc.savePage(picked.filePath, 'HTMLComplete')
+      this.send('toast', t('Страница сохранена'))
+      return true
+    } catch (error) {
+      log('savePage', String(error))
+      this.send('toast', t('Не удалось сохранить страницу'))
+      return false
+    }
+  }
+
+  /** Puts the page on the home page, next to the other tiles. */
+  addToHome() {
+    const tab = this.getActive()
+    if (!tab?.hasContent || !/^https?:/i.test(tab.url)) return false
+    const current = settings.get().favorites
+    if (current.some((item) => item.url === tab.url)) {
+      this.send('toast', t('Уже на главной'))
+      return false
+    }
+    const title =
+      (tab.title || '').trim() || tab.url.replace(/^https?:\/\/(www\.)?/i, '').split('/')[0]
+    settings.patch({
+      favorites: [...current, { id: randomUUID(), title: title.slice(0, 60), url: tab.url }]
+    })
+    this.send('toast', t('Добавлено на главную'))
+    return true
   }
 
   /* ------------------------------------------------------------ bookmarks */
