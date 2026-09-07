@@ -222,6 +222,7 @@ const api = {
   vaultHelloUnlock: (): Promise<boolean> => ipcRenderer.invoke('vault:hello-unlock'),
   vaultHelloEnable: (on: boolean): Promise<boolean> => ipcRenderer.invoke('vault:hello-enable', on),
   vaultLock: () => ipcRenderer.invoke('vault:lock'),
+  vaultDismissNotice: (): Promise<void> => ipcRenderer.invoke('vault:dismiss-notice'),
   vaultSave: (input: { origin: string; username: string; password: string; note?: string }): Promise<boolean> =>
     ipcRenderer.invoke('vault:save', input),
   vaultReveal: (id: string): Promise<string | null> => ipcRenderer.invoke('vault:reveal', id),

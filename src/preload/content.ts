@@ -236,6 +236,50 @@ if (isTop && httpOrigin) {
 
   let announced = ''
 
+  /**
+   * Whether this field is one the browser has something to offer for: the
+   * password box itself, or the box the form uses for the account name.
+   */
+  function loginField(node: EventTarget | null): HTMLInputElement | null {
+    if (!(node instanceof HTMLInputElement)) return null
+    if (node.matches(PASSWORD)) return node
+    const password = passwordFields()[0]
+    if (!password) return null
+    return usernameFieldFor(password) === node ? node : null
+  }
+
+  /**
+   * Where the field is, in the page's own coordinates. The browser adds the
+   * position of the page inside the window; it cannot know the scroll or the
+   * layout, and this side cannot know where the page is drawn.
+   */
+  function report(field: HTMLInputElement) {
+    const rect = field.getBoundingClientRect()
+    ipcRenderer.send('autofill:field', {
+      host: location.host,
+      x: Math.round(rect.left),
+      y: Math.round(rect.top),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height)
+    })
+  }
+
+  const hide = () => ipcRenderer.send('autofill:leave')
+
+  /** The field the offer is currently anchored to, if any. */
+  let anchored: HTMLInputElement | null = null
+
+  const follow = () => {
+    if (!anchored) return
+    // Scrolled out of sight, or the form was replaced under it.
+    if (!anchored.isConnected || !visible(anchored)) {
+      anchored = null
+      hide()
+      return
+    }
+    report(anchored)
+  }
+
   const announce = () => {
     const fields = passwordFields()
     const key = `${location.host}:${fields.length}`
@@ -268,6 +312,40 @@ if (isTop && httpOrigin) {
 
   const start = () => {
     announce()
+
+    // Every click on a login box, not once per page: an offer that came back
+    // only if the page reloaded is the one people described as appearing
+    // "every other time".
+    const open = (event: Event) => {
+      const field = loginField(event.target)
+      if (!field) return
+      anchored = field
+      report(field)
+    }
+    document.addEventListener('focusin', open, true)
+    document.addEventListener('click', open, true)
+    document.addEventListener(
+      'focusout',
+      (event) => {
+        if (!loginField(event.target)) return
+        anchored = null
+        hide()
+      },
+      true
+    )
+    // The offer is a separate layer over the page, so it does not scroll with
+    // it by itself. It follows, and gives up when the field leaves the view.
+    window.addEventListener('scroll', follow, true)
+    window.addEventListener('resize', follow)
+    document.addEventListener(
+      'keydown',
+      (event) => {
+        if (event.key !== 'Escape' || !anchored) return
+        anchored = null
+        hide()
+      },
+      true
+    )
     const observer = new MutationObserver(() => announce())
     observer.observe(document.documentElement, { childList: true, subtree: true })
 

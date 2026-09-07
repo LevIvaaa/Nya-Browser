@@ -947,8 +947,8 @@ export default function SettingsPage({
                 </button>
               </Row>
               <Row
-                title={t('Спрашивать при запуске браузера')}
-                hint={t('Хранилище остаётся закрытым, пока вы не подтвердите, что это вы')}
+                title={t('Держать хранилище закрытым')}
+                hint={t('Мастер-пароль спросят там, где он понадобится — под полем входа')}
               >
                 <Toggle
                   checked={settings.passwordsAskOnStart}
