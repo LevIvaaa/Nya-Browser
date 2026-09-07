@@ -15,6 +15,7 @@
 
 import { app, nativeImage, shell, type Session } from 'electron'
 import { createHash } from 'crypto'
+import { execFileSync } from 'child_process'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs'
 import { dirname, join } from 'path'
 import { appEntryPath, appIconPath, isLinux, writeAppEntry } from './linux-integration'
@@ -289,6 +290,8 @@ class Apps {
       }
     }
 
+    listInWindows(record)
+
     const apps = this.store.get().apps.filter((item) => item.id !== record.id)
     this.store.set({ apps: [...apps, record] })
     this.store.flush()
@@ -299,6 +302,7 @@ class Apps {
   remove(id: string) {
     const record = this.get(id)
     if (!record) return
+    unlistInWindows(id)
     if (isLinux) {
       try {
         rmSync(appEntryPath(id), { force: true })
@@ -324,6 +328,65 @@ class Apps {
     this.store.set({ apps: this.store.get().apps.filter((item) => item.id !== id) })
     this.store.flush()
   }
+}
+
+/* --------------------------------------------- the list Windows shows */
+
+/**
+ * Where Windows keeps what it will show under "Installed apps".
+ *
+ * A shortcut alone is what Chrome makes, and it is also why an installed site
+ * feels like a bookmark with delusions: it is nowhere in the system's own list,
+ * so there is no way to uninstall it from where everything else is uninstalled
+ * from. Writing this key is what puts it there, and the uninstall string points
+ * back at us with the app's id.
+ *
+ * Per user (HKCU), because nothing here needs administrator rights.
+ */
+const uninstallKey = (id: string) =>
+  `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\NyaApp-${id}`
+
+function listInWindows(record: InstalledApp) {
+  if (process.platform !== 'win32') return
+  const key = uninstallKey(record.id)
+  const quoted = (value: string) => value
+  const set = (name: string, type: string, value: string) => {
+    try {
+      execFileSync('reg', ['add', key, '/v', name, '/t', type, '/d', quoted(value), '/f'], {
+        windowsHide: true,
+        stdio: 'ignore'
+      })
+    } catch (error) {
+      log('apps: registry', name, String(error))
+    }
+  }
+  const exe = process.execPath
+  set('DisplayName', 'REG_SZ', record.name)
+  set('DisplayIcon', 'REG_SZ', record.icon)
+  set('Publisher', 'REG_SZ', 'Nya Browser')
+  set('InstallLocation', 'REG_SZ', dirname(exe))
+  set('UninstallString', 'REG_SZ', `"${exe}" --nya-app-remove=${record.id}`)
+  set('DisplayVersion', 'REG_SZ', app.getVersion())
+  set('NoModify', 'REG_DWORD', '1')
+  set('NoRepair', 'REG_DWORD', '1')
+}
+
+function unlistInWindows(id: string) {
+  if (process.platform !== 'win32') return
+  try {
+    execFileSync('reg', ['delete', uninstallKey(id), '/f'], { windowsHide: true, stdio: 'ignore' })
+  } catch {
+    /* not listed, or already gone */
+  }
+}
+
+/** The app id an uninstall from Windows' own list arrived with. */
+export function appRemoveFromArgv(argv: readonly string[]): string | null {
+  for (const arg of argv) {
+    const match = /^--nya-app-remove=([0-9a-f]{6,32})$/.exec(arg)
+    if (match) return match[1]
+  }
+  return null
 }
 
 /** Our own folder in the Start menu, so removing an app leaves no strays. */

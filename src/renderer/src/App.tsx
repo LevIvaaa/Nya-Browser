@@ -301,7 +301,7 @@ export default function App() {
                 update={update}
                 appMode={win.app}
                 appCandidate={appCandidate}
-                onInstallApp={() => void window.browser.installApp()}
+                onInstallApp={() => void window.browser.setOverlay('install-app')}
                 view={overlay ?? view}
                 onOpenAddress={openPalette}
                 onToggleView={(target) => {
