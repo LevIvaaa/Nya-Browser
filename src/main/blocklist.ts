@@ -86,7 +86,17 @@ export const ALLOW_LIST = [
   'accounts.google.com', 'apis.google.com', 'www.google.com/recaptcha', 'recaptcha.net',
   'gstatic.com', 'googleapis.com', 'googleusercontent.com', 'youtube.com', 'ytimg.com',
   'facebook.com/plugins', 'paypal.com', 'paypalobjects.com', 'stripe.com', 'js.stripe.com',
-  'hcaptcha.com', 'cloudflare.com', 'challenges.cloudflare.com', 'sentry.io'
+  'hcaptcha.com', 'cloudflare.com', 'challenges.cloudflare.com', 'sentry.io',
+  // Signing in with somebody else's account. These are not optional extras
+  // on a page — block one and the button does nothing at all, which is what
+  // "Sign in with Google" on pinterest.com did until play.google.com was
+  // let through.
+  'play.google.com', 'accounts.youtube.com', 'oauth2.googleapis.com',
+  'appleid.apple.com', 'appleid.cdn-apple.com',
+  'login.microsoftonline.com', 'login.live.com', 'login.microsoft.com',
+  'passport.yandex.ru', 'passport.yandex.com', 'id.vk.com', 'oauth.vk.com',
+  'login.vk.com', 'connect.ok.ru', 'id.mail.ru', 'oauth.mail.ru',
+  'github.com/login', 'api.twitter.com/oauth', 'appleid.apple.com/auth'
 ]
 
 /**

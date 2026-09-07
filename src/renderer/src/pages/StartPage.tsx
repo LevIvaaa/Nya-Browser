@@ -183,11 +183,16 @@ export default function StartPage({
       const missing = [...new Set(settings.favorites.map((fav) => hostOf(fav.url)))]
         .filter((host) => host && !cached[host])
         .slice(0, 24)
-      for (const host of missing) {
-        const data = await window.browser.fetchFavicon(host)
-        if (!alive) return
-        if (data) setIcons((prev) => ({ ...prev, [host]: data }))
-      }
+      // All at once rather than one after another: waiting for each before
+      // asking for the next meant the last tile waited out every round trip
+      // before it, and a page of eleven took as long as eleven sites.
+      await Promise.all(
+        missing.map(async (host) => {
+          const data = await window.browser.fetchFavicon(host)
+          if (!alive || !data) return
+          setIcons((prev) => ({ ...prev, [host]: data }))
+        })
+      )
     })()
     return () => {
       alive = false
@@ -746,6 +751,9 @@ function EditBar({
               onChange={(event) => onPatch({ tileFill: Number(event.target.value) })}
               className="h-1 w-[84px] cursor-pointer"
             />
+            {/* Without the number it is a slider you set by eye and cannot
+                set back to where it was. */}
+            <span className="w-[30px] text-right tabular-nums text-faint">{page.tileFill}%</span>
           </span>
 
           {/* Text colour. Over a wallpaper the theme's ink is often the wrong
@@ -875,10 +883,12 @@ function Tile({
         height: size,
         fontSize: size * 0.4,
         borderRadius: radiusFor(shape, size),
+        // The same mix as the card it sits on. As a solid surface it was a
+        // different white from the tile at every setting but full.
         background: icon
-          ? 'var(--surface-solid)'
+          ? `color-mix(in srgb, var(--surface-solid) ${fill}%, var(--surface))`
           : `linear-gradient(140deg, hsl(${hue} 72% 58%), hsl(${(hue + 42) % 360} 70% 46%))`,
-        boxShadow: 'var(--shadow-sm)'
+        boxShadow: icon && fill < 40 ? 'none' : 'var(--shadow-sm)'
       }}
     >
       {icon ? (

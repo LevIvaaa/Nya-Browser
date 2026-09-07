@@ -12,6 +12,7 @@ import { settings } from './settings'
 import { engine } from './filters'
 import { looksLikePdf } from './pdf'
 import { sites } from './sites'
+import { siteOf } from './vault'
 import type { PermissionRequest, PermissionSettings, SecurityStats } from '../shared/types'
 
 const ads = new DomainMatcher(AD_DOMAINS)
@@ -309,6 +310,15 @@ export function hardenSession(
         : (details.webContentsId !== undefined ? documentHosts.get(details.webContentsId) : undefined) ??
           hostOf(details.referrer || '')
     if (pageOf && sites.get(pageOf).blocking === 'off') return callback({})
+
+    // A tracker is something that follows you from one site to another. A
+    // request a page makes to its own site is that page working — and it was
+    // being refused, which is how a sign-in button comes to do nothing and a
+    // search engine comes to warn that this browser may not open everything.
+    if (pageOf && details.resourceType !== 'mainFrame') {
+      const here = siteOf(url.hostname)
+      if (here !== '' && here === siteOf(pageOf)) return callback({})
+    }
 
     let kind = classify(url.hostname, url.pathname)
 
