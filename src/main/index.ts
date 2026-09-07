@@ -837,7 +837,15 @@ function registerIpc() {
     vault.removeMasterPassword(str(currentPass, 400))
   )
   ipcMain.handle('vault:fill', (event, id: unknown) => current(event).fillCredential(str(id, 64)))
-  ipcMain.handle('vault:confirm-save', (event, save: unknown) => current(event).confirmSavePassword(flag(save)))
+  ipcMain.handle(
+    'vault:confirm-save',
+    (event, save: unknown, username: unknown, password: unknown) =>
+      current(event).confirmSavePassword(
+        flag(save),
+        username === undefined ? undefined : str(username, 200),
+        password === undefined ? undefined : str(password, 400)
+      )
+  )
   ipcMain.handle('vault:cipher-sample', (event) => vault.cipherSample())
 
   /* ---- downloads ---- */

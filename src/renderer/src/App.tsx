@@ -6,7 +6,7 @@ import BookmarksBar from './components/BookmarksBar'
 import Toasts from './components/Toasts'
 import Welcome from './components/Welcome'
 import { applyLanguage, onLanguageChange } from './i18n'
-import { FindBar, PermissionBar, SavePasswordBar } from './components/Bars'
+import { FindBar, PermissionBar } from './components/Bars'
 import { TabRail, TabStrip } from './components/Tabs'
 import StartPage from './pages/StartPage'
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
@@ -24,7 +24,7 @@ export default function App() {
   const state = useBrowser()
   const {
     tabs, groups, appCandidate, active, settings, engines, engine, profiles, profile, bookmarks, bookmarked,
-    downloads, activeDownloads, closed, stats, win, permission, savePassword,
+    downloads, activeDownloads, closed, stats, win, permission,
     edge, toasts, patch, refreshBookmarks, setPermission, setAutofill, setSavePassword
   } = state
 
@@ -134,7 +134,6 @@ export default function App() {
     view,
     findOpen,
     Boolean(permission),
-    Boolean(savePassword),
     settings?.tabPosition,
     settings?.railWidth,
     settings?.compact,
@@ -313,15 +312,6 @@ export default function App() {
                 onAnswer={(allow) => {
                   void window.browser.answerPermission(permission.id, allow)
                   setPermission(null)
-                }}
-              />
-            )}
-            {savePassword && (
-              <SavePasswordBar
-                offer={savePassword}
-                onAnswer={(save) => {
-                  void window.browser.vaultConfirmSave(save)
-                  setSavePassword(null)
                 }}
               />
             )}

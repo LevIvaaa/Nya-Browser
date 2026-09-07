@@ -125,28 +125,3 @@ export function PermissionBar({
     </Bar>
   )
 }
-
-/* ------------------------------------------------------- save password bar */
-export function SavePasswordBar({
-  offer,
-  onAnswer
-}: {
-  offer: SavePasswordOffer
-  onAnswer: (save: boolean) => void
-}) {
-  return (
-    <Bar icon={<Key width={16} height={16} />} onClose={() => onAnswer(false)}>
-      <span className="min-w-0 flex-1 truncate text-sm">
-        {offer.known ? t('Обновить пароль для') : t('Сохранить пароль для')}{' '}
-        <b className="font-semibold">{offer.host}</b>
-        {offer.username ? ` · ${offer.username}` : ''}
-      </span>
-      <button className="btn h-[28px] px-3 text-sm" onClick={() => onAnswer(false)}>
-        {t('Не сейчас')}
-      </button>
-      <button className="btn btn-primary h-[28px] px-3 text-sm" onClick={() => onAnswer(true)}>
-        {t('Сохранить')}
-      </button>
-    </Bar>
-  )
-}

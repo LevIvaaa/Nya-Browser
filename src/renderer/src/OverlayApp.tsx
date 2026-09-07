@@ -8,6 +8,7 @@ import AutofillCard from './components/AutofillOffer'
 import InstallApp from './components/InstallApp'
 import PageMenu from './components/PageMenu'
 import PrintSheet from './components/PrintSheet'
+import SavePassword from './components/SavePassword'
 import TabsPanel from './components/TabsPanel'
 import SitePanel from './components/SitePanel'
 import UpdateCard from './components/UpdateCard'
@@ -22,7 +23,8 @@ import type { UpdateState } from '../../shared/types'
  * itself stays visible underneath.
  */
 export default function OverlayApp() {
-  const { settings, profiles, active, engine, groups, tabs, appCandidate, autofill } = useBrowser()
+  const { settings, profiles, active, engine, groups, tabs, appCandidate, autofill, savePassword } =
+    useBrowser()
   const [mode, setMode] = useState<string | null>(null)
   const [update, setUpdate] = useState<UpdateState | null>(null)
   const [, setLangVersion] = useState(0)
@@ -71,6 +73,7 @@ export default function OverlayApp() {
       {mode === 'site' && <SitePanel onClose={close} />}
       {mode === 'autofill' && <AutofillCard offer={autofill} onClose={close} />}
       {mode === 'print' && <PrintSheet onClose={close} />}
+      {mode === 'save-password' && <SavePassword offer={savePassword} onClose={close} />}
       {mode.startsWith('tabs-panel:') && (
         <TabsPanel
           tabs={tabs}
