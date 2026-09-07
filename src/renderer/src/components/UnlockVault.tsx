@@ -160,7 +160,10 @@ export default function UnlockVault({
           </p>
         )}
 
-        <button className="mt-4 w-full text-center text-sm text-faint hover:text-dim" onClick={onSkip}>
+        {/* Declining is a normal answer to this question, so it looks like one.
+            As grey text on the bottom edge it read as a footnote, and people
+            hunted for a way out of a card that was never compulsory. */}
+        <button className="btn mt-4 h-[38px] w-full justify-center" onClick={onSkip}>
           {t('Не сейчас')}
         </button>
       </div>

@@ -4,16 +4,12 @@ import {
   ArrowLeft,
   ArrowRight,
   Cross,
-  Download,
-  Gear,
   Home,
   Incognito,
   Lock,
   More,
-  Plus,
   Reload,
   Search,
-  Shield,
   Star,
   StarFilled,
   Unlock,
@@ -61,7 +57,6 @@ export default function Toolbar({
   onToggleView
 }: Props) {
   const loading = tab?.loading ?? false
-  const blocked = tab?.blocked ?? 0
   const secure = tab?.secure ?? true
   const hasContent = tab?.hasContent ?? false
   const canBookmark = Boolean(tab?.url && /^https?:/i.test(tab.url))
@@ -178,14 +173,28 @@ export default function Toolbar({
             </span>
           )}
 
-          {blocked > 0 && (
+          {/* What was blocked here is counted under the lock on the left, with
+              the rest of what this site is allowed to do. This end of the field
+              is for the one thing a reader does to a page they like. */}
+          {canBookmark && (
             <span
-              className="animate-pop flex shrink-0 items-center gap-1 rounded-pill px-1.5 py-[1px] text-2xs font-semibold"
-              title={t('Заблокировано на этой странице: {n}', { n: blocked })}
-              style={{ background: 'color-mix(in srgb, var(--good) 16%, transparent)', color: 'var(--good)' }}
+              role="button"
+              tabIndex={0}
+              title={bookmarked ? t('Убрать из закладок · Ctrl+D') : t('В закладки · Ctrl+D')}
+              className="no-drag flex shrink-0 items-center rounded-[7px] p-1 hover:bg-[var(--line)]"
+              style={bookmarked ? { color: 'var(--accent)' } : undefined}
+              onClick={(event) => {
+                event.stopPropagation()
+                void window.browser.toggleBookmark()
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return
+                event.stopPropagation()
+                event.preventDefault()
+                void window.browser.toggleBookmark()
+              }}
             >
-              <Shield width={10} height={10} />
-              {blocked}
+              {bookmarked ? <StarFilled width={14} height={14} /> : <Star width={14} height={14} />}
             </span>
           )}
 
@@ -239,20 +248,11 @@ export default function Toolbar({
         </Tooltip>
       )}
 
+      {/* Only what has nowhere else to live: a new version worth telling
+          someone about, the profile, and the menu. Bookmarks, downloads, a new
+          tab and the settings all sit in that menu already, and the row of
+          duplicates was just noise beside the address. */}
       <div className="no-drag flex items-center gap-0.5 pr-1">
-        {!appMode && (
-        <Tooltip label={bookmarked ? t('Убрать из закладок · Ctrl+D') : t('В закладки · Ctrl+D')}>
-          <button
-            className="icon-btn"
-            disabled={!canBookmark}
-            onClick={() => window.browser.toggleBookmark()}
-            style={bookmarked ? { color: 'var(--accent)' } : undefined}
-          >
-            {bookmarked ? <StarFilled /> : <Star />}
-          </button>
-        </Tooltip>
-        )}
-
         {updateBadge && (
           <Tooltip label={updateLabel}>
             <button
@@ -294,30 +294,6 @@ export default function Toolbar({
           </Tooltip>
         )}
 
-        <Tooltip label={t('Загрузки · Ctrl+J')}>
-          <button
-            className="icon-btn relative"
-            onClick={() => onToggleView('downloads')}
-            style={view === 'downloads' ? { background: 'var(--surface-hover)', color: 'var(--text)' } : undefined}
-          >
-            <Download />
-            {downloadCount > 0 && (
-              <span
-                className="animate-pulse-soft absolute right-1 top-1 h-[6px] w-[6px] rounded-pill"
-                style={{ background: 'var(--accent)' }}
-              />
-            )}
-          </button>
-        </Tooltip>
-
-        {!appMode && (
-          <Tooltip label={t('Новая вкладка · Ctrl+T')}>
-            <button className="icon-btn" onClick={() => window.browser.newTab()}>
-              <Plus />
-            </button>
-          </Tooltip>
-        )}
-
         {!appMode && profile && (
           <Tooltip label={t('Профиль: {name}', { name: profile.name })}>
             <button
@@ -331,26 +307,22 @@ export default function Toolbar({
           </Tooltip>
         )}
 
-        {!appMode && (
-          <Tooltip label={t('Настройки · Ctrl+,')}>
-            <button
-              className="icon-btn"
-              onClick={() => onToggleView('settings')}
-              style={view === 'settings' ? { background: 'var(--surface-hover)', color: 'var(--text)' } : undefined}
-            >
-              <Gear />
-            </button>
-          </Tooltip>
-        )}
-
-        <Tooltip label={t('Меню')}>
+        <Tooltip label={downloadCount > 0 ? t('Меню · идёт загрузка') : t('Меню')}>
           <button
-            className={cx('icon-btn')}
+            className={cx('icon-btn relative')}
             onMouseDown={(event) => event.stopPropagation()}
             onClick={() => onToggleView('menu')}
             style={view === 'menu' ? { background: 'var(--surface-hover)', color: 'var(--text)' } : undefined}
           >
             <More />
+            {/* Downloads moved into this menu, so the sign that one is running
+                moved with them — otherwise it would happen out of sight. */}
+            {downloadCount > 0 && (
+              <span
+                className="animate-pulse-soft absolute right-1 top-1 h-[6px] w-[6px] rounded-pill"
+                style={{ background: 'var(--accent)' }}
+              />
+            )}
           </button>
         </Tooltip>
       </div>
