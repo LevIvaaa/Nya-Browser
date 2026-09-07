@@ -119,10 +119,32 @@ function noUnaskedPasskeyPrompt() {
   }
 }
 
+/**
+ * Says we do not have the browser-drawn account chooser, because we do not.
+ *
+ * Federated sign-in — the "continue with Google" buttons — can go two ways: a
+ * popup window to the provider, which this browser opens like any other, or
+ * the newer one where the browser itself lists the accounts to pick from.
+ * Chromium carries the plumbing for the second; the chooser is part of Chrome
+ * and not of the engine, so the call runs into nothing and the button does
+ * nothing with it. Every library falls back to the popup when the feature is
+ * absent, so absent is what it says.
+ */
+function noFederatedChooser() {
+  const view = window as unknown as Record<string, unknown>
+  try {
+    delete view.IdentityCredential
+    delete view.IdentityProvider
+  } catch {
+    /* a page that pinned it keeps it, and keeps the dead end with it */
+  }
+}
+
 if (/^https?:$/.test(location.protocol)) {
   try {
     contextBridge.executeInMainWorld({ func: chromeShapes })
     contextBridge.executeInMainWorld({ func: noUnaskedPasskeyPrompt })
+    contextBridge.executeInMainWorld({ func: noFederatedChooser })
   } catch {
     /* a page that refuses the call keeps the empty object; nothing else breaks */
   }

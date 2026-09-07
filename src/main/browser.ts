@@ -369,6 +369,23 @@ function pdfOptions(options: PrintOptions) {
   }
 }
 
+/**
+ * One address for the purposes of not listing the same page twice: the
+ * fragment and a trailing slash make no difference to where you end up, and
+ * "/settings" and "/settings/" appearing one under the other in the list is
+ * how the address bar came to look like a bad search engine.
+ */
+function sameAddress(url: string): string {
+  try {
+    const parsed = new URL(url)
+    parsed.hash = ''
+    const path = parsed.pathname.replace(/\/+$/, '')
+    return `${parsed.origin}${path}${parsed.search}`.toLowerCase()
+  } catch {
+    return url.toLowerCase()
+  }
+}
+
 function prettyUrl(raw: string): string {
   try {
     const url = new URL(raw)
@@ -2385,11 +2402,23 @@ export class BrowserWindow {
     }
     if (useHistory) out.push(...history.search(q, 6))
 
+    // Whatever was typed goes first, because it is the one thing certainly
+    // meant. An address if it reads like one, a search if it does not —
+    // typing "pinterest" used to put six half-remembered addresses above
+    // searching for the word itself.
     const direct = normalizeInput(q, s)
+    const search: Suggestion = {
+      kind: 'search',
+      title: q,
+      url: normalizeInput(`${q} `, s),
+      subtitle: t('Поиск')
+    }
     if (!/^https?:\/\/(duckduckgo|www\.google|www\.bing|search|yandex|www\.startpage|www\.mojeek|www\.ecosia|searx)/i.test(direct)) {
       out.unshift({ kind: 'url', title: q, url: direct, subtitle: t('Открыть сайт') })
+      out.push(search)
+    } else {
+      out.unshift(search)
     }
-    out.push({ kind: 'search', title: q, url: normalizeInput(`${q} `, s), subtitle: t('Поиск') })
 
     // A tab and a history entry often share a URL. The tab is listed first and
     // claims the address, so the same page is never offered twice — once to
@@ -2397,10 +2426,11 @@ export class BrowserWindow {
     const seen = new Set<string>()
     const kept: Suggestion[] = []
     for (const item of out) {
-      const key = item.kind === 'tab' ? `tab:${item.tabId}` : item.url
-      if (seen.has(key) || (item.kind !== 'tab' && seen.has(item.url))) continue
+      const same = sameAddress(item.url)
+      const key = item.kind === 'tab' ? `tab:${item.tabId}` : same
+      if (seen.has(key) || (item.kind !== 'tab' && seen.has(same))) continue
       seen.add(key)
-      seen.add(item.url)
+      seen.add(same)
       kept.push(item)
       if (kept.length === 9) break
     }
