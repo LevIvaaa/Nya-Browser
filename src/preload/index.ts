@@ -225,6 +225,9 @@ const api = {
   vaultSave: (input: { origin: string; username: string; password: string; note?: string }): Promise<boolean> =>
     ipcRenderer.invoke('vault:save', input),
   vaultReveal: (id: string): Promise<string | null> => ipcRenderer.invoke('vault:reveal', id),
+  /** Vault → clipboard, without the password passing through the interface. */
+  vaultCopy: (id: string): Promise<boolean> => ipcRenderer.invoke('vault:copy', id),
+  copyText: (text: string): Promise<boolean> => ipcRenderer.invoke('clipboard:write', text),
   vaultRemove: (id: string): Promise<boolean> => ipcRenderer.invoke('vault:remove', id),
   vaultGenerate: (length?: number): Promise<string> => ipcRenderer.invoke('vault:generate', length),
   vaultSetMaster: (current: string | null, next: string): Promise<boolean> =>
@@ -260,6 +263,9 @@ const api = {
   checkUpdates: (): Promise<UpdateState> => ipcRenderer.invoke('updates:check'),
   newWindow: (incognito = false): Promise<boolean> => ipcRenderer.invoke('window:new', incognito),
   favicons: (): Promise<Record<string, string>> => ipcRenderer.invoke('favicons:all'),
+  /** Goes and gets one for a site that has not been visited in this profile. */
+  fetchFavicon: (host: string): Promise<string | undefined> =>
+    ipcRenderer.invoke('favicons:fetch', host),
   downloadUpdate: (): Promise<boolean> => ipcRenderer.invoke('updates:download'),
   installUpdate: (): Promise<boolean> => ipcRenderer.invoke('updates:install'),
   extensions: (): Promise<InstalledExtension[]> => ipcRenderer.invoke('ext:list'),

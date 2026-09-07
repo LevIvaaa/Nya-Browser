@@ -15,15 +15,18 @@ export const net = {
   }
 }
 
-// The vault asks whether the OS keychain is there before it uses it; in a test
-// it is not, and saying so keeps the tests off the real keychain.
+// A stand-in for the OS keychain: reversible, in-process, and worth nothing as
+// protection. The real one is DPAPI, which is per-machine and per-account and
+// therefore not something a test may touch. Saying it is unavailable instead
+// would leave the whole keychain-backed path — the one the browser uses by
+// default — untested.
 export const safeStorage = {
-  isEncryptionAvailable: () => false,
-  encryptString: () => {
-    throw new Error('no keychain in the tests')
-  },
-  decryptString: () => {
-    throw new Error('no keychain in the tests')
+  isEncryptionAvailable: () => true,
+  encryptString: (text) => Buffer.from('nya-test:' + text, 'utf8'),
+  decryptString: (buffer) => {
+    const text = Buffer.from(buffer).toString('utf8')
+    if (!text.startsWith('nya-test:')) throw new Error('not sealed by this stub')
+    return text.slice('nya-test:'.length)
   }
 }
 

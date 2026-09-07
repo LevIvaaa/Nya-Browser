@@ -415,6 +415,11 @@ class Vault {
   }
 
   remove(id: string): boolean {
+    // A shut vault does not give its entries up and does not lose them either.
+    // Reading one takes the key; deleting one took nothing at all, so anyone at
+    // an unattended machine could throw away every password without ever
+    // proving they were allowed to see one.
+    if (this.locked) return false
     const file = this.store.get()
     const entries = file.entries.filter((e) => e.id !== id)
     if (entries.length === file.entries.length) return false

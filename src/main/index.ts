@@ -1,5 +1,5 @@
 import { t } from './i18n'
-import { app, dialog, ipcMain, Menu, nativeTheme, session, shell, type MenuItemConstructorOptions } from 'electron'
+import { app, clipboard, dialog, ipcMain, Menu, nativeTheme, session, shell, type MenuItemConstructorOptions } from 'electron'
 import { join } from 'path'
 import { execFile, execFileSync } from 'child_process'
 import { BrowserWindow } from './browser'
@@ -683,6 +683,21 @@ function registerIpc() {
     return vault.save(str(data.origin, 200), str(data.username, 200), str(data.password, 400), str(data.note, 200))
   })
   ipcMain.handle('vault:reveal', (event, id: unknown) => vault.reveal(str(id, 64)))
+  // Copying happens here rather than in the page. navigator.clipboard needs the
+  // window to hold focus and the click's activation to still be alive, and
+  // after a round trip to fetch the password neither is guaranteed — which is
+  // why the copy button did nothing. This way the password is never handed to
+  // the interface at all: it goes from the vault to the clipboard.
+  ipcMain.handle('vault:copy', (event, id: unknown) => {
+    const value = vault.reveal(str(id, 64))
+    if (!value) return false
+    clipboard.writeText(value)
+    return true
+  })
+  ipcMain.handle('clipboard:write', (event, text: unknown) => {
+    clipboard.writeText(str(text, 4000))
+    return true
+  })
   ipcMain.handle('vault:remove', (event, id: unknown) => vault.remove(str(id, 64)))
   ipcMain.handle('vault:generate', (event, length?: unknown) => vault.generate(num(length) || 20))
   ipcMain.handle('vault:set-master', (event, currentPass: unknown, next: unknown) =>
@@ -731,6 +746,11 @@ function registerIpc() {
     return true
   })
   ipcMain.handle('favicons:all', (event) => favicons.all())
+  // Asked for by name, for a tile just added or a saved password whose site
+  // has not been opened here. Rides the profile's own session.
+  ipcMain.handle('favicons:fetch', (event, host: unknown) =>
+    favicons.fetchFor(str(host, 200), current(event).pageSession)
+  )
   ipcMain.handle('updates:download', (event) => downloadUpdate())
   ipcMain.handle('updates:install', (event) => installNow())
 

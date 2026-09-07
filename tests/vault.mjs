@@ -25,7 +25,7 @@ await build({
   logLevel: 'error'
 })
 
-const { siteOf } = await import(pathToFileURL(out).href)
+const { siteOf, vault } = await import(pathToFileURL(out).href)
 
 let passed = 0
 const failures = []
@@ -69,6 +69,25 @@ check('two sites under co.uk are not', sameSite('example.co.uk', 'other.co.uk'),
 check('two sites under com.br are not', sameSite('shop.example.com.br', 'shop.other.com.br'), false)
 check('two hosts on localhost are not', sameSite('localhost', 'localhost'), false)
 check('two addresses are not', sameSite('192.168.0.1', '192.168.0.1'), false)
+
+/* --------------------------------------------- what a shut vault will not do */
+
+// Reading an entry needs the key. Deleting one needed nothing, so anyone who
+// sat down at an unlocked machine could throw away every password without ever
+// proving they were allowed to read one.
+{
+  const dir = mkdtempSync(join(tmpdir(), 'nya-vault-locked-'))
+  vault.load(dir, false)
+  check('a fresh vault opens with the keychain', vault.locked, false)
+  const saved = vault.save('example.com', 'someone', 'a password worth keeping')
+  check('a password can be saved while the vault is open', saved, true)
+  const [entry] = vault.list()
+  vault.lock()
+  check('and the vault locks', vault.locked, true)
+  check('a locked vault does not give the password up', vault.reveal(entry.id), null)
+  check('a locked vault does not delete it either', vault.remove(entry.id), false)
+  check('so the entry is still there', vault.list().length, 1)
+}
 
 for (const { name, actual, expected } of failures) {
   console.log(`FAIL ${name}`)
