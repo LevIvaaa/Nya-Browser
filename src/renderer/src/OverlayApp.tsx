@@ -7,6 +7,7 @@ import GroupColour from './components/GroupColour'
 import AutofillCard from './components/AutofillOffer'
 import InstallApp from './components/InstallApp'
 import PageMenu from './components/PageMenu'
+import PrintSheet from './components/PrintSheet'
 import TabsPanel from './components/TabsPanel'
 import SitePanel from './components/SitePanel'
 import UpdateCard from './components/UpdateCard'
@@ -69,6 +70,7 @@ export default function OverlayApp() {
     <div className="relative h-full w-full">
       {mode === 'site' && <SitePanel onClose={close} />}
       {mode === 'autofill' && <AutofillCard offer={autofill} onClose={close} />}
+      {mode === 'print' && <PrintSheet onClose={close} />}
       {mode.startsWith('tabs-panel:') && (
         <TabsPanel
           tabs={tabs}

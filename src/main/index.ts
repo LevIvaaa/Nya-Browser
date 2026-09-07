@@ -41,7 +41,7 @@ import {
   urlFromArgv
 } from './integration'
 import { SEARCH_ENGINES } from '../shared/search'
-import type { AppInfo, Settings, SiteRules, ThemeMode } from '../shared/types'
+import type { AppInfo, PrintOptions, Settings, SiteRules, ThemeMode } from '../shared/types'
 
 /* ------------------------------------------------------------------------- */
 /* Startup switches — read before app.whenReady() and fixed for the session.  */
@@ -502,7 +502,41 @@ function registerIpc() {
   ipcMain.handle('nav:zoom', (event, delta: unknown) => current(event).setZoom(delta === 'reset' ? 'reset' : num(delta)))
   ipcMain.handle('nav:http-fallback', (event) => current(event).continueOverHttp())
   ipcMain.handle('nav:proceed-certificate', (event) => current(event).proceedPastCertificate())
-  ipcMain.handle('nav:print', (event) => current(event).print())
+  ipcMain.handle('nav:printers', (event) => current(event).printers())
+  /** Whatever the print sheet sent, back in a shape the browser can trust. */
+  const printOptions = (raw: unknown): PrintOptions => {
+    const input = (raw ?? {}) as Partial<PrintOptions>
+    const papers = ['A4', 'A3', 'A5', 'Letter', 'Legal', 'Tabloid'] as const
+    const margins = ['default', 'none', 'narrow'] as const
+    return {
+      landscape: flag(input.landscape),
+      paper: papers.includes(input.paper as (typeof papers)[number])
+        ? (input.paper as PrintOptions['paper'])
+        : 'A4',
+      margins: margins.includes(input.margins as (typeof margins)[number])
+        ? (input.margins as PrintOptions['margins'])
+        : 'default',
+      scale: Math.max(25, Math.min(200, num(input.scale) || 100)),
+      background: flag(input.background),
+      headers: flag(input.headers),
+      pages: str(input.pages, 100),
+      copies: Math.max(1, Math.min(50, num(input.copies) || 1)),
+      colour: flag(input.colour),
+      duplex: flag(input.duplex)
+    }
+  }
+  ipcMain.handle('nav:print-to', (event, name: unknown, options: unknown) =>
+    current(event).printTo(str(name, 200), printOptions(options))
+  )
+  ipcMain.handle('nav:print-preview', (event, options: unknown) =>
+    current(event).printPreview(printOptions(options))
+  )
+  ipcMain.handle('nav:print-pdf', (event, options: unknown) =>
+    current(event).printPdf(printOptions(options))
+  )
+  ipcMain.handle('nav:zoom-percent', (event, percent: unknown) =>
+    current(event).setZoomPercent(num(percent))
+  )
   ipcMain.handle('nav:save-page', (event) => current(event).savePage())
   ipcMain.handle('ui:action', (event, action: unknown) => current(event).requestUiAction(str(action, 32)))
   ipcMain.handle('nav:translate', (event) => current(event).translatePage())
@@ -569,6 +603,11 @@ function registerIpc() {
   const applyEverywhere = () => {
     for (const win of windows) win.applySettings()
   }
+  // Settings are also changed from inside the browser — a tile added from the
+  // page menu, a theme handed over by the installer — and those changes have
+  // to reach the windows too. Without this a new tile turned up on the home
+  // page only when something else happened to broadcast.
+  settings.onChange(() => applyEverywhere())
 
   /** Same for the profile list: renaming one must not leave a window behind. */
   const profilesEverywhere = () => {

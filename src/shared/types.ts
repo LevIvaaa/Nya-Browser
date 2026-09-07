@@ -31,6 +31,22 @@ export interface SearchEngine {
   hint: string
 }
 
+/** What the print sheet asks, and what both the preview and the job use. */
+export interface PrintOptions {
+  landscape: boolean
+  paper: 'A4' | 'A3' | 'A5' | 'Letter' | 'Legal' | 'Tabloid'
+  margins: 'default' | 'none' | 'narrow'
+  /** per cent, 25–200 */
+  scale: number
+  background: boolean
+  headers: boolean
+  /** '' is every page; otherwise something like '1-5, 8' */
+  pages: string
+  copies: number
+  colour: boolean
+  duplex: boolean
+}
+
 export interface Favorite {
   id: string
   title: string

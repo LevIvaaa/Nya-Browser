@@ -59,7 +59,7 @@ export function AppMenu({ onClose, onOpen }: { onClose: () => void; onOpen: (vie
           window.browser.clearBrowsingData()
         )}
         <div className="my-1.5" style={{ borderTop: '1px solid var(--line)' }} />
-        {item(<Printer width={15} height={15} />, t('Печать страницы'), '', () => window.browser.print())}
+        {item(<Printer width={15} height={15} />, t('Печать страницы'), '', () => window.browser.setOverlay('print'))}
         {item(<Keyboard width={15} height={15} />, t('Инструменты разработчика'), 'F12', () =>
           window.browser.openDevTools()
         )}

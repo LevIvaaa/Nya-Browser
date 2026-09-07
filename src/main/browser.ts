@@ -49,6 +49,7 @@ import type {
   PermissionRequest,
   Profile,
   InstalledApp,
+  PrintOptions,
   SiteInfo,
   SiteRules,
   WebAppCandidate,
@@ -170,6 +171,12 @@ class Tab {
 
   /** Whether this page is currently showing a translation of itself. */
   translated = false
+  /**
+   * The app this page says it can be installed as. It is worked out when the
+   * page loads and kept here rather than on the window, or switching to a
+   * tab that is not an app would still be offering the last one that was.
+   */
+  candidate: WebAppCandidate | null = null
 
   /** Creates the native view on demand: restored tabs cost nothing until used. */
   ensureView(wire: (tab: Tab) => void): boolean {
@@ -295,7 +302,9 @@ class Tab {
       sleeping: this.sleeping,
       muted: this.muted,
       audible: wc ? wc.isCurrentlyAudible() : false,
-      zoom: wc ? Math.round(wc.getZoomLevel() * 10) / 10 : 0,
+      // Three decimals, not one: a per cent step is a hundredth of a level,
+      // and rounding it away made 105% read back as 106%.
+      zoom: wc ? Math.round(wc.getZoomLevel() * 1000) / 1000 : 0,
       translated: this.translated,
       error: this.error
     }
@@ -309,6 +318,55 @@ class Tab {
 function translateTarget(): string {
   const code = settings.get().language || app.getLocale()
   return (code.split('-')[0] || 'ru').toLowerCase()
+}
+
+/** Inches, because that is what printToPDF measures margins in. */
+const MARGIN_INCHES = { default: 0.4, none: 0, narrow: 0.2 }
+
+function marginsForPrint(kind: PrintOptions['margins']) {
+  if (kind === 'none') return { marginType: 'none' as const }
+  if (kind === 'default') return { marginType: 'default' as const }
+  const inch = MARGIN_INCHES.narrow
+  return {
+    marginType: 'custom' as const,
+    top: inch,
+    bottom: inch,
+    left: inch,
+    right: inch
+  }
+}
+
+/**
+ * "1-5, 8" as the pairs Electron's print wants. Anything that is not a page
+ * number is dropped rather than guessed at, and an empty list means the
+ * whole document — which is what the caller does with it.
+ */
+function pageRanges(text: string): Array<{ from: number; to: number }> {
+  const out: Array<{ from: number; to: number }> = []
+  for (const part of text.split(',')) {
+    const range = /^\s*(\d+)\s*(?:-\s*(\d+))?\s*$/.exec(part)
+    if (!range) continue
+    const from = Number(range[1])
+    const to = range[2] ? Number(range[2]) : from
+    if (from < 1 || to < from) continue
+    // Electron counts from zero here, and people do not.
+    out.push({ from: from - 1, to: to - 1 })
+  }
+  return out
+}
+
+/** The same answers, in the shape printToPDF reads them. */
+function pdfOptions(options: PrintOptions) {
+  const inch = MARGIN_INCHES[options.margins] ?? MARGIN_INCHES.default
+  return {
+    landscape: options.landscape,
+    printBackground: options.background,
+    displayHeaderFooter: options.headers,
+    scale: Math.max(0.25, Math.min(2, options.scale / 100)),
+    pageSize: options.paper,
+    margins: { top: inch, bottom: inch, left: inch, right: inch },
+    ...(options.pages.trim() ? { pageRanges: options.pages.trim() } : {})
+  }
 }
 
 function prettyUrl(raw: string): string {
@@ -1411,6 +1469,9 @@ export class BrowserWindow {
     }
     this.activeId = id
     tab.lastActive = Date.now()
+    // Whatever this tab decided about being an app, not what the last one did.
+    this.candidate = tab.candidate
+    this.sendApp()
     this.wake(tab)
     this.showActive()
     this.persistSession()
@@ -1781,6 +1842,7 @@ export class BrowserWindow {
    * page is asked for an address and nothing more.
    */
   private async lookForApp(tab: Tab) {
+    tab.candidate = null
     this.candidate = null
     const wc = tab.wc
     if (this.appMode || this.incognito || !wc || wc.isDestroyed()) return this.sendApp()
@@ -1799,8 +1861,9 @@ export class BrowserWindow {
     if (!manifestUrl) return this.sendApp()
     const found = await readManifest(this.ses, tab.url, manifestUrl)
     // The page may have moved on while the manifest was being fetched.
+    tab.candidate = found && !apps.has(found.id) ? found : null
     if (this.getActive()?.id !== tab.id) return
-    this.candidate = found && !apps.has(found.id) ? found : null
+    this.candidate = tab.candidate
     this.sendApp()
   }
 
@@ -1975,10 +2038,38 @@ export class BrowserWindow {
 
   setZoom(delta: number | 'reset') {
     this.withActive((wc) => {
-      const next = delta === 'reset' ? settings.get().defaultZoom : Math.max(-3, Math.min(4, wc.getZoomLevel() + delta))
-      wc.setZoomLevel(next)
-      this.broadcast()
+      const next =
+        delta === 'reset'
+          ? settings.get().defaultZoom
+          : Math.max(-3, Math.min(4, wc.getZoomLevel() + delta))
+      this.applyZoom(wc, next, delta === 'reset')
     })
+  }
+
+  /**
+   * The zoom people actually read: per cent, in fives. Chromium counts in
+   * levels where each step is 1.2×, which is why the menu used to offer 83%
+   * and 120% and nothing in between.
+   */
+  setZoomPercent(percent: number) {
+    const wanted = Math.max(25, Math.min(500, Math.round(percent)))
+    this.withActive((wc) => {
+      const level = Math.log(wanted / 100) / Math.log(1.2)
+      this.applyZoom(wc, level, Math.abs(wanted - 100) < 0.5)
+    })
+  }
+
+  /**
+   * Sets the zoom and remembers it for the site, because a page that forgets
+   * its size on every reload is a page you set the size of twice a minute.
+   * The default is stored as nothing at all, so changing the default later
+   * still reaches every site that never asked for anything else.
+   */
+  private applyZoom(wc: WebContents, level: number, isDefault: boolean) {
+    wc.setZoomLevel(level)
+    const host = hostOfUrl(wc.getURL())
+    if (host) sites.set(host, { zoom: isDefault ? undefined : level })
+    this.broadcast()
   }
 
   find(text: string, forward = true) {
@@ -1999,8 +2090,105 @@ export class BrowserWindow {
     if (/^https?:/i.test(url)) void shell.openExternal(url)
   }
 
-  print() {
-    this.withActive((wc) => wc.print({}))
+  /** The printers Windows knows about, for the browser's own print sheet. */
+  async printers(): Promise<Array<{ name: string; description: string; isDefault: boolean }>> {
+    const wc = this.getActive()?.wc
+    if (!wc || wc.isDestroyed()) return []
+    try {
+      const list = await wc.getPrintersAsync()
+      return list.map((printer) => ({
+        name: printer.name,
+        description: printer.displayName || printer.description || '',
+        // Which one Windows would have used is not a field of its own; it is
+        // one of the platform options, as a string.
+        isDefault:
+          String((printer.options as unknown as Record<string, unknown>)?.['printer-is-default']) === 'true'
+      }))
+    } catch (error) {
+      log('printers', String(error))
+      return []
+    }
+  }
+
+  /**
+   * Prints to a named printer with no dialog of Windows' own, because the one
+   * Electron would open never appears. A printer that asks for a filename —
+   * "Microsoft Print to PDF" is one — puts up its own window and answers when
+   * that window is answered, so nothing is reported until then.
+   */
+  printTo(deviceName: string, options: PrintOptions) {
+    this.withActive((wc) => {
+      try {
+        wc.print(
+          {
+            silent: true,
+            deviceName,
+            copies: Math.max(1, Math.min(50, Math.round(options.copies))),
+            landscape: options.landscape,
+            color: options.colour,
+            printBackground: options.background,
+            scaleFactor: Math.max(25, Math.min(200, Math.round(options.scale))),
+            pageSize: options.paper,
+            margins: marginsForPrint(options.margins),
+            duplexMode: options.duplex ? 'longEdge' : 'simplex',
+            header: options.headers ? ' ' : undefined,
+            footer: options.headers ? ' ' : undefined,
+            ...(pageRanges(options.pages).length > 0
+              ? { pageRanges: pageRanges(options.pages) }
+              : {})
+          },
+          (ok, reason) => {
+            if (ok) return this.send('toast', t('Отправлено на печать'))
+            if (reason === 'cancelled') return
+            log('print', reason)
+            this.send('toast', t('Не удалось напечатать'))
+          }
+        )
+      } catch (error) {
+        log('print', String(error))
+        this.send('toast', t('Не удалось напечатать'))
+      }
+    })
+  }
+
+  /**
+   * The pages as they will be printed, for the print sheet to show. Same
+   * call as the one that makes the file, so the preview cannot disagree
+   * with what comes out.
+   */
+  async printPreview(options: PrintOptions): Promise<Uint8Array | null> {
+    const wc = this.getActive()?.wc
+    if (!wc || wc.isDestroyed()) return null
+    try {
+      return await wc.printToPDF(pdfOptions(options))
+    } catch (error) {
+      log('printPreview', String(error))
+      return null
+    }
+  }
+
+  /** The page as a PDF file, which is the other half of what printing is for. */
+  async printPdf(options: PrintOptions): Promise<boolean> {
+    const tab = this.getActive()
+    const wc = tab?.wc
+    if (!tab || !wc || wc.isDestroyed()) return false
+    const safe = (tab.title || 'page').replace(/[\\/:*?"<>|]/g, ' ').trim().slice(0, 80)
+    const picked = await dialog.showSaveDialog(this.win, {
+      title: t('Сохранить как PDF'),
+      defaultPath: join(app.getPath('downloads'), `${safe || 'page'}.pdf`),
+      filters: [{ name: 'PDF', extensions: ['pdf'] }]
+    })
+    if (picked.canceled || !picked.filePath) return false
+    try {
+      const data = await wc.printToPDF(pdfOptions(options))
+      writeFileSync(picked.filePath, data)
+      this.send('toast', t('Сохранено в PDF'))
+      return true
+    } catch (error) {
+      log('printToPDF', String(error))
+      this.send('toast', t('Не удалось сохранить PDF'))
+      return false
+    }
   }
 
   /* ------------------------------------------------------------ translate */

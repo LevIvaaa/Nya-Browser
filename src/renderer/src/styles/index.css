@@ -402,6 +402,17 @@ button {
   .field::placeholder {
     color: var(--text-faint);
   }
+  /*
+   * A dropdown list is drawn by the system on an opaque surface of its own,
+   * and it takes its colours from the element. A translucent white field over
+   * that surface came out as pale grey text on pale grey — the list was there
+   * and unreadable. Selects get a solid colour for that reason alone.
+   */
+  select.field,
+  select.field option {
+    background: var(--surface-solid);
+    color: var(--text);
+  }
 }
 
 /* Range inputs */
