@@ -170,8 +170,28 @@ export default function StartPage({
   const layout = page.layout
   const blockedTotal = stats.ads + stats.trackers + stats.crypto
 
+  // The cache answers for sites that have been visited here. A tile someone
+  // just added points at a site they have not opened yet, and it showed a grey
+  // letter until they did — so the missing ones are fetched from the sites
+  // themselves, once each.
   useEffect(() => {
-    void window.browser.favicons().then(setIcons)
+    let alive = true
+    void (async () => {
+      const cached = await window.browser.favicons()
+      if (!alive) return
+      setIcons(cached)
+      const missing = [...new Set(settings.favorites.map((fav) => hostOf(fav.url)))]
+        .filter((host) => host && !cached[host])
+        .slice(0, 24)
+      for (const host of missing) {
+        const data = await window.browser.fetchFavicon(host)
+        if (!alive) return
+        if (data) setIcons((prev) => ({ ...prev, [host]: data }))
+      }
+    })()
+    return () => {
+      alive = false
+    }
   }, [settings.favorites])
 
   useEffect(() => {
@@ -304,6 +324,7 @@ export default function StartPage({
                 style={page.tiles}
                 shape={page.shape}
                 labels={page.tileLabels}
+                fill={page.tileFill}
                 editing={editing}
                 dropping={dropIndex === index && editing}
                 onOpen={() => open(fav.url)}
@@ -650,7 +671,9 @@ function EditBar({
   const hidden = ORDER.filter((id) => id !== 'search' && page[SWITCH[id]] !== true)
 
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-20 flex flex-col items-end gap-2">
+    /* Clear of the window's edge on both sides: at four the panel and the
+       pencil were pressed into the corner, touching it. */
+    <div className="pointer-events-none fixed bottom-6 right-6 z-20 flex flex-col items-end gap-2.5">
       {editing && (
         <div
           className="animate-pop pointer-events-auto flex max-w-[520px] flex-wrap items-center justify-end gap-2 rounded-card p-2.5"
@@ -703,6 +726,25 @@ function EditBar({
           >
             {page.tileLabels ? t('Скрыть подписи') : t('Показать подписи')}
           </button>
+
+          {/* How solid the tiles are: the theme's own white or black at one
+              end, glass with the wallpaper through it at the other. */}
+          <span
+            className="flex h-7 items-center gap-2 rounded-pill px-2.5 text-2xs"
+            style={{ background: 'var(--field-idle)' }}
+            title={t('Заливка плиток')}
+          >
+            {t('Заливка')}
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={page.tileFill}
+              onChange={(event) => onPatch({ tileFill: Number(event.target.value) })}
+              className="h-1 w-[84px] cursor-pointer"
+            />
+          </span>
 
           {/* Text colour. Over a wallpaper the theme's ink is often the wrong
               one, and the page has no way to know that — so it is a choice.
@@ -791,6 +833,7 @@ function Tile({
   style,
   shape,
   labels,
+  fill,
   editing,
   dropping,
   onOpen,
@@ -806,6 +849,8 @@ function Tile({
   style: StartPageSettings['tiles']
   shape: TileShape
   labels: boolean
+  /** 0–100: glass to solid, chosen while the page is being arranged */
+  fill: number
   editing: boolean
   dropping: boolean
   onOpen: () => void
@@ -878,7 +923,10 @@ function Tile({
           borderRadius: radiusFor(shape, 96),
           ...(card
             ? {
-                background: 'var(--surface)',
+                // From the theme's own surface — white in a light theme, near
+                // black in a dark one — down to plain glass. The icon inside
+                // is untouched by this.
+                background: `color-mix(in srgb, var(--surface-solid) ${fill}%, var(--surface))`,
                 borderColor: 'var(--line)',
                 backdropFilter: 'blur(18px) saturate(160%)',
                 boxShadow: 'var(--shadow-sm)',

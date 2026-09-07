@@ -361,8 +361,26 @@ export function Modal({
   footer?: ReactNode
   width?: number
 }) {
+  const box = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => event.key === 'Escape' && onClose()
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') return onClose()
+      // Enter answers the dialog. Every one of these ends in a footer whose
+      // last button is the thing the dialog is for, and typing a name into a
+      // field and pressing Enter did nothing at all — in a dozen places,
+      // because each dialog would have had to wire it up for itself.
+      if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.altKey) return
+      const target = event.target as HTMLElement | null
+      // A text area is somewhere Enter means a new line, and a button already
+      // has its own answer to being pressed.
+      if (target && /^(TEXTAREA|BUTTON|A|SELECT)$/.test(target.tagName)) return
+      if (target && !box.current?.contains(target)) return
+      const primary = box.current?.querySelector<HTMLButtonElement>('footer .btn-primary:not(:disabled)')
+      if (!primary) return
+      event.preventDefault()
+      primary.click()
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
@@ -377,6 +395,7 @@ export function Modal({
       onClick={onClose}
     >
       <div
+        ref={box}
         className="animate-sheet contain overflow-hidden rounded-card"
         style={{
           width,
