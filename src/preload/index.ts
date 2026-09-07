@@ -66,6 +66,8 @@ export interface AutofillOffer {
 export interface SavePasswordOffer {
   host: string
   username: string
+  /** what the page sent, so the card can show and correct it */
+  password: string
   known: boolean
 }
 
@@ -248,7 +250,8 @@ const api = {
     ipcRenderer.invoke('vault:set-master', current, next),
   vaultDropMaster: (current: string): Promise<boolean> => ipcRenderer.invoke('vault:drop-master', current),
   vaultFill: (id: string): Promise<boolean> => ipcRenderer.invoke('vault:fill', id),
-  vaultConfirmSave: (save: boolean): Promise<boolean> => ipcRenderer.invoke('vault:confirm-save', save),
+  vaultConfirmSave: (save: boolean, username?: string, password?: string): Promise<boolean> =>
+    ipcRenderer.invoke('vault:confirm-save', save, username, password),
   vaultCipherSample: (): Promise<{ file: string; sample: string; mode: string }> =>
     ipcRenderer.invoke('vault:cipher-sample'),
 

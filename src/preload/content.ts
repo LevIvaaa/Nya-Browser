@@ -348,8 +348,18 @@ if (isTop && httpOrigin) {
     if (!(node instanceof HTMLInputElement)) return null
     if (node.matches(PASSWORD)) return node
     const password = passwordFields()[0]
-    if (!password) return null
-    return usernameFieldFor(password) === node ? node : null
+    if (password) return usernameFieldFor(password) === node ? node : null
+    // A sign-in that asks for the address first and the password on the next
+    // screen — which is how Google does it — has no password field to work
+    // back from, so the field has to say for itself that it is one.
+    const type = (node.type || 'text').toLowerCase()
+    if (!['text', 'email', 'tel', ''].includes(type)) return null
+    if (!visible(node)) return null
+    const auto = (node.autocomplete || '').toLowerCase()
+    if (auto === 'username' || auto === 'email') return node
+    if (type === 'email') return node
+    const hay = `${node.name} ${node.id} ${node.placeholder} ${node.getAttribute('aria-label') ?? ''}`
+    return USERNAME_HINTS.test(hay) ? node : null
   }
 
   /**

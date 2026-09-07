@@ -461,6 +461,8 @@ export class BrowserWindow {
   /** The login field an offer is currently anchored to. */
   private field: { webContentsId: number; host: string; x: number; y: number; width: number; height: number } | null = null
   private hideOffer: ReturnType<typeof setTimeout> | null = null
+  /** Whether the locked-vault card is on screen and holding the keyboard. */
+  private noticeUp = false
   /** Hosts where the reader said "not now" to the locked-vault notice. */
   private noticeDismissed = new Set<string>()
 
@@ -2486,15 +2488,14 @@ export class BrowserWindow {
 
     if (vault.locked) {
       if (this.noticeDismissed.has(host)) return
+      // Already up: leave it alone. Re-showing it on every focus is what
+      // made it jitter — it takes the keyboard, the page reports its field
+      // lost focus, the card closes, the keyboard goes back, and round.
+      if (this.overlayMode === 'autofill' && this.noticeUp) return
+      this.noticeUp = true
       this.send('state:autofill', { host, locked: true, entries: [] })
-      const inner = this.contentBox()
       return this.setOverlayMode('autofill', {
-        bounds: {
-          x: Math.round(inner.x + 14 - margin),
-          y: Math.round(inner.y + 14 - margin),
-          width: 380 + margin * 2,
-          height: 210 + margin * 2
-        },
+        bounds: this.noticeBounds(380, 210),
         // The master password is typed into this card, so it takes the keyboard.
         focus: true
       })
@@ -2546,10 +2547,25 @@ export class BrowserWindow {
     return { x: x - margin, y: y - margin, width: width + margin * 2, height: height + margin * 2 }
   }
 
+  /** A card in the corner, up against the right edge of the page. */
+  private noticeBounds(width: number, height: number) {
+    const margin = BrowserWindow.OFFER_MARGIN
+    const inner = this.contentBox()
+    return {
+      x: Math.round(inner.x + inner.width - width - 14 - margin),
+      y: Math.round(inner.y + 14 - margin),
+      width: width + margin * 2,
+      height: height + margin * 2
+    }
+  }
+
   /** The page said the field lost focus; the card goes with it. */
   hideAutofill(webContentsId: number) {
     const tab = this.tabs.find((t) => t.wc?.id === webContentsId)
     if (!tab || tab.id !== this.activeId) return
+    // The locked-vault card asked for the keyboard, which is why the field
+    // lost it. It closes when it is answered, not when it is opened.
+    if (this.noticeUp) return
     // Not at once: clicking the card is itself what takes focus off the field,
     // and closing on that would mean the card could never be used.
     if (this.hideOffer) clearTimeout(this.hideOffer)
@@ -2561,6 +2577,7 @@ export class BrowserWindow {
 
   private closeOffer() {
     this.field = null
+    this.noticeUp = false
     if (this.overlayMode === 'autofill') this.setOverlayMode(null)
   }
 
@@ -2581,29 +2598,45 @@ export class BrowserWindow {
     this.handleAutofillField(field.webContentsId, field.host, field)
   }
 
-  /** A page submitted credentials: offer to save them. */
+  /**
+   * A page submitted credentials. Worth asking about only when the answer
+   * could change something: a password the vault already has for that name,
+   * unchanged, is the one the browser just filled in, and asking to save it
+   * again is noise.
+   */
   handleAutofillSubmitted(host: string, username: string, password: string) {
     if (!password) return
     // Offering to save a password from a private window would be the one
     // thing it promised not to do.
     if (this.incognito) return
     const existing = vault.forOrigin(host).find((e) => e.username === username)
-    this.send('state:save-password', {
-      host,
-      username,
-      // The password is kept in the main process until the user confirms.
-      known: Boolean(existing)
-    })
+    if (existing && !vault.locked && vault.reveal(existing.id) === password) return
     this.pendingCredential = { host, username, password }
+    this.send('state:save-password', { host, username, password, known: Boolean(existing) })
+    this.setOverlayMode('save-password', {
+      bounds: this.noticeBounds(400, 244),
+      focus: true
+    })
   }
 
   private pendingCredential: { host: string; username: string; password: string } | null = null
 
-  confirmSavePassword(save: boolean): boolean {
+  /**
+   * The answer to that question, with whatever was edited in the card. The
+   * password can be changed there because the one the page sent is not
+   * always the one worth keeping — a typo, or a generated password the
+   * reader wants to adjust before it is the only copy.
+   */
+  confirmSavePassword(save: boolean, username?: string, password?: string): boolean {
     const pending = this.pendingCredential
     this.pendingCredential = null
+    if (this.overlayMode === 'save-password') this.setOverlayMode(null)
     if (!save || !pending) return false
-    const ok = vault.save(pending.host, pending.username, pending.password)
+    const ok = vault.save(
+      pending.host,
+      username ?? pending.username,
+      password || pending.password
+    )
     this.send('toast', ok ? t('Пароль сохранён') : t('Хранилище паролей заблокировано'))
     return ok
   }
