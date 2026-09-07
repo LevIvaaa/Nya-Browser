@@ -1,4 +1,4 @@
-import { ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 
 /**
  * Autofill content script.
@@ -14,6 +14,119 @@ import { ipcRenderer } from 'electron'
  *    (the page already knows those values, so nothing new is disclosed);
  *  - fills fields when the browser pushes a credential.
  */
+
+/* ------------------------------------------------- the four Chrome shapes */
+
+/**
+ * Chrome leaves four things on `window.chrome` that no page uses for anything
+ * real: app, csi, loadTimes and runtime. Chromium on its own leaves the object
+ * empty, and that emptiness is how a site tells an embedded browser from the
+ * one people download.
+ *
+ * Google reads it on the sign-in form. Measured here: type an address, and the
+ * answer is "this browser or app may not be secure", with no way past it.
+ * Measured again with these four in place: the same address gets the ordinary
+ * "couldn't find your account" — the form works. Nothing about the engine
+ * changes; this is the same Chromium that Chrome ships, patch for patch, and
+ * the shapes below are inert.
+ *
+ * It has to run in the page's own world, because that is the only world the
+ * page can read. Nothing of the browser goes with it: the function is copied
+ * across on its own, without the scope it was written in.
+ */
+function chromeShapes() {
+  const target = window as unknown as { chrome?: Record<string, unknown> }
+  const chrome = target.chrome ?? (target.chrome = {})
+  const seconds = () => (performance.timeOrigin + performance.now()) / 1000
+  if (!chrome.app) {
+    chrome.app = {
+      isInstalled: false,
+      InstallState: { DISABLED: 'disabled', INSTALLED: 'installed', NOT_INSTALLED: 'not_installed' },
+      RunningState: { CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run', RUNNING: 'running' },
+      getDetails: () => null,
+      getIsInstalled: () => false,
+      runningState: () => 'cannot_run'
+    }
+  }
+  if (!chrome.csi) {
+    chrome.csi = () => ({
+      onloadT: Date.now(),
+      startE: Date.now(),
+      pageT: performance.now(),
+      tran: 15
+    })
+  }
+  if (!chrome.loadTimes) {
+    chrome.loadTimes = () => ({
+      requestTime: seconds(),
+      startLoadTime: seconds(),
+      commitLoadTime: seconds(),
+      finishDocumentLoadTime: seconds(),
+      finishLoadTime: seconds(),
+      firstPaintTime: seconds(),
+      firstPaintAfterLoadTime: 0,
+      navigationType: 'Other',
+      wasFetchedViaSpdy: true,
+      wasNpnNegotiated: true,
+      npnNegotiatedProtocol: 'h2',
+      wasAlternateProtocolAvailable: false,
+      connectionInfo: 'h2'
+    })
+  }
+  if (!chrome.runtime) {
+    // Present but inert, the way it is on a page with no extension talking to
+    // it: the enums exist and the calls throw as Chrome's do.
+    chrome.runtime = {
+      OnInstalledReason: {},
+      OnRestartRequiredReason: {},
+      PlatformArch: {},
+      PlatformNaclArch: {},
+      PlatformOs: {},
+      RequestUpdateCheckStatus: {},
+      connect: () => {
+        throw new TypeError('Error in invocation of runtime.connect')
+      },
+      sendMessage: () => {
+        throw new TypeError('Error in invocation of runtime.sendMessage')
+      }
+    }
+  }
+}
+
+/**
+ * Turns off the passkey prompt a page can start without being asked.
+ *
+ * "Conditional mediation" is the passkey offer that is supposed to appear
+ * quietly inside the address field's own suggestion list — Chrome has a place
+ * to draw it, and Chromium on its own does not. What happens instead is that
+ * Windows throws its full-screen "use your passkey / scan a QR code / insert a
+ * security key" dialog over the page the moment it loads, before anyone has
+ * clicked anything. Google's sign-in form starts one on every visit.
+ *
+ * Saying the quiet kind is unavailable is the honest answer: we have nowhere to
+ * put it. Passkeys themselves are untouched — a page's "Sign in with a passkey"
+ * button still works, because that one is a real click and the dialog is then
+ * the answer to it.
+ */
+function noUnaskedPasskeyPrompt() {
+  const api = (window as unknown as { PublicKeyCredential?: { isConditionalMediationAvailable?: unknown } })
+    .PublicKeyCredential
+  if (!api) return
+  try {
+    api.isConditionalMediationAvailable = () => Promise.resolve(false)
+  } catch {
+    /* a browser that will not let it be replaced keeps the dialog */
+  }
+}
+
+if (/^https?:$/.test(location.protocol)) {
+  try {
+    contextBridge.executeInMainWorld({ func: chromeShapes })
+    contextBridge.executeInMainWorld({ func: noUnaskedPasskeyPrompt })
+  } catch {
+    /* a page that refuses the call keeps the empty object; nothing else breaks */
+  }
+}
 
 const isTop = (() => {
   try {

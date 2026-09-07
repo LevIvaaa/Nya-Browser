@@ -93,11 +93,22 @@ export default function SitePanel({ onClose }: { onClose: () => void }) {
                   : t('Заблокировано на этой вкладке: {n}', { n: info.blocked })}
               </span>
             </span>
-            <Shield
-              width={15}
-              height={15}
-              style={{ color: info.rules.blocking === 'off' ? 'var(--faint)' : 'var(--good)' }}
-            />
+            {/* The count used to sit in the address field; this is where it
+                went, next to the switch that produces it. */}
+            {info.rules.blocking === 'off' ? (
+              <Shield width={15} height={15} style={{ color: 'var(--faint)' }} />
+            ) : (
+              <span
+                className="flex shrink-0 items-center gap-1 rounded-pill px-2 py-[2px] text-2xs font-semibold tabular-nums"
+                style={{
+                  background: 'color-mix(in srgb, var(--good) 16%, transparent)',
+                  color: 'var(--good)'
+                }}
+              >
+                <Shield width={11} height={11} />
+                {info.blocked}
+              </span>
+            )}
           </label>
         </div>
 

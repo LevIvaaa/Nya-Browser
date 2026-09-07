@@ -40,6 +40,9 @@ export function AppMenu({ onClose, onOpen }: { onClose: () => void; onOpen: (vie
   return (
     <Popover onClose={onClose} width={280}>
       <div className="py-1.5">
+        {item(<Plus width={15} height={15} />, t('Новая вкладка'), 'Ctrl+T', () =>
+          void window.browser.newTab()
+        )}
         {item(<Incognito width={15} height={15} />, t('Приватное окно'), 'Ctrl+Shift+N', () =>
           void window.browser.newWindow(true)
         )}
@@ -110,11 +113,11 @@ export function ProfileMenu({
               style={{ transition: 'background var(--t-fast) linear' }}
             >
               <Avatar avatar={profile.avatar} crop={profile.crop} color={profile.color} size={30} ring={profile.id === state.activeId} />
+              {/* The one you are in is the one with the ring around it. Saying
+                  so again underneath was a caption for something already
+                  visible. */}
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-base font-medium">{profile.name}</span>
-                <span className="block text-2xs text-faint">
-                  {profile.id === state.activeId ? t('активный · настроить') : t('переключиться')}
-                </span>
               </span>
             </button>
           ))}

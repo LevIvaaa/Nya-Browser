@@ -767,6 +767,30 @@ export class BrowserWindow {
     if (wasVisible !== rect.visible) this.focusView()
   }
 
+  /**
+   * How far a maximised window hangs off the screen.
+   *
+   * Windows maximises a frameless window to the size of the screen *plus* its
+   * invisible resize border — eight pixels or so on every edge, deliberately,
+   * so that the edges stay grabbable. Anything drawn out there cannot be seen
+   * or clicked, and what lives in the top right corner is the close button:
+   * half of it was off the screen, which is exactly how it looked. So the
+   * interface is moved inside those pixels instead of being drawn under them.
+   */
+  private edgeOverflow() {
+    const none = { left: 0, top: 0, right: 0, bottom: 0 }
+    if (process.platform !== 'win32') return none
+    if (!this.win.isMaximized() || this.win.isFullScreen()) return none
+    const bounds = this.win.getBounds()
+    const area = screen.getDisplayMatching(bounds).workArea
+    return {
+      left: Math.max(0, Math.round(area.x - bounds.x)),
+      top: Math.max(0, Math.round(area.y - bounds.y)),
+      right: Math.max(0, Math.round(bounds.x + bounds.width - (area.x + area.width))),
+      bottom: Math.max(0, Math.round(bounds.y + bounds.height - (area.y + area.height)))
+    }
+  }
+
   layout() {
     if (this.win.isDestroyed()) return
     // Frameless windows should report identical bounds/contentBounds, but on
@@ -776,8 +800,10 @@ export class BrowserWindow {
     const content = this.win.getContentBounds()
     const w = Math.max(bounds.width, content.width)
     const h = Math.max(bounds.height, content.height)
-    this.chrome.setBounds({ x: 0, y: 0, width: w, height: h })
-    this.overlay.setBounds({ x: 0, y: 0, width: w, height: h })
+    const over = this.edgeOverflow()
+    const inner = { width: w - over.left - over.right, height: h - over.top - over.bottom }
+    this.chrome.setBounds({ x: over.left, y: over.top, ...inner })
+    this.overlay.setBounds({ x: over.left, y: over.top, ...inner })
 
     const active = this.getActive()
     if (!active?.view) return
@@ -791,11 +817,12 @@ export class BrowserWindow {
     }
 
     const r = this.layoutRect
+    // The page is measured inside the chrome, so it moves with it.
     const rect = {
-      x: Math.round(r.x),
-      y: Math.round(r.y),
-      width: Math.round(r.width || w),
-      height: Math.round(r.height || Math.max(0, h - r.y))
+      x: Math.round(r.x) + over.left,
+      y: Math.round(r.y) + over.top,
+      width: Math.round(r.width || inner.width),
+      height: Math.round(r.height || Math.max(0, inner.height - r.y))
     }
     active.view.setBounds(rect)
     // Square. The page is flush against the left and right edges of the window,

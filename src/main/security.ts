@@ -255,6 +255,19 @@ function isPdfResponse(details: {
  * than swapping afterwards keeps the blank page out of the tab's history, so
  * Back still goes where the reader expects.
  */
+/**
+ * Beside the user agent, Chromium tells every site which *brand* of browser
+ * it is, in the Sec-CH-UA headers. Ours said only "Chromium", and Google reads
+ * exactly that: type an address into the sign-in form and the answer is "this
+ * browser or app may not be secure", with no way past it. That is a list of
+ * approved brands, not a security check — the engine underneath is the same
+ * Chromium that Chrome ships, patch for patch. So the brand list says so too.
+ */
+function withChromeBrand(value: string, version: string): string {
+  if (!value || value.includes('Google Chrome')) return value
+  return `${value}, "Google Chrome";v="${version}"`
+}
+
 export function hardenSession(
   ses: Session,
   onBlocked?: (webContentsId: number) => void,
@@ -362,6 +375,16 @@ export function hardenSession(
       headers['Sec-GPC'] = '1'
     }
     delete headers['X-Client-Data'] // Chrome-only build/experiment identifier
+
+    // The brand list, kept in step with the user agent above.
+    for (const name of Object.keys(headers)) {
+      const lower = name.toLowerCase()
+      if (lower === 'sec-ch-ua') {
+        headers[name] = withChromeBrand(String(headers[name]), process.versions.chrome.split('.')[0])
+      } else if (lower === 'sec-ch-ua-full-version-list') {
+        headers[name] = withChromeBrand(String(headers[name]), process.versions.chrome)
+      }
+    }
 
     if (s.blockThirdPartyCookies && details.resourceType !== 'mainFrame') {
       const target = hostOf(details.url)

@@ -615,15 +615,10 @@ export default function SettingsPage({
                     >
                       {item.name.charAt(0)}
                     </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2 text-base font-medium">
-                        {item.name}
-                        <Pill tone={item.privacy === 'high' ? 'good' : item.privacy === 'medium' ? 'warn' : 'bad'}>
-                          {item.privacy === 'high' ? t('приватный') : item.privacy === 'medium' ? t('средне') : t('трекинг')}
-                        </Pill>
-                      </span>
-                      <span className="block truncate text-sm text-dim">{item.hint}</span>
-                    </span>
+                    {/* The name and nothing else. Grading each engine as
+                        "private" or "tracking" and explaining it underneath
+                        turned a list of five names into a wall of opinion. */}
+                    <span className="min-w-0 flex-1 truncate text-base font-medium">{item.name}</span>
                   </button>
                 ))}
                 {settings.searchEngine === 'custom' && (
@@ -670,10 +665,10 @@ export default function SettingsPage({
                 <div key={profile.id} className="flex items-center gap-3 px-4 py-3" style={{ borderTop: '1px solid var(--line)' }}>
                   <Avatar avatar={profile.avatar} crop={profile.crop} color={profile.color} size={34} ring={profile.id === profiles.activeId} />
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 text-base font-medium">
-                      {profile.name}
-                      {profile.id === profiles.activeId && <Pill tone="accent">{t('активный')}</Pill>}
-                    </div>
+                    {/* The ring around the avatar already says which one you
+                        are in, and the one you are in is the one without a
+                        "Войти" button. */}
+                    <div className="truncate text-base font-medium">{profile.name}</div>
                     <div className="text-sm text-dim">
                       {t('создан {date}', {
                         date: new Date(profile.created).toLocaleDateString(
@@ -938,6 +933,7 @@ export default function SettingsPage({
 
           {/* ------------------------------------------------------ passwords */}
           {tab === 'passwords' && (
+            <>
             <Section title={t('Хранилище паролей')} icon={<Key width={15} height={15} />} description={t('Шифрование AES-256-GCM для каждой записи')}>
               <Row title={t('Записей')} hint={vault?.mode === 'password' ? t('Ключ выводится из мастер-пароля') : t('Ключ запечатан средствами Windows (DPAPI)')}>
                 <span className="text-sm text-dim">{vault?.count ?? 0}</span>
@@ -976,6 +972,32 @@ export default function SettingsPage({
                 </Row>
               )}
             </Section>
+
+            {/* Passwords from a file used to be filed under "System", three
+                screens away from everything else about passwords. */}
+            <Section
+              title={t('Перенос паролей')}
+              icon={<Download width={15} height={15} />}
+              description={t('Из файла, который выгрузил другой браузер')}
+            >
+              <Row
+                title={t('Пароли из CSV')}
+                hint={t('В Chrome: Пароли → ⋮ → Экспорт паролей. Файл после импорта лучше удалить')}
+              >
+                <button
+                  className="btn"
+                  onClick={async () => {
+                    const result = await window.browser.importPasswordsCsv()
+                    if (result.error) flash(result.error)
+                    else if (result.added || result.skipped)
+                      flash(t('Добавлено {a}, пропущено {s}', { a: result.added, s: result.skipped }))
+                  }}
+                >
+                  {t('Выбрать файл')}
+                </button>
+              </Row>
+            </Section>
+            </>
           )}
 
           {/* --------------------------------------------------------- speed */}
@@ -1250,22 +1272,6 @@ export default function SettingsPage({
                     </Row>
                   ))
                 )}
-                <Row
-                  title={t('Пароли из CSV')}
-                  hint={t('В Chrome: Пароли → ⋮ → Экспорт паролей. Файл после импорта лучше удалить')}
-                >
-                  <button
-                    className="btn"
-                    onClick={async () => {
-                      const result = await window.browser.importPasswordsCsv()
-                      if (result.error) flash(result.error)
-                      else if (result.added || result.skipped)
-                        flash(t('Добавлено {a}, пропущено {s}', { a: result.added, s: result.skipped }))
-                    }}
-                  >
-                    {t('Выбрать файл')}
-                  </button>
-                </Row>
               </Section>
 
               <Section
