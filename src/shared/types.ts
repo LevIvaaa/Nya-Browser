@@ -213,6 +213,14 @@ export interface StartPageSettings {
   /** captions under the tile icons; off leaves the icon alone in the card */
   tileLabels: boolean
   /**
+   * How solid a tile's card is, 0–100. At 100 it is the theme's own surface —
+   * white in a light theme, near-black in a dark one — and at 0 it is glass
+   * with the wallpaper straight through it. The site's icon does not change
+   * either way. Filled is the default: over a busy wallpaper the glass version
+   * left the tiles barely there.
+   */
+  tileFill: number
+  /**
    * Text colour for the whole start page, as a hex string. Empty means "follow
    * the theme" — which is right over a plain background and wrong over a
    * wallpaper, so the page lets it be set by hand.

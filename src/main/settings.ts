@@ -76,6 +76,7 @@ export const DEFAULT_START_PAGE: StartPageSettings = {
   tiles: 'card',
   shape: 'rounded',
   tileLabels: true,
+  tileFill: 100,
   ink: '',
   layout: { ...DEFAULT_LAYOUT },
   place: { ...DEFAULT_PLACE }
@@ -268,6 +269,7 @@ function sanitizeStartPage(v: unknown): StartPageSettings {
     tiles: oneOf(s.tiles, ['card', 'icon'] as const, d.tiles),
     shape: oneOf(s.shape, ['rounded', 'soft', 'circle', 'square'] as const, d.shape),
     tileLabels: bool(s.tileLabels, d.tileLabels),
+    tileFill: clamp(s.tileFill, 0, 100, d.tileFill),
     // Empty means "follow the theme"; anything that is not a colour becomes that.
     ink: /^#[0-9a-f]{6}$/i.test(String(s.ink)) ? String(s.ink) : '',
     layout: sanitizeLayout(s.layout),
