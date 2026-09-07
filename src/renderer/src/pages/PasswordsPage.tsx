@@ -1,14 +1,19 @@
 import { t } from '../i18n'
 import { useEffect, useMemo, useState } from 'react'
 import type { Credential, VaultState } from '../../../preload/index'
-import { Copy, Cross, Eye, EyeOff, Key, Lock, LockOpen, Plus, Search, Shield, Wand } from '../components/Icons'
+import { ChevronRight, Copy, Cross, Eye, EyeOff, Key, Lock, LockOpen, Plus, Search, Shield, Wand } from '../components/Icons'
 import { EmptyState, Modal, Pill, TextField, formatDate } from '../components/ui'
+
+const normalizeHost = (host: string) => host.toLowerCase().replace(/^www\./, '')
 
 export default function PasswordsPage() {
   const [state, setState] = useState<VaultState | null>(null)
   const [items, setItems] = useState<Credential[]>([])
   const [query, setQuery] = useState('')
   const [revealed, setRevealed] = useState<Record<string, string>>({})
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<Credential | null>(null)
+  const [icons, setIcons] = useState<Record<string, string>>({})
   const [unlockOpen, setUnlockOpen] = useState(false)
   const [masterOpen, setMasterOpen] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
@@ -21,6 +26,30 @@ export default function PasswordsPage() {
   useEffect(() => {
     void refresh()
   }, [])
+
+  // Icons for the sites in the list. The cache answers for anything visited in
+  // this profile; the rest are fetched once, from the site itself, so a list of
+  // logins is a list of recognisable sites and not of grey letters.
+  useEffect(() => {
+    if (items.length === 0) return
+    let alive = true
+    void (async () => {
+      const cached = await window.browser.favicons()
+      if (!alive) return
+      setIcons(cached)
+      const missing = [...new Set(items.map((item) => normalizeHost(item.origin)))]
+        .filter((host) => !cached[host])
+        .slice(0, 40)
+      for (const host of missing) {
+        const data = await window.browser.fetchFavicon(host)
+        if (!alive) return
+        if (data) setIcons((prev) => ({ ...prev, [host]: data }))
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [items])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -107,73 +136,92 @@ export default function PasswordsPage() {
             hint={t('Войдите на сайт — браузер предложит сохранить пароль. Или добавьте запись вручную.')}
           />
         ) : (
+          /* A list of sites, and nothing else until one is opened. Every row
+             used to carry a password box and three buttons, so a screenful of
+             saved logins read as a wall of dots. */
           <div className="card overflow-hidden">
-            {filtered.map((item) => (
-              <div
-                key={item.id}
-                className="group flex flex-wrap items-center gap-3 px-4 py-3"
-                style={{ borderTop: '1px solid var(--line)' }}
-              >
-                <span
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] text-sm font-semibold text-white"
-                  style={{ background: 'color-mix(in srgb, var(--accent) 75%, #555)' }}
-                >
-                  {item.origin.charAt(0).toUpperCase()}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-base font-medium">{item.origin}</div>
-                  <div className="truncate text-sm text-dim">{item.username || t('без имени')}</div>
-                </div>
+            {filtered.map((item) => {
+              const open = expanded === item.id
+              return (
+                <div key={item.id} style={{ borderTop: '1px solid var(--line)' }}>
+                  <button
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-[var(--surface-hover)]"
+                    style={{ transition: 'background var(--t-fast) linear' }}
+                    onClick={() => {
+                      setExpanded(open ? null : item.id)
+                      setError('')
+                      if (open) setRevealed(({ [item.id]: _drop, ...rest }) => rest)
+                    }}
+                  >
+                    <SiteIcon host={item.origin} icon={icons[normalizeHost(item.origin)]} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-base font-medium">{item.origin}</span>
+                      <span className="block truncate text-sm text-dim">
+                        {item.username || t('без имени')}
+                      </span>
+                    </span>
+                    <ChevronRight
+                      width={14}
+                      height={14}
+                      className="shrink-0 text-faint"
+                      style={{
+                        transform: open ? 'rotate(90deg)' : 'none',
+                        transition: 'transform var(--t-fast) var(--ease-out)'
+                      }}
+                    />
+                  </button>
 
-                <div className="flex items-center gap-2">
-                  <code
-                    className="rounded-[8px] px-2 py-1 font-mono text-xs"
-                    style={{ background: 'var(--field-idle)', minWidth: 120 }}
-                  >
-                    {revealed[item.id] ?? '••••••••••'}
-                  </code>
-                  <button
-                    className="icon-btn"
-                    title={revealed[item.id] ? t('Скрыть') : t('Показать')}
-                    onClick={async () => {
-                      if (revealed[item.id]) {
-                        setRevealed(({ [item.id]: _drop, ...rest }) => rest)
-                        return
-                      }
-                      const value = await window.browser.vaultReveal(item.id)
-                      if (value) setRevealed((prev) => ({ ...prev, [item.id]: value }))
-                      else setError(t('Хранилище заблокировано'))
-                    }}
-                  >
-                    {revealed[item.id] ? <EyeOff width={14} height={14} /> : <Eye width={14} height={14} />}
-                  </button>
-                  <button
-                    className="icon-btn"
-                    title={t('Копировать пароль')}
-                    onClick={async () => {
-                      const value = await window.browser.vaultReveal(item.id)
-                      if (value) await navigator.clipboard.writeText(value)
-                    }}
-                  >
-                    <Copy width={14} height={14} />
-                  </button>
-                  <button
-                    className="icon-btn"
-                    title={t('Удалить')}
-                    onClick={async () => {
-                      await window.browser.vaultRemove(item.id)
-                      void refresh()
-                    }}
-                  >
-                    <Cross width={14} height={14} />
-                  </button>
+                  {open && (
+                    <div className="animate-fade flex flex-col gap-2 px-4 pb-3.5 pt-0.5">
+                      <Line
+                        label={t('Логин')}
+                        value={item.username || t('без имени')}
+                        onCopy={
+                          item.username
+                            ? () => void window.browser.copyText(item.username)
+                            : undefined
+                        }
+                      />
+                      <Line
+                        label={t('Пароль')}
+                        value={revealed[item.id] ?? '••••••••••'}
+                        mono
+                        onCopy={async () => {
+                          const ok = await window.browser.vaultCopy(item.id)
+                          if (!ok) setError(t('Хранилище заблокировано'))
+                        }}
+                        onReveal={async () => {
+                          if (revealed[item.id]) {
+                            setRevealed(({ [item.id]: _drop, ...rest }) => rest)
+                            return
+                          }
+                          const value = await window.browser.vaultReveal(item.id)
+                          if (value) setRevealed((prev) => ({ ...prev, [item.id]: value }))
+                          else setError(t('Хранилище заблокировано'))
+                        }}
+                        revealed={Boolean(revealed[item.id])}
+                      />
+                      <div className="flex items-center gap-3 pt-1">
+                        <span className="mr-auto text-2xs text-faint">
+                          добавлен {formatDate(item.created)}
+                        </span>
+                        <button
+                          className="btn h-[28px] px-3 text-sm"
+                          style={{ color: 'var(--bad)' }}
+                          onClick={() => {
+                            setError('')
+                            setConfirmDelete(item)
+                          }}
+                        >
+                          <Cross width={13} height={13} />
+                          {t('Удалить')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-
-                <span className="w-full text-2xs text-faint md:w-auto">
-                  добавлен {formatDate(item.created)}
-                </span>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
 
@@ -211,6 +259,116 @@ export default function PasswordsPage() {
             void refresh()
           }}
         />
+      )}
+
+      {/* Deleting a password is not undoable and there is no copy of it
+          anywhere else, so it is asked about — and refused outright while the
+          vault is shut, because whoever is at the keyboard then has not shown
+          they are allowed to touch it. */}
+      {confirmDelete && (
+        <Modal
+          title={locked ? t('Хранилище заблокировано') : t('Удалить пароль?')}
+          onClose={() => setConfirmDelete(null)}
+          footer={
+            <>
+              <button className="btn" onClick={() => setConfirmDelete(null)}>
+                {locked ? t('Закрыть') : t('Отмена')}
+              </button>
+              {locked ? (
+                <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    setConfirmDelete(null)
+                    setUnlockOpen(true)
+                  }}
+                >
+                  {t('Разблокировать')}
+                </button>
+              ) : (
+                <button
+                  className="btn btn-primary"
+                  style={{ background: 'var(--bad)' }}
+                  onClick={async () => {
+                    const ok = await window.browser.vaultRemove(confirmDelete.id)
+                    setConfirmDelete(null)
+                    if (!ok) setError(t('Не удалось удалить запись'))
+                    else {
+                      setExpanded(null)
+                      void refresh()
+                    }
+                  }}
+                >
+                  {t('Удалить')}
+                </button>
+              )}
+            </>
+          }
+        >
+          <p className="text-sm text-dim">
+            {locked
+              ? t('Сначала откройте хранилище — пока оно закрыто, записи нельзя ни прочитать, ни удалить.')
+              : t('Запись для {host} будет удалена без возможности восстановить.', {
+                  host: confirmDelete.origin
+                })}
+          </p>
+        </Modal>
+      )}
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------- list pieces */
+
+/** The site's own icon, with its first letter until one arrives. */
+function SiteIcon({ host, icon }: { host: string; icon?: string }) {
+  return (
+    <span
+      className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[11px] text-sm font-semibold text-white"
+      style={icon ? { background: 'var(--field-idle)' } : { background: 'color-mix(in srgb, var(--accent) 75%, #555)' }}
+    >
+      {icon ? (
+        <img src={icon} alt="" width={18} height={18} style={{ objectFit: 'contain' }} />
+      ) : (
+        host.charAt(0).toUpperCase()
+      )}
+    </span>
+  )
+}
+
+/** One value of an opened entry, with the buttons that act on it. */
+function Line({
+  label,
+  value,
+  mono,
+  onCopy,
+  onReveal,
+  revealed
+}: {
+  label: string
+  value: string
+  mono?: boolean
+  onCopy?: () => void
+  onReveal?: () => void
+  revealed?: boolean
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-[70px] shrink-0 text-2xs uppercase tracking-wider text-faint">{label}</span>
+      <span
+        className={`min-w-0 flex-1 truncate rounded-[8px] px-2.5 py-1.5 text-sm ${mono ? 'font-mono' : ''}`}
+        style={{ background: 'var(--field-idle)' }}
+      >
+        {value}
+      </span>
+      {onReveal && (
+        <button className="icon-btn shrink-0" title={revealed ? t('Скрыть') : t('Показать')} onClick={onReveal}>
+          {revealed ? <EyeOff width={14} height={14} /> : <Eye width={14} height={14} />}
+        </button>
+      )}
+      {onCopy && (
+        <button className="icon-btn shrink-0" title={t('Копировать')} onClick={onCopy}>
+          <Copy width={14} height={14} />
+        </button>
       )}
     </div>
   )

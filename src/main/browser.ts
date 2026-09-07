@@ -361,6 +361,10 @@ export class BrowserWindow {
 
   private seq = 0
   private ses!: Session
+  /** The session this window's pages run in, for work done on their behalf. */
+  get pageSession(): Session {
+    return this.ses
+  }
   /** named runs of tabs; see reorderStrip for what keeps them runs */
   groups: TabGroup[] = []
   private groupSeq = 0
