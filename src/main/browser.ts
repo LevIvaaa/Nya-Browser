@@ -100,6 +100,8 @@ interface PersistedTab {
   favicon: string | null
   pinned?: boolean
   groupId?: number | null
+  /** which big group it was in; absent in sessions written before they existed */
+  space?: number
 }
 
 /**
@@ -171,6 +173,8 @@ class Tab {
 
   /** Whether this page is currently showing a translation of itself. */
   translated = false
+  /** Which big group this tab lives in; they never move on their own. */
+  space = 1
   /**
    * The app this page says it can be installed as. It is worked out when the
    * page loads and kept here rather than on the window, or switching to a
@@ -446,6 +450,15 @@ export class BrowserWindow {
   /** Transparent layer above the page: menus, popovers and the command palette. */
   overlay: WebContentsView
   tabs: Tab[] = []
+  /**
+   * The big groups. There is always at least one and it starts nameless,
+   * so a browser nobody has organised looks like a browser with no groups.
+   */
+  private spaces: Array<{ id: number; name: string; colour: string }> = [
+    { id: 1, name: '', colour: '' }
+  ]
+  private spaceId = 1
+  private spaceSeq = 1
   activeId = -1
 
   private seq = 0
@@ -1038,7 +1051,11 @@ export class BrowserWindow {
     // Coalesce bursts (loading + title + favicon arrive together) into one frame.
     this.broadcastTimer = setTimeout(() => {
       this.broadcastTimer = null
-      this.send('state:tabs', this.tabs.map((t) => t.serialize(this.activeId)))
+      this.send(
+        'state:tabs',
+        this.here().map((t) => t.serialize(this.activeId))
+      )
+      this.sendSpaces()
       this.send('state:security', { ...stats })
     }, 16)
   }
@@ -1461,6 +1478,7 @@ export class BrowserWindow {
   /* -------------------------------------------------------------- actions */
   newTab(url?: string, background = false): number {
     const tab = new Tab(++this.seq, this.ses)
+    tab.space = this.spaceId
     const insertAt = settings.get().newTabAfterCurrent
       ? this.tabs.findIndex((t) => t.id === this.activeId) + 1
       : this.tabs.length
@@ -1487,6 +1505,9 @@ export class BrowserWindow {
       this.exitHtmlFullscreen(previous)
     }
     this.activeId = id
+    // A tab found through search or the tab list can be in another big group;
+    // going to it means going there.
+    if (tab.space !== this.spaceId) this.spaceId = tab.space
     tab.lastActive = Date.now()
     // Whatever this tab decided about being an app, not what the last one did.
     this.candidate = tab.candidate
@@ -1551,12 +1572,15 @@ export class BrowserWindow {
     }
     tab.destroy(this.win)
 
-    if (this.tabs.length === 0) {
+    // An empty group is still a group; it gets a blank tab rather than
+    // dumping you into somebody else's.
+    if (this.here().length === 0) {
       this.newTab()
       return
     }
     if (this.activeId === id) {
-      const next = this.tabs[Math.min(index, this.tabs.length - 1)]
+      const here = this.here()
+      const next = here[Math.min(index, here.length - 1)] ?? here[here.length - 1]
       this.activeId = next.id
       this.wake(next)
     }
@@ -2352,6 +2376,86 @@ export class BrowserWindow {
     this.send('state:update', state)
   }
 
+  /* -------------------------------------------------------- big groups */
+
+  /** The tabs of the group in force — the ones the strip is made of. */
+  private here(): Tab[] {
+    return this.tabs.filter((tab) => tab.space === this.spaceId)
+  }
+
+  private sendSpaces() {
+    this.send(
+      'state:spaces',
+      this.spaces.map((space) => ({
+        id: space.id,
+        name: space.name,
+        colour: space.colour,
+        count: this.tabs.filter((tab) => tab.space === space.id).length,
+        active: space.id === this.spaceId
+      }))
+    )
+  }
+
+  /** A new one, empty, and you are in it. */
+  newSpace(name?: string): number {
+    const id = ++this.spaceSeq
+    this.spaces.push({ id, name: (name ?? '').slice(0, 40), colour: '' })
+    this.spaceId = id
+    // Empty means empty: one blank tab, so there is something to look at.
+    this.newTab()
+    this.persistSession()
+    return id
+  }
+
+  switchSpace(id: number) {
+    if (!this.spaces.some((space) => space.id === id) || id === this.spaceId) return
+    this.spaceId = id
+    const here = this.here()
+    if (here.length === 0) return void this.newTab()
+    // Back to whichever of its tabs was last looked at.
+    const last = here.reduce((best, tab) => (tab.lastActive > best.lastActive ? tab : best), here[0])
+    this.activeId = last.id
+    this.wake(last)
+    this.showActive()
+    this.persistSession()
+    this.broadcast()
+  }
+
+  editSpace(id: number, patch: { name?: string; colour?: string }) {
+    const space = this.spaces.find((item) => item.id === id)
+    if (!space) return
+    if (patch.name !== undefined) space.name = patch.name.slice(0, 40)
+    if (patch.colour !== undefined) space.colour = /^#[0-9a-f]{6}$/i.test(patch.colour) ? patch.colour : ''
+    this.persistSession()
+    this.broadcast()
+  }
+
+  /**
+   * Closes a whole group and everything in it. The last one standing cannot
+   * be closed — that would be a browser with nowhere to put a tab.
+   */
+  closeSpace(id: number) {
+    if (this.spaces.length < 2) return
+    const index = this.spaces.findIndex((space) => space.id === id)
+    if (index === -1) return
+    for (const tab of this.tabs.filter((tab) => tab.space === id)) {
+      const at = this.tabs.indexOf(tab)
+      if (at !== -1) this.tabs.splice(at, 1)
+      tab.destroy(this.win)
+    }
+    this.spaces.splice(index, 1)
+    if (this.spaceId === id) {
+      this.spaceId = this.spaces[Math.min(index, this.spaces.length - 1)].id
+      const here = this.here()
+      if (here.length === 0) return void this.newTab()
+      this.activeId = here[here.length - 1].id
+      this.wake(here[here.length - 1])
+    }
+    this.showActive()
+    this.persistSession()
+    this.broadcast()
+  }
+
   /* ----------------------------------------------------------- suggestions */
   suggestions(query: string): Suggestion[] {
     const q = query.trim()
@@ -2810,8 +2914,11 @@ export class BrowserWindow {
           title: t.title,
           favicon: t.favicon,
           pinned: t.pinned,
-          groupId: t.groupId
+          groupId: t.groupId,
+          space: t.space
         })),
+        spaces: this.spaces,
+        spaceId: this.spaceId,
         // Only the groups that still have a saved tab in them: restoring an
         // empty group would put a name over nothing.
         groups: this.groups.filter((g) => kept.some((t) => t.groupId === g.id)),
@@ -2829,7 +2936,13 @@ export class BrowserWindow {
     if (!settings.get().restoreSession) return false
     const file = this.sessionFile()
     if (!existsSync(file)) return false
-    let payload: { tabs: PersistedTab[]; activeIndex: number; groups?: TabGroup[] }
+    let payload: {
+      tabs: PersistedTab[]
+      activeIndex: number
+      groups?: TabGroup[]
+      spaces?: Array<{ id: number; name: string; colour: string }>
+      spaceId?: number
+    }
     try {
       payload = JSON.parse(readFileSync(file, 'utf8'))
     } catch {
@@ -2845,6 +2958,22 @@ export class BrowserWindow {
     this.groupSeq = this.groups.reduce((top, group) => Math.max(top, group.id), 0)
     const knownGroup = new Set(this.groups.map((group) => group.id))
 
+    // The big groups, before the tabs that name them. A session written
+    // before they existed comes back as the one nameless group everything
+    // was already in.
+    if (Array.isArray(payload.spaces) && payload.spaces.length > 0) {
+      this.spaces = payload.spaces.map((space) => ({
+        id: space.id,
+        name: String(space.name ?? '').slice(0, 40),
+        colour: /^#[0-9a-f]{6}$/i.test(String(space.colour)) ? String(space.colour) : ''
+      }))
+      this.spaceSeq = this.spaces.reduce((top, space) => Math.max(top, space.id), 1)
+      this.spaceId = this.spaces.some((space) => space.id === payload.spaceId)
+        ? (payload.spaceId as number)
+        : this.spaces[0].id
+    }
+    const knownSpace = new Set(this.spaces.map((space) => space.id))
+
     const lazy = settings.get().lazyRestore
     payload.tabs.slice(0, 40).forEach((saved, index) => {
       const isActive = index === Math.max(0, payload.activeIndex)
@@ -2854,6 +2983,7 @@ export class BrowserWindow {
       tab.url = saved.url
       tab.hasContent = true
       tab.pinned = saved.pinned === true
+      tab.space = knownSpace.has(saved.space as number) ? (saved.space as number) : this.spaces[0].id
       tab.groupId =
         saved.groupId !== undefined && saved.groupId !== null && knownGroup.has(saved.groupId)
           ? saved.groupId

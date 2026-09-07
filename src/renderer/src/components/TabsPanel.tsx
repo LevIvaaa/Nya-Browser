@@ -1,6 +1,7 @@
 import { t } from '../i18n'
-import type { TabGroup, TabState } from '../../../shared/types'
-import { ChevronDown, ChevronRight, Cross, Globe, Plus } from './Icons'
+import { useState } from 'react'
+import type { TabGroup, TabSpace, TabState } from '../../../shared/types'
+import { ChevronDown, ChevronRight, Cross, Globe, Pencil, Plus, Tabs } from './Icons'
 
 /**
  * Every tab in this window as a list, and every group with it.
@@ -14,15 +15,20 @@ import { ChevronDown, ChevronRight, Cross, Globe, Plus } from './Icons'
 export default function TabsPanel({
   tabs,
   groups,
+  spaces,
   x,
   onClose
 }: {
   tabs: TabState[]
   groups: TabGroup[]
+  spaces: TabSpace[]
   /** the left edge of the button that opened this */
   x: number
   onClose: () => void
 }) {
+  /** The big group being renamed right now, if any. */
+  const [editing, setEditing] = useState<number | null>(null)
+  const [name, setName] = useState('')
   const width = 320
   const left = Math.max(8, Math.min(x, window.innerWidth - width - 8))
   const active = tabs.find((tab) => tab.active)
@@ -108,6 +114,73 @@ export default function TabsPanel({
           </button>
         </div>
 
+        {/* The big groups: a whole strip of tabs each, kept while you work in
+            another. Only worth showing once there is more than the one every
+            browser starts with. */}
+        {spaces.length > 1 && (
+          <div className="shrink-0 border-b px-1.5 pb-1.5" style={{ borderColor: 'var(--line)' }}>
+            {spaces.map((space) => (
+              <div
+                key={space.id}
+                className="group flex h-9 items-center gap-2 rounded-[9px] px-2 hover:bg-[var(--surface-hover)]"
+                style={space.active ? { background: 'var(--surface-hover)' } : undefined}
+              >
+                <span
+                  className="h-2 w-2 shrink-0 rounded-pill"
+                  style={{ background: space.colour || 'var(--accent)' }}
+                />
+                {editing === space.id ? (
+                  <input
+                    autoFocus
+                    className="field h-[26px] min-w-0 flex-1 text-sm"
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        void window.browser.editSpace(space.id, { name })
+                        setEditing(null)
+                      }
+                      if (event.key === 'Escape') setEditing(null)
+                    }}
+                    onBlur={() => setEditing(null)}
+                  />
+                ) : (
+                  <button
+                    className="min-w-0 flex-1 truncate text-left text-sm"
+                    style={{ color: space.active ? 'var(--ink)' : 'var(--text-dim)' }}
+                    onClick={() => {
+                      void window.browser.switchSpace(space.id)
+                      onClose()
+                    }}
+                  >
+                    {space.name || t('Группа вкладок')}
+                  </button>
+                )}
+                <span className="shrink-0 text-2xs text-faint">{space.count}</span>
+                <button
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] opacity-0 hover:bg-[var(--line)] group-hover:opacity-100"
+                  title={t('Переименовать')}
+                  onClick={() => {
+                    setName(space.name)
+                    setEditing(space.id)
+                  }}
+                >
+                  <Pencil width={11} height={11} />
+                </button>
+                {spaces.length > 1 && (
+                  <button
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] opacity-0 hover:bg-[var(--line)] group-hover:opacity-100"
+                    title={t('Закрыть группу вкладок')}
+                    onClick={() => void window.browser.closeSpace(space.id)}
+                  >
+                    <Cross width={11} height={11} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5">
           {loose.map((tab) => row(tab))}
 
@@ -145,6 +218,8 @@ export default function TabsPanel({
         </div>
 
         <div className="shrink-0 border-t px-1.5 py-1.5" style={{ borderColor: 'var(--line)' }}>
+          {/* Two different things, and they were one word before: a run of tabs
+              inside this strip, or a strip of its own. */}
           <button
             className="flex h-9 w-full items-center gap-2 rounded-[9px] px-2 text-left text-sm hover:bg-[var(--surface-hover)]"
             disabled={!active}
@@ -155,6 +230,18 @@ export default function TabsPanel({
           >
             <span className="text-dim">
               <Plus width={13} height={13} />
+            </span>
+            {t('Сгруппировать эту вкладку')}
+          </button>
+          <button
+            className="flex h-9 w-full items-center gap-2 rounded-[9px] px-2 text-left text-sm hover:bg-[var(--surface-hover)]"
+            onClick={() => {
+              void window.browser.newSpace()
+              onClose()
+            }}
+          >
+            <span className="text-dim">
+              <Tabs width={13} height={13} />
             </span>
             {t('Новая группа вкладок')}
           </button>

@@ -12,6 +12,7 @@ import type {
   WindowState
 } from '../../../shared/types'
 import type { AutofillOffer, Bookmark, ClosedTab, SavePasswordOffer } from '../../../preload/index'
+import type { TabSpace } from '../../../shared/types'
 
 const FALLBACK_ENGINE: SearchEngine = {
   id: 'duckduckgo',
@@ -46,6 +47,7 @@ export function useBrowser() {
   })
   const [permission, setPermission] = useState<PermissionRequest | null>(null)
   const [autofill, setAutofill] = useState<AutofillOffer | null>(null)
+  const [spaces, setSpaces] = useState<TabSpace[]>([])
   const [savePassword, setSavePassword] = useState<SavePasswordOffer | null>(null)
   const [edge, setEdge] = useState(false)
   const [toasts, setToasts] = useState<Toast[]>([])
@@ -71,6 +73,7 @@ export function useBrowser() {
       api.onSecurity(setStats),
       api.onPermission(setPermission),
       api.onAutofill(setAutofill),
+      api.onSpaces(setSpaces),
       api.onSavePassword(setSavePassword),
       api.onEdge(setEdge),
       api.onToast(pushToast)
@@ -113,7 +116,7 @@ export function useBrowser() {
   }, [])
 
   return {
-    tabs, groups, appCandidate, active, settings, engines, engine, profiles, profile, bookmarks, bookmarked,
+    tabs, groups, spaces, appCandidate, active, settings, engines, engine, profiles, profile, bookmarks, bookmarked,
     downloads, activeDownloads, closed, stats, win, permission, autofill, savePassword,
     edge, toasts, patch, pushToast, refreshBookmarks,
     setPermission, setAutofill, setSavePassword, setToasts

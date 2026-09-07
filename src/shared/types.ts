@@ -31,6 +31,21 @@ export interface SearchEngine {
   hint: string
 }
 
+/**
+ * A set of tabs that stays put while you work in another one — the thing
+ * in the corner of the strip with a number on it. Every tab is in exactly
+ * one; the first one has no name and is simply where tabs go.
+ */
+export interface TabSpace {
+  id: number
+  name: string
+  /** '' means it takes the interface's own colour */
+  colour: string
+  /** how many tabs are in it, for the corner */
+  count: number
+  active: boolean
+}
+
 /** What the print sheet asks, and what both the preview and the job use. */
 export interface PrintOptions {
   landscape: boolean
