@@ -455,10 +455,11 @@ function registerIpc() {
   )
   ipcMain.handle('space:switch', (event, id: unknown) => current(event).switchSpace(num(id)))
   ipcMain.handle('space:edit', (event, id: unknown, patch: unknown) => {
-    const data = (patch ?? {}) as { name?: unknown; colour?: unknown }
+    const data = (patch ?? {}) as { name?: unknown; colour?: unknown; pinned?: unknown }
     current(event).editSpace(num(id), {
       name: data.name === undefined ? undefined : str(data.name, 40),
-      colour: data.colour === undefined ? undefined : str(data.colour, 9)
+      colour: data.colour === undefined ? undefined : str(data.colour, 9),
+      pinned: data.pinned === undefined ? undefined : flag(data.pinned)
     })
   })
   ipcMain.handle('space:close', (event, id: unknown) => current(event).closeSpace(num(id)))

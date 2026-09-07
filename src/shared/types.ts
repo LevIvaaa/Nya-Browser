@@ -44,6 +44,8 @@ export interface TabSpace {
   /** how many tabs are in it, for the corner */
   count: number
   active: boolean
+  /** shown in the strip itself, next to the other pinned ones */
+  pinned: boolean
 }
 
 /** What the print sheet asks, and what both the preview and the job use. */
