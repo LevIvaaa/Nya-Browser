@@ -7,6 +7,7 @@ import GroupColour from './components/GroupColour'
 import AutofillCard from './components/AutofillOffer'
 import InstallApp from './components/InstallApp'
 import PageMenu from './components/PageMenu'
+import TabsPanel from './components/TabsPanel'
 import SitePanel from './components/SitePanel'
 import UpdateCard from './components/UpdateCard'
 import type { UpdateState } from '../../shared/types'
@@ -20,7 +21,7 @@ import type { UpdateState } from '../../shared/types'
  * itself stays visible underneath.
  */
 export default function OverlayApp() {
-  const { settings, profiles, active, engine, groups, appCandidate, autofill } = useBrowser()
+  const { settings, profiles, active, engine, groups, tabs, appCandidate, autofill } = useBrowser()
   const [mode, setMode] = useState<string | null>(null)
   const [update, setUpdate] = useState<UpdateState | null>(null)
   const [, setLangVersion] = useState(0)
@@ -68,6 +69,14 @@ export default function OverlayApp() {
     <div className="relative h-full w-full">
       {mode === 'site' && <SitePanel onClose={close} />}
       {mode === 'autofill' && <AutofillCard offer={autofill} onClose={close} />}
+      {mode.startsWith('tabs-panel:') && (
+        <TabsPanel
+          tabs={tabs}
+          groups={groups}
+          x={Number(mode.slice('tabs-panel:'.length)) || 0}
+          onClose={close}
+        />
+      )}
       {mode.startsWith('page-menu:') && (
         <PageMenu
           tab={active}
