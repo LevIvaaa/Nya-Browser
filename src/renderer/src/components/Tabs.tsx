@@ -1,7 +1,7 @@
 import { t } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
 import type { InternalPage, Settings, TabGroup, TabSpace, TabState } from '../../../shared/types'
-import { ChevronDown, Clock, Cross, Download, Gear, Globe, Key, Pin, Plus, Sleep, Star, Volume, VolumeOff } from './Icons'
+import { ChevronDown, Clock, Cross, Download, Gear, Globe, Key, Pin, Plus, Sleep, Star, Tabs, Volume, VolumeOff } from './Icons'
 import { cx } from './ui'
 
 /** The same icons these pages carry in the toolbar and in the menu. */
@@ -472,7 +472,18 @@ export function TabStrip({
       onDragEnd={reorder.onDragEnd}
       onDoubleClick={() => window.browser.maximize()}
     >
-      <TabsButton count={tabs.length} space={spaces.find((item) => item.active)} />
+      <TabsButton
+        space={spaces.find((item) => item.active)}
+        named={spaces.some((item) => item.active && item.pinned)}
+      />
+      {/* The pinned ones, side by side, before the tabs of whichever is open. */}
+      {spaces.some((space) => space.pinned) && (
+        <div className="flex shrink-0 items-center gap-0.5 pr-1">
+          {spaces.map((space, index) =>
+            space.pinned ? <SpaceChip key={space.id} space={space} index={index} /> : null
+          )}
+        </div>
+      )}
       <div className="flex min-w-0 items-center gap-1" style={{ flex: '0 1 auto' }}>
         {rows.map((row) =>
           row.kind === 'group' ? (
@@ -516,7 +527,47 @@ export function TabStrip({
  * them. Ten tabs fit across a window and thirty do not, and past that point
  * the strip is favicons and guesswork.
  */
-function TabsButton({ count, space }: { count: number; space?: TabSpace }) {
+/**
+ * A pinned big group, in the strip next to the others. A group used every
+ * day should be one click away rather than one click inside a list.
+ */
+function SpaceChip({ space, index }: { space: TabSpace; index: number }) {
+  return (
+    <button
+      className="no-drag flex h-7 shrink-0 items-center gap-1.5 rounded-[9px] px-2 text-2xs font-semibold"
+      style={{
+        background: space.active
+          ? `color-mix(in srgb, ${space.colour || 'var(--accent)'} 22%, transparent)`
+          : 'transparent',
+        color: space.active ? 'var(--ink)' : 'var(--text-dim)',
+        boxShadow: space.active
+          ? `inset 0 0 0 1px color-mix(in srgb, ${space.colour || 'var(--accent)'} 45%, transparent)`
+          : 'none',
+        transition: 'background var(--t-fast) linear, color var(--t-fast) linear'
+      }}
+      title={space.name || t('Группа {n}', { n: index + 1 })}
+      onClick={() => void window.browser.switchSpace(space.id)}
+    >
+      <span
+        className="h-2 w-2 shrink-0 rounded-pill"
+        style={{ background: space.colour || 'var(--accent)' }}
+      />
+      <span className="max-w-[110px] truncate">
+        {space.name || t('Группа {n}', { n: index + 1 })}
+      </span>
+      <span className="tabular-nums opacity-60">{space.count}</span>
+    </button>
+  )
+}
+
+function TabsButton({
+  space,
+  named
+}: {
+  space?: TabSpace
+  /** whether a pinned chip is already naming the group in force */
+  named?: boolean
+}) {
   return (
     <button
       className="no-drag flex h-7 shrink-0 items-center gap-1.5 rounded-[9px] px-1.5 text-2xs font-semibold text-dim hover:bg-[var(--surface-hover)]"
@@ -527,13 +578,15 @@ function TabsButton({ count, space }: { count: number; space?: TabSpace }) {
         void window.browser.setOverlay(`tabs-panel:${Math.round(box.left)}`)
       }}
     >
-      {/* Which big group these tabs belong to, when there is more than the
-          one everything starts in. */}
-      {space?.colour && (
+      {/* Which big group these tabs belong to — unless its own chip is already
+          in the strip saying so, in which case this is just the way in. */}
+      {!named && space?.colour && (
         <span className="h-2 w-2 rounded-pill" style={{ background: space.colour }} />
       )}
-      {space?.name && <span className="max-w-[120px] truncate">{space.name}</span>}
-      <span className="tabular-nums">{count}</span>
+      {!named && space?.name && <span className="max-w-[120px] truncate">{space.name}</span>}
+      {/* The count was here and it was noise: every chip carries its own, and
+          this button is a way in, not a readout. */}
+      <Tabs width={13} height={13} />
       <ChevronDown width={11} height={11} />
     </button>
   )
@@ -543,11 +596,13 @@ function TabsButton({ count, space }: { count: number; space?: TabSpace }) {
 export function TabRail({
   tabs,
   groups,
+  spaces,
   settings,
   side
 }: {
   tabs: TabState[]
   groups: TabGroup[]
+  spaces: TabSpace[]
   settings: Settings
   side: 'left' | 'right'
 }) {
@@ -579,6 +634,14 @@ export function TabRail({
           <Plus width={14} height={14} />
         </button>
       </div>
+
+      {spaces.some((space) => space.pinned) && (
+        <div className="flex flex-wrap gap-1 px-0.5 pb-1">
+          {spaces.map((space, index) =>
+            space.pinned ? <SpaceChip key={space.id} space={space} index={index} /> : null
+          )}
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto overflow-x-hidden pr-0.5">
         {rows.map((row) =>

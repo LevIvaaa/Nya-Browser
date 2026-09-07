@@ -324,7 +324,7 @@ export default function App() {
         <div className="flex min-h-0 flex-1">
           {vertical && settings.tabPosition === 'left' && !chromeHidden && (
             <div className="animate-slide-right">
-              <TabRail tabs={tabs} groups={groups} settings={settings} side="left" />
+              <TabRail tabs={tabs} groups={groups} spaces={spaces} settings={settings} side="left" />
             </div>
           )}
 
@@ -384,7 +384,7 @@ export default function App() {
 
           {vertical && settings.tabPosition === 'right' && !chromeHidden && (
             <div className="animate-slide-left">
-              <TabRail tabs={tabs} groups={groups} settings={settings} side="right" />
+              <TabRail tabs={tabs} groups={groups} spaces={spaces} settings={settings} side="right" />
             </div>
           )}
         </div>

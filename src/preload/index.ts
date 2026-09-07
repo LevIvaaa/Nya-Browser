@@ -115,7 +115,7 @@ const api = {
   pinTab: (id: number, pinned?: boolean) => ipcRenderer.invoke('tab:pin', id, pinned),
   newSpace: (name?: string): Promise<number> => ipcRenderer.invoke('space:new', name),
   switchSpace: (id: number) => ipcRenderer.invoke('space:switch', id),
-  editSpace: (id: number, patch: { name?: string; colour?: string }) =>
+  editSpace: (id: number, patch: { name?: string; colour?: string; pinned?: boolean }) =>
     ipcRenderer.invoke('space:edit', id, patch),
   closeSpace: (id: number) => ipcRenderer.invoke('space:close', id),
   onSpaces: (cb: (spaces: TabSpace[]) => void) => on<TabSpace[]>('state:spaces', cb),

@@ -28,7 +28,7 @@ export function AppMenu({ onClose, onOpen }: { onClose: () => void; onOpen: (vie
         action()
         onClose()
       }}
-      className="flex w-full items-center gap-3 px-3 py-2 text-left text-base hover:bg-[var(--surface-hover)]"
+      className="flex h-8 w-full items-center gap-2.5 rounded-[8px] px-2.5 text-left text-sm hover:bg-[var(--surface-hover)]"
       style={{ transition: 'background var(--t-fast) linear' }}
     >
       <span className="text-dim">{icon}</span>
@@ -38,8 +38,8 @@ export function AppMenu({ onClose, onOpen }: { onClose: () => void; onOpen: (vie
   )
 
   return (
-    <Popover onClose={onClose} width={280}>
-      <div className="py-1.5">
+    <Popover onClose={onClose} width={264}>
+      <div className="p-1">
         {item(<Plus width={15} height={15} />, t('Новая вкладка'), 'Ctrl+T', () =>
           void window.browser.newTab()
         )}

@@ -454,8 +454,8 @@ export class BrowserWindow {
    * The big groups. There is always at least one and it starts nameless,
    * so a browser nobody has organised looks like a browser with no groups.
    */
-  private spaces: Array<{ id: number; name: string; colour: string }> = [
-    { id: 1, name: '', colour: '' }
+  private spaces: Array<{ id: number; name: string; colour: string; pinned: boolean }> = [
+    { id: 1, name: '', colour: '', pinned: false }
   ]
   private spaceId = 1
   private spaceSeq = 1
@@ -2391,7 +2391,8 @@ export class BrowserWindow {
         name: space.name,
         colour: space.colour,
         count: this.tabs.filter((tab) => tab.space === space.id).length,
-        active: space.id === this.spaceId
+        active: space.id === this.spaceId,
+        pinned: space.pinned === true
       }))
     )
   }
@@ -2399,7 +2400,7 @@ export class BrowserWindow {
   /** A new one, empty, and you are in it. */
   newSpace(name?: string): number {
     const id = ++this.spaceSeq
-    this.spaces.push({ id, name: (name ?? '').slice(0, 40), colour: '' })
+    this.spaces.push({ id, name: (name ?? '').slice(0, 40), colour: '', pinned: false })
     this.spaceId = id
     // Empty means empty: one blank tab, so there is something to look at.
     this.newTab()
@@ -2421,11 +2422,12 @@ export class BrowserWindow {
     this.broadcast()
   }
 
-  editSpace(id: number, patch: { name?: string; colour?: string }) {
+  editSpace(id: number, patch: { name?: string; colour?: string; pinned?: boolean }) {
     const space = this.spaces.find((item) => item.id === id)
     if (!space) return
     if (patch.name !== undefined) space.name = patch.name.slice(0, 40)
     if (patch.colour !== undefined) space.colour = /^#[0-9a-f]{6}$/i.test(patch.colour) ? patch.colour : ''
+    if (patch.pinned !== undefined) space.pinned = patch.pinned
     this.persistSession()
     this.broadcast()
   }
@@ -2940,7 +2942,7 @@ export class BrowserWindow {
       tabs: PersistedTab[]
       activeIndex: number
       groups?: TabGroup[]
-      spaces?: Array<{ id: number; name: string; colour: string }>
+      spaces?: Array<{ id: number; name: string; colour: string; pinned?: boolean }>
       spaceId?: number
     }
     try {
@@ -2965,7 +2967,8 @@ export class BrowserWindow {
       this.spaces = payload.spaces.map((space) => ({
         id: space.id,
         name: String(space.name ?? '').slice(0, 40),
-        colour: /^#[0-9a-f]{6}$/i.test(String(space.colour)) ? String(space.colour) : ''
+        colour: /^#[0-9a-f]{6}$/i.test(String(space.colour)) ? String(space.colour) : '',
+        pinned: space.pinned === true
       }))
       this.spaceSeq = this.spaces.reduce((top, space) => Math.max(top, space.id), 1)
       this.spaceId = this.spaces.some((space) => space.id === payload.spaceId)
@@ -3001,6 +3004,13 @@ export class BrowserWindow {
     })
 
     if (this.activeId === -1 && this.tabs[0]) this.activeId = this.tabs[0].id
+    // A big group whose tabs were all blank saves nothing, and comes back
+    // empty. Whichever one the window opens on gets a tab either way.
+    if (this.here().length === 0) {
+      this.newTab()
+      return true
+    }
+    if (this.tabs.every((tab) => tab.id !== this.activeId)) this.activeId = this.here()[0].id
     this.reorderStrip()
     this.showActive()
     this.sendGroups()
