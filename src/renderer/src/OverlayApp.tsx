@@ -4,6 +4,7 @@ import { useBrowser } from './state/useBrowser'
 import CommandPalette from './components/CommandPalette'
 import { AppMenu, ProfileMenu } from './components/Menus'
 import GroupColour from './components/GroupColour'
+import AutofillCard from './components/AutofillOffer'
 import InstallApp from './components/InstallApp'
 import SitePanel from './components/SitePanel'
 import UpdateCard from './components/UpdateCard'
@@ -18,7 +19,7 @@ import type { UpdateState } from '../../shared/types'
  * itself stays visible underneath.
  */
 export default function OverlayApp() {
-  const { settings, profiles, active, engine, groups, appCandidate } = useBrowser()
+  const { settings, profiles, active, engine, groups, appCandidate, autofill } = useBrowser()
   const [mode, setMode] = useState<string | null>(null)
   const [update, setUpdate] = useState<UpdateState | null>(null)
   const [, setLangVersion] = useState(0)
@@ -65,6 +66,7 @@ export default function OverlayApp() {
   return (
     <div className="relative h-full w-full">
       {mode === 'site' && <SitePanel onClose={close} />}
+      {mode === 'autofill' && <AutofillCard offer={autofill} onClose={close} />}
       {mode === 'install-app' && <InstallApp candidate={appCandidate} onClose={close} />}
       {mode.startsWith('group-colour:') && (
         <GroupColour

@@ -380,6 +380,17 @@ export class BrowserWindow {
   private pendingPermissions = new Map<string, (allow: boolean) => void>()
   private preloadId: string | null = null
   private overlayMode: string | null = null
+  /**
+   * While an offer is anchored to a field, the overlay is cut down to the
+   * size of the card itself. It is one layer over the whole window, so at
+   * full size it would swallow every click meant for the page underneath.
+   */
+  private overlayBounds: { x: number; y: number; width: number; height: number } | null = null
+  /** The login field an offer is currently anchored to. */
+  private field: { webContentsId: number; host: string; x: number; y: number; width: number; height: number } | null = null
+  private hideOffer: ReturnType<typeof setTimeout> | null = null
+  /** Hosts where the reader said "not now" to the locked-vault notice. */
+  private noticeDismissed = new Set<string>()
 
   /** How many windows are already up, so the next one is not stacked on them. */
   private static open = 0
@@ -824,7 +835,9 @@ export class BrowserWindow {
     const over = this.edgeOverflow()
     const inner = { width: w - over.left - over.right, height: h - over.top - over.bottom }
     this.chrome.setBounds({ x: over.left, y: over.top, ...inner })
-    this.overlay.setBounds({ x: over.left, y: over.top, ...inner })
+    this.overlay.setBounds(
+      this.overlayBounds ?? { x: over.left, y: over.top, ...inner }
+    )
 
     const active = this.getActive()
     if (!active?.view) return
@@ -888,15 +901,26 @@ export class BrowserWindow {
    * Shows or hides the overlay layer. While hidden it is not just transparent
    * but invisible, so it never swallows clicks meant for the page.
    */
-  setOverlayMode(mode: string | null) {
+  setOverlayMode(
+    mode: string | null,
+    options: {
+      bounds?: { x: number; y: number; width: number; height: number } | null
+      focus?: boolean
+    } = {}
+  ) {
     this.overlayMode = mode
     const visible = mode !== null
+    this.overlayBounds = visible ? (options.bounds ?? null) : null
     this.raiseOverlay()
+    this.layout()
     this.overlay.setVisible(visible)
     this.overlay.webContents.send('state:overlay', mode)
     this.chrome.webContents.send('state:overlay', mode)
-    if (visible) this.overlay.webContents.focus()
-    else this.focusView()
+    // An offer under a field must not take the keyboard away from that
+    // field: people carry on typing while it is up, and it disappears when
+    // what they typed no longer needs it.
+    if (visible && options.focus !== false) this.overlay.webContents.focus()
+    else if (!visible) this.focusView()
   }
 
   /**
@@ -2132,19 +2156,134 @@ export class BrowserWindow {
   }
 
   /* ------------------------------------------------------------- autofill */
-  /** A page reported a login form: offer matching credentials, if any. */
-  handleAutofillForm(webContentsId: number, host: string) {
+
+  /** Room around the card inside the overlay's own bounds, for its shadow. */
+  private static readonly OFFER_MARGIN = 20
+
+  /**
+   * A page reported that it has a login form at all. Nothing is shown for this
+   * on its own — the offer belongs under the field, and which field that is
+   * nobody knows until it is clicked.
+   */
+  handleAutofillForm(_webContentsId: number, _host: string) {}
+
+  /**
+   * Someone clicked a login box. If something is saved for this site the offer
+   * opens under the box — or, when the vault is shut, a notice in the corner
+   * asking for the master password, which is the only thing standing between
+   * the click and the password.
+   */
+  handleAutofillField(
+    webContentsId: number,
+    host: string,
+    rect: { x: number; y: number; width: number; height: number }
+  ) {
     const tab = this.tabs.find((t) => t.wc?.id === webContentsId)
     if (!tab || tab.id !== this.activeId) return
+    if (this.hideOffer) {
+      clearTimeout(this.hideOffer)
+      this.hideOffer = null
+    }
     const matches = vault.forOrigin(host)
-    if (matches.length === 0) return
+    if (matches.length === 0) return this.closeOffer()
+    this.field = { webContentsId, host, ...rect }
+    const margin = BrowserWindow.OFFER_MARGIN
+
+    if (vault.locked) {
+      if (this.noticeDismissed.has(host)) return
+      this.send('state:autofill', { host, locked: true, entries: [] })
+      const inner = this.contentBox()
+      return this.setOverlayMode('autofill', {
+        bounds: {
+          x: Math.round(inner.x + 14 - margin),
+          y: Math.round(inner.y + 14 - margin),
+          width: 380 + margin * 2,
+          height: 210 + margin * 2
+        },
+        // The master password is typed into this card, so it takes the keyboard.
+        focus: true
+      })
+    }
+
     this.send('state:autofill', {
       host,
-      locked: vault.locked,
+      locked: false,
       // `origin` travels so the offer can say where a credential came from when
       // it was not saved on this exact address.
       entries: matches.map(({ id, username, origin }) => ({ id, username, origin }))
     })
+    this.setOverlayMode('autofill', {
+      bounds: this.offerBounds(rect, matches.length),
+      focus: false
+    })
+  }
+
+  /** The page area, in window coordinates, as the interface reported it. */
+  private contentBox() {
+    const over = this.edgeOverflow()
+    return {
+      x: over.left + this.layoutRect.x,
+      y: over.top + this.layoutRect.y,
+      width: this.layoutRect.width,
+      height: this.layoutRect.height
+    }
+  }
+
+  /**
+   * The card sits under the field and as wide as it, never narrower than a
+   * name needs — unless there is no room below, where it goes above instead,
+   * the way every menu near the bottom of a screen does.
+   */
+  private offerBounds(
+    rect: { x: number; y: number; width: number; height: number },
+    count: number
+  ) {
+    const margin = BrowserWindow.OFFER_MARGIN
+    const inner = this.contentBox()
+    const width = Math.round(Math.max(260, Math.min(420, rect.width)))
+    const height = 12 + Math.min(count, 4) * 44 + 30
+    const bounds = this.win.getBounds()
+    let x = Math.round(inner.x + rect.x)
+    let y = Math.round(inner.y + rect.y + rect.height + 4)
+    if (y + height > bounds.height - 8) y = Math.round(inner.y + rect.y - height - 4)
+    x = Math.max(4, Math.min(x, bounds.width - width - 4))
+    y = Math.max(4, y)
+    return { x: x - margin, y: y - margin, width: width + margin * 2, height: height + margin * 2 }
+  }
+
+  /** The page said the field lost focus; the card goes with it. */
+  hideAutofill(webContentsId: number) {
+    const tab = this.tabs.find((t) => t.wc?.id === webContentsId)
+    if (!tab || tab.id !== this.activeId) return
+    // Not at once: clicking the card is itself what takes focus off the field,
+    // and closing on that would mean the card could never be used.
+    if (this.hideOffer) clearTimeout(this.hideOffer)
+    this.hideOffer = setTimeout(() => {
+      this.hideOffer = null
+      this.closeOffer()
+    }, 220)
+  }
+
+  private closeOffer() {
+    this.field = null
+    if (this.overlayMode === 'autofill') this.setOverlayMode(null)
+  }
+
+  /** "Not now" on the locked notice: not for this site, not this time. */
+  dismissVaultNotice() {
+    if (this.field) this.noticeDismissed.add(this.field.host)
+    this.closeOffer()
+  }
+
+  /**
+   * The vault opened while an offer was up. What started all this was a click
+   * on a login box, so the offer comes straight back — with the passwords in
+   * it this time.
+   */
+  reofferAutofill() {
+    const field = this.field
+    if (!field || vault.locked) return
+    this.handleAutofillField(field.webContentsId, field.host, field)
   }
 
   /** A page submitted credentials: offer to save them. */

@@ -670,14 +670,15 @@ function registerIpc() {
    * could ask for the key after someone else's verification would be no gate
    * at all.
    */
-  ipcMain.handle('vault:hello-unlock', async () => {
+  ipcMain.handle('vault:hello-unlock', async (event) => {
     if (!vault.locked) return true
     if (!(await helloVerify(t('Разблокировать пароли Nya Browser')))) return false
     // Hello proves who is at the keyboard; what opens the vault after that is
     // whichever key this vault has. A master-password vault has none unless
     // Hello was turned on for it, and then there is nothing to open.
-    if (vault.unlockWithHelloKey()) return true
-    return vault.mode === 'os' && vault.unlock('')
+    const opened = vault.unlockWithHelloKey() || (vault.mode === 'os' && vault.unlock(''))
+    if (opened) current(event).reofferAutofill()
+    return opened
   })
   ipcMain.handle('vault:hello-enable', async (event, on: unknown) => {
     if (!flag(on)) {
@@ -694,7 +695,13 @@ function registerIpc() {
     return true
   })
   ipcMain.handle('vault:list', (event) => vault.list())
-  ipcMain.handle('vault:unlock', (event, password: unknown) => vault.unlock(str(password, 400)))
+  ipcMain.handle('vault:unlock', (event, password: unknown) => {
+    const opened = vault.unlock(str(password, 400))
+    // The click that asked for this was on a login box: put the offer back.
+    if (opened) current(event).reofferAutofill()
+    return opened
+  })
+  ipcMain.handle('vault:dismiss-notice', (event) => current(event).dismissVaultNotice())
   ipcMain.handle('vault:lock', (event) => vault.lock())
   ipcMain.handle('vault:save', (event, input: unknown) => {
     const data = (input ?? {}) as { origin?: string; username?: string; password?: string; note?: string }
@@ -854,6 +861,25 @@ function registerIpc() {
   ipcMain.on('autofill:form', (event, payload: unknown) => {
     const data = (payload ?? {}) as { host?: string }
     current(event).handleAutofillForm(event.sender.id, str(data.host, 200))
+  })
+  ipcMain.on('autofill:field', (event, payload: unknown) => {
+    const data = (payload ?? {}) as {
+      host?: string
+      x?: unknown
+      y?: unknown
+      width?: unknown
+      height?: unknown
+    }
+    const px = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
+    current(event).handleAutofillField(event.sender.id, str(data.host, 200), {
+      x: px(data.x),
+      y: px(data.y),
+      width: px(data.width),
+      height: px(data.height)
+    })
+  })
+  ipcMain.on('autofill:leave', (event) => {
+    current(event).hideAutofill(event.sender.id)
   })
   ipcMain.on('autofill:submitted', (event, payload: unknown) => {
     const data = (payload ?? {}) as { host?: string; username?: string; password?: string }
