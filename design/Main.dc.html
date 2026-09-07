@@ -43,10 +43,22 @@
       <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="rgba(242,243,247,0.55)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
     </div>
     </div>
+    <div style="display: flex; align-items: stretch;">
+    <!-- The theme switch. The installer redraws itself in the other theme and
+         the browser opens in whichever was left showing. -->
+    <div data-nsis="theme-x" style="display: flex; align-items: center; justify-content: center; width: 38px; height: 34px; color: rgba(242, 243, 247, 0.62);">
+      <span data-theme-glyph="dark">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"></circle><path d="M12 2.4v2.2M12 19.4v2.2M2.4 12h2.2M19.4 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6"></path></svg>
+      </span>
+      <span data-theme-glyph="light">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.2A8.6 8.6 0 1 1 9.8 3.5a6.9 6.9 0 0 0 10.7 10.7z"></path></svg>
+      </span>
+    </div>
     <div data-nsis="close-x" style="display: flex; align-items: center; justify-content: center; width: 46px; height: 34px; color: rgba(242, 243, 247, 0.62);">
       <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
         <path d="M0.6 0.6l8.8 8.8M9.4 0.6L0.6 9.4" stroke="currentColor" stroke-width="1"></path>
       </svg>
+    </div>
     </div>
   </div>
 

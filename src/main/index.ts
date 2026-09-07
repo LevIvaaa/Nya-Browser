@@ -41,7 +41,7 @@ import {
   urlFromArgv
 } from './integration'
 import { SEARCH_ENGINES } from '../shared/search'
-import type { AppInfo, Settings, SiteRules } from '../shared/types'
+import type { AppInfo, Settings, SiteRules, ThemeMode } from '../shared/types'
 
 /* ------------------------------------------------------------------------- */
 /* Startup switches — read before app.whenReady() and fixed for the session.  */
@@ -68,6 +68,37 @@ function readLanguageHandoff(): { raw: string | null; picked: string | null } {
   } catch {
     return { raw: null, picked: null }
   }
+}
+
+/**
+ * The theme the installer was left in. It is written when the browser is
+ * installed and read here, so the first window opens looking like the
+ * installer the person was just looking at rather than in the other theme.
+ */
+function readThemeHandoff(): ThemeMode | null {
+  try {
+    const out = execFileSync('reg', ['query', LANGUAGE_HANDOFF_KEY, '/v', 'theme'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    })
+    const match = /theme\s+REG_SZ\s+(\S+)/.exec(out)
+    const raw = match?.[1]
+    return raw === 'light' || raw === 'dark' || raw === 'system' ? raw : null
+  } catch {
+    return null
+  }
+}
+
+/** And back the other way, so the uninstaller matches the browser. */
+function writeThemeHandoff(theme: ThemeMode) {
+  if (process.platform !== 'win32') return
+  execFile(
+    'reg',
+    ['add', LANGUAGE_HANDOFF_KEY, '/v', 'theme', '/t', 'REG_SZ', '/d', theme, '/f'],
+    () => {
+      /* the registry is a courtesy to the installer, never a failure */
+    }
+  )
 }
 
 /** Mirrors the browser's language for the installer; '' travels as "system". */
@@ -198,6 +229,15 @@ if (!app.requestSingleInstanceLock()) {
     }
     const mirror = settings.get().language || 'system'
     if (handoff.raw !== mirror) writeLanguageHandoff(mirror)
+
+    // The same trade for the theme: take what the installer left, then put
+    // back what the browser is actually set to. Without the second half a
+    // theme chosen in the settings would be overruled at every start by the
+    // one picked during the install.
+    const theme = readThemeHandoff()
+    if (theme !== null && theme !== settings.get().theme) settings.patch({ theme })
+    const themeNow = settings.get().theme
+    if (theme !== themeNow) writeThemeHandoff(themeNow)
   }
   applyStartupSwitches()
   installExitHooks()
@@ -543,6 +583,10 @@ function registerIpc() {
     const dns = settings.get()
     const next = settings.patch((patch ?? {}) as Partial<Settings>)
     nativeTheme.themeSource = next.theme
+    // The installer is told too, so the theme picked here is what the next
+    // install screen and the uninstaller are drawn in — and so the value left
+    // behind at install time cannot overrule this at the next start.
+    writeThemeHandoff(next.theme)
     // The resolver is process-wide and takes effect on the next lookup, so a
     // change here is felt without a restart.
     if (
@@ -571,6 +615,7 @@ function registerIpc() {
   ipcMain.handle('settings:reset', (event) => {
     const next = settings.reset()
     nativeTheme.themeSource = next.theme
+    writeThemeHandoff(next.theme)
     applyEverywhere()
     return next
   })
@@ -580,6 +625,7 @@ function registerIpc() {
       const parsed = JSON.parse(str(json, 200_000))
       const next = settings.patch(parsed as Partial<Settings>)
       nativeTheme.themeSource = next.theme
+      writeThemeHandoff(next.theme)
       applyEverywhere()
       return true
     } catch {

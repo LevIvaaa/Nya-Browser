@@ -23,7 +23,10 @@ const { join, resolve } = require('path')
 
 const root = resolve(__dirname, '..')
 const designDir = join(root, 'design')
-const outDir = join(root, 'build', 'art')
+const outDir =
+  process.env.NYA_ART_THEME === 'light'
+    ? join(root, 'build', 'art', 'light')
+    : join(root, 'build', 'art')
 
 /** Everything is authored at 640×400. */
 const WIDTH = 640
@@ -36,6 +39,75 @@ const HEIGHT = 400
 const SCALE = process.env.NYA_ART_SCALE ? Number(process.env.NYA_ART_SCALE) : 2
 
 const version = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version
+
+/** 'dark' or 'light'; one process renders one of them. */
+const THEME = process.env.NYA_ART_THEME === 'light' ? 'light' : 'dark'
+
+/**
+ * The design is drawn dark, and this is the same design in light.
+ *
+ * Colours are swapped in the source of the artboard rather than kept as a
+ * second set of files: two copies of nine pages would mean every change made
+ * twice, and the one made once is the bug nobody sees until the installer is
+ * already out. Anything not in this table stays as it was and is reported, so
+ * a colour added to a design shows up here rather than silently staying dark.
+ */
+const LIGHT = {
+  // surfaces
+  '#0c0d12': '#f7f8fc',
+  '#16171e': '#e8eaf2',
+  '24,26,34,0.92': 'rgba(255, 255, 255, 0.94)',
+  '12,13,18,0.4': 'rgba(255, 255, 255, 0.55)',
+  // ink
+  '#f2f3f7': '#14151c',
+  '242,243,247,0.62': 'rgba(20, 21, 28, 0.66)',
+  '242,243,247,0.55': 'rgba(20, 21, 28, 0.6)',
+  '242,243,247,0.38': 'rgba(20, 21, 28, 0.46)',
+  // the faint white washes a dark surface uses become faint dark ones
+  '255,255,255,0.16': 'rgba(16, 18, 28, 0.18)',
+  '255,255,255,0.12': 'rgba(16, 18, 28, 0.13)',
+  '255,255,255,0.1': 'rgba(16, 18, 28, 0.11)',
+  '255,255,255,0.08': 'rgba(16, 18, 28, 0.09)',
+  '255,255,255,0.07': 'rgba(16, 18, 28, 0.08)',
+  '255,255,255,0.06': 'rgba(16, 18, 28, 0.07)',
+  '255,255,255,0.055': 'rgba(16, 18, 28, 0.065)',
+  '255,255,255,0.05': 'rgba(16, 18, 28, 0.06)',
+  // shadows, which on white are a hint rather than a hole
+  '0,0,0,0.85': 'rgba(22, 24, 46, 0.16)',
+  '0,0,0,0.45': 'rgba(22, 24, 46, 0.10)',
+  // the brand, a shade deeper so white text on it still reads
+  '#7c6cff': '#6a58f5',
+  '#9c90ff': '#7d6cf7',
+  '#a99fff': '#8f81f8',
+  '124,108,255,0.9': 'rgba(106, 88, 245, 0.9)',
+  '124,108,255,0.85': 'rgba(106, 88, 245, 0.5)',
+  '124,108,255,0.45': 'rgba(106, 88, 245, 0.45)',
+  '124,108,255,0.4': 'rgba(106, 88, 245, 0.4)',
+  '124,108,255,0.35': 'rgba(106, 88, 245, 0.35)',
+  '124,108,255,0.32': 'rgba(106, 88, 245, 0.32)',
+  '124,108,255,0.25': 'rgba(106, 88, 245, 0.22)',
+  '124,108,255,0.16': 'rgba(106, 88, 245, 0.14)'
+  // #0a84ff, #2fbf71, #e5484d, #f5a524, #00b8a9, #e255a1 and #ffffff are
+  // left alone: they are accents and status colours, and they read on both.
+}
+
+const reported = new Set()
+
+/** The same markup with the light palette in it. */
+function toLight(html) {
+  return html
+    .replace(/#[0-9a-fA-F]{6}/g, (hex) => LIGHT[hex.toLowerCase()] ?? hex)
+    .replace(/rgba\(([^)]*)\)/g, (whole, inside) => {
+      const key = inside.split(',').map((part) => part.trim()).join(',')
+      const found = LIGHT[key]
+      if (found) return found
+      if (!reported.has(key)) {
+        reported.add(key)
+        console.warn(`  light: no colour for rgba(${key}) — left as it was`)
+      }
+      return whole
+    })
+}
 
 /**
  * Turns build/installer-strings/<code>.json into the INI files the installer
@@ -121,14 +193,20 @@ if (!process.versions.electron) {
   delete env.ELECTRON_RUN_AS_NODE
 
   const layout = []
-  for (const page of PAGES) {
-    execFileSync(electron, [__filename, page.name], {
-      stdio: 'inherit',
-      env: { ...env, NYA_ART_SCALE: String(page.scale ?? 2) }
-    })
-    const fragment = join(outDir, `.layout-${page.name}.nsh`)
-    layout.push(readFileSync(fragment, 'utf8').trim())
-    rmSync(fragment)
+  for (const theme of ['dark', 'light']) {
+    console.log(`--- ${theme}`)
+    for (const page of PAGES) {
+      execFileSync(electron, [__filename, page.name], {
+        stdio: 'inherit',
+        env: { ...env, NYA_ART_SCALE: String(page.scale ?? 2), NYA_ART_THEME: theme }
+      })
+      // Both themes measure the same rectangles — the palette moves nothing —
+      // so the layout is taken once and the second pass's copy discarded.
+      const where = theme === 'light' ? join(outDir, 'light') : outDir
+      const fragment = join(where, `.layout-${page.name}.nsh`)
+      if (theme === 'dark') layout.push(readFileSync(fragment, 'utf8').trim())
+      rmSync(fragment)
+    }
   }
 
   const header = [
@@ -164,22 +242,29 @@ function toStandalone(file) {
     // The design was drawn against a sample version.
     .replace(/1\.0\.0/g, version)
 
-  return `<!doctype html><html><head><meta charset="utf-8">${style[1]}</head><body>${markup}</body></html>`
+  const page = `<!doctype html><html><head><meta charset="utf-8">${style[1]}</head><body>${markup}</body></html>`
+  return THEME === 'light' ? toLight(page) : page
 }
 
 /** CSS forcing every checkbox into one state, so both can be cropped out. */
 const BOX_CSS = {
-  on: '[data-nsis^="box-"] { background: #7c6cff !important; border: 0 !important; }' +
+  on:
+    `[data-nsis^="box-"] { background: ${THEME === 'light' ? '#6a58f5' : '#7c6cff'} !important;` +
+    ' border: 0 !important; }' +
     '[data-nsis^="box-"] svg { display: block !important; }',
-  off: '[data-nsis^="box-"] { background: transparent !important;' +
-    ' border: 1px solid rgba(255,255,255,0.16) !important; }' +
+  off:
+    '[data-nsis^="box-"] { background: transparent !important;' +
+    ` border: 1px solid ${THEME === 'light' ? 'rgba(16,18,28,0.22)' : 'rgba(255,255,255,0.16)'} !important; }` +
     '[data-nsis^="box-"] svg { display: none !important; }'
 }
 
 /** What never belongs in the bitmap, because a live control covers it. */
 const HIDE_CSS =
   '[data-nsis="progress"], [data-nsis="path"], [data-nsis="version"],' +
-  ' [data-nsis-hide], [data-nsis^="box-"] { visibility: hidden !important; }'
+  ' [data-nsis-hide], [data-nsis^="box-"] { visibility: hidden !important; }' +
+  // The switch offers the theme you are not in: the sun is drawn for the dark
+  // installer and the moon for the light one, so the other glyph goes.
+  ` [data-theme-glyph="${THEME === 'light' ? 'dark' : 'light'}"] { display: none !important; }`
 
 async function shoot(window, css) {
   const key = css ? await window.webContents.insertCSS(css) : null
