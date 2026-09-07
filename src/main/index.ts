@@ -318,6 +318,15 @@ if (!app.requestSingleInstanceLock()) {
     // Pages ask for their anti-flicker CSS synchronously at document-start, so
     // the answer must never block: whatever the engine knows right now, or
     // nothing. Registered before the first window exists.
+    // Whether the blocker is on at all, for the one page that needs to do its
+    // own blocking from the inside.
+    ipcMain.on('ads:on', (event) => {
+      try {
+        event.returnValue = settings.get().blockAds === true
+      } catch {
+        event.returnValue = false
+      }
+    })
     ipcMain.on('cosmetic:boot', (event, host: unknown) => {
       try {
         const s = settings.get()
@@ -440,6 +449,20 @@ function registerIpc() {
   ipcMain.handle('tab:pin', (event, id: unknown, pinned?: unknown) =>
     current(event).pinTab(num(id), pinned === undefined ? undefined : flag(pinned))
   )
+  /* ---- big groups: a whole strip of tabs at a time ---- */
+  ipcMain.handle('space:new', (event, name?: unknown) =>
+    current(event).newSpace(name === undefined ? undefined : str(name, 40))
+  )
+  ipcMain.handle('space:switch', (event, id: unknown) => current(event).switchSpace(num(id)))
+  ipcMain.handle('space:edit', (event, id: unknown, patch: unknown) => {
+    const data = (patch ?? {}) as { name?: unknown; colour?: unknown }
+    current(event).editSpace(num(id), {
+      name: data.name === undefined ? undefined : str(data.name, 40),
+      colour: data.colour === undefined ? undefined : str(data.colour, 9)
+    })
+  })
+  ipcMain.handle('space:close', (event, id: unknown) => current(event).closeSpace(num(id)))
+
   ipcMain.handle('tab:group-new', (event, id: unknown, name?: unknown) =>
     current(event).createGroup(num(id), name === undefined ? undefined : str(name, 40))
   )

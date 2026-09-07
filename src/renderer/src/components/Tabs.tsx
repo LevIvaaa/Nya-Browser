@@ -1,6 +1,6 @@
 import { t } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
-import type { InternalPage, Settings, TabGroup, TabState } from '../../../shared/types'
+import type { InternalPage, Settings, TabGroup, TabSpace, TabState } from '../../../shared/types'
 import { ChevronDown, Clock, Cross, Download, Gear, Globe, Key, Pin, Plus, Sleep, Star, Volume, VolumeOff } from './Icons'
 import { cx } from './ui'
 
@@ -455,10 +455,12 @@ type Reorder = ReturnType<typeof useReorder>
 export function TabStrip({
   tabs,
   groups,
+  spaces,
   settings
 }: {
   tabs: TabState[]
   groups: TabGroup[]
+  spaces: TabSpace[]
   settings: Settings
 }) {
   const reorder = useReorder()
@@ -470,7 +472,7 @@ export function TabStrip({
       onDragEnd={reorder.onDragEnd}
       onDoubleClick={() => window.browser.maximize()}
     >
-      <TabsButton count={tabs.length} />
+      <TabsButton count={tabs.length} space={spaces.find((item) => item.active)} />
       <div className="flex min-w-0 items-center gap-1" style={{ flex: '0 1 auto' }}>
         {rows.map((row) =>
           row.kind === 'group' ? (
@@ -514,10 +516,10 @@ export function TabStrip({
  * them. Ten tabs fit across a window and thirty do not, and past that point
  * the strip is favicons and guesswork.
  */
-function TabsButton({ count }: { count: number }) {
+function TabsButton({ count, space }: { count: number; space?: TabSpace }) {
   return (
     <button
-      className="no-drag flex h-7 shrink-0 items-center gap-1 rounded-[9px] px-1.5 text-2xs font-semibold text-dim hover:bg-[var(--surface-hover)]"
+      className="no-drag flex h-7 shrink-0 items-center gap-1.5 rounded-[9px] px-1.5 text-2xs font-semibold text-dim hover:bg-[var(--surface-hover)]"
       title={t('Все вкладки и группы')}
       aria-label={t('Все вкладки и группы')}
       onClick={(event) => {
@@ -525,6 +527,12 @@ function TabsButton({ count }: { count: number }) {
         void window.browser.setOverlay(`tabs-panel:${Math.round(box.left)}`)
       }}
     >
+      {/* Which big group these tabs belong to, when there is more than the
+          one everything starts in. */}
+      {space?.colour && (
+        <span className="h-2 w-2 rounded-pill" style={{ background: space.colour }} />
+      )}
+      {space?.name && <span className="max-w-[120px] truncate">{space.name}</span>}
       <span className="tabular-nums">{count}</span>
       <ChevronDown width={11} height={11} />
     </button>

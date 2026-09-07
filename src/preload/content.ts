@@ -140,11 +140,108 @@ function noFederatedChooser() {
   }
 }
 
+/**
+ * YouTube without the ads that arrive inside the video's own response.
+ *
+ * Two halves, because either alone leaves something through. The player asks
+ * for a description of what to play; that answer carries the ad breaks, and
+ * they are removed from it as it arrives — from the page's first copy and from
+ * every later request. Then, for anything the first half missed, an ad that is
+ * actually playing is skipped: the button if there is one, otherwise by moving
+ * to the end of it, which is what the button does anyway.
+ *
+ * Nothing here touches the video itself; the fields removed are the ones whose
+ * names say what they hold.
+ */
+function youtubeWithoutAds() {
+  const AD_FIELDS = ['adPlacements', 'playerAds', 'adSlots', 'adBreakHeartbeatParams']
+
+  const strip = (value: unknown): unknown => {
+    if (!value || typeof value !== 'object') return value
+    const record = value as Record<string, unknown>
+    for (const field of AD_FIELDS) if (field in record) delete record[field]
+    if (record.playerResponse) strip(record.playerResponse)
+    if (Array.isArray(record.onResponseReceivedActions)) {
+      for (const item of record.onResponseReceivedActions) strip(item)
+    }
+    return value
+  }
+
+  // The copy the page is built with, before any script reads it.
+  try {
+    let held: unknown
+    Object.defineProperty(window, 'ytInitialPlayerResponse', {
+      configurable: true,
+      get: () => held,
+      set: (value) => {
+        held = strip(value)
+      }
+    })
+  } catch {
+    /* a page that defined it first keeps its own */
+  }
+
+  // And every copy fetched afterwards, which is how the rest of a session's
+  // videos arrive.
+  const realFetch = window.fetch
+  window.fetch = async function (this: unknown, ...args: Parameters<typeof fetch>) {
+    const response = await realFetch.apply(this as never, args)
+    const url = String(args[0] instanceof Request ? args[0].url : args[0] ?? '')
+    if (!/\/youtubei\/v1\/(player|next|reel)/.test(url)) return response
+    try {
+      const text = await response.clone().text()
+      const parsed = strip(JSON.parse(text))
+      return new Response(JSON.stringify(parsed), {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers
+      })
+    } catch {
+      return response
+    }
+  } as typeof fetch
+
+  /** An ad that started anyway: end it. */
+  const skip = () => {
+    const player = document.querySelector('.html5-video-player')
+    if (!player || !player.classList.contains('ad-showing')) return
+    const button = document.querySelector<HTMLElement>(
+      '.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button'
+    )
+    if (button) return button.click()
+    const video = document.querySelector<HTMLVideoElement>('video.html5-main-video')
+    if (video && Number.isFinite(video.duration) && video.duration > 0) {
+      video.currentTime = video.duration
+    }
+  }
+
+  const watch = () => {
+    skip()
+    const observer = new MutationObserver(skip)
+    observer.observe(document.documentElement, {
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class']
+    })
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', watch, { once: true })
+  } else {
+    watch()
+  }
+}
 if (/^https?:$/.test(location.protocol)) {
   try {
     contextBridge.executeInMainWorld({ func: chromeShapes })
     contextBridge.executeInMainWorld({ func: noUnaskedPasskeyPrompt })
     contextBridge.executeInMainWorld({ func: noFederatedChooser })
+    // Only where it applies, and only while the blocker is on: this is the
+    // blocker doing its job by other means, not a thing of its own.
+    if (/(^|\.)(youtube\.com|youtube-nocookie\.com)$/.test(location.hostname)) {
+      if (ipcRenderer.sendSync('ads:on') === true) {
+        contextBridge.executeInMainWorld({ func: youtubeWithoutAds })
+      }
+    }
   } catch {
     /* a page that refuses the call keeps the empty object; nothing else breaks */
   }

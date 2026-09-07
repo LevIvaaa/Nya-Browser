@@ -23,7 +23,7 @@ import type { UpdateState } from '../../shared/types'
  * itself stays visible underneath.
  */
 export default function OverlayApp() {
-  const { settings, profiles, active, engine, groups, tabs, appCandidate, autofill, savePassword } =
+  const { settings, profiles, active, engine, groups, spaces, tabs, appCandidate, autofill, savePassword } =
     useBrowser()
   const [mode, setMode] = useState<string | null>(null)
   const [update, setUpdate] = useState<UpdateState | null>(null)
@@ -78,6 +78,7 @@ export default function OverlayApp() {
         <TabsPanel
           tabs={tabs}
           groups={groups}
+          spaces={spaces}
           x={Number(mode.slice('tabs-panel:'.length)) || 0}
           onClose={close}
         />

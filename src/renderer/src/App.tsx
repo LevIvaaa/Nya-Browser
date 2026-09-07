@@ -23,7 +23,7 @@ type Overlay = 'menu' | 'profiles' | 'update' | null
 export default function App() {
   const state = useBrowser()
   const {
-    tabs, groups, appCandidate, active, settings, engines, engine, profiles, profile, bookmarks, bookmarked,
+    tabs, groups, spaces, appCandidate, active, settings, engines, engine, profiles, profile, bookmarks, bookmarked,
     downloads, activeDownloads, closed, stats, win, permission,
     edge, toasts, patch, refreshBookmarks, setPermission, setAutofill, setSavePassword
   } = state
@@ -302,7 +302,9 @@ export default function App() {
               />
             </div>
 
-            {!vertical && !appWindow && <TabStrip tabs={tabs} groups={groups} settings={settings} />}
+            {!vertical && !appWindow && (
+              <TabStrip tabs={tabs} groups={groups} spaces={spaces} settings={settings} />
+            )}
             {pinnedBookmarks.length > 0 && (
               <BookmarksBar items={pinnedBookmarks} onManage={() => toggleView('bookmarks')} />
             )}
