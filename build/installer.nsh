@@ -64,6 +64,9 @@ ManifestDPIAware true
 !define NYA_DIM_L   "4A4C57"
 !define NYA_TEXT_L  "14151C"
 !define NYA_FAINT_L "80828C"
+; White stays white: it is the text on the accent button, and the accent is
+; the same shade of purple in both.
+!define NYA_WHITE_L "FFFFFF"
 
 ; The accent and the progress track as COLORREF (0x00BBGGRR), which is what
 ; the progress bar messages want.
@@ -74,12 +77,29 @@ ManifestDPIAware true
 
 Var nyaTheme          ; "light" or "dark"
 Var nyaBackdrop       ; the image control holding the page artwork
-Var nyaBg
-Var nyaDim
-Var nyaText
-Var nyaFaint
-Var nyaTrackBgr
-Var nyaAccentBgr
+
+; Text on the artwork, by the part it plays: DIM, TEXT, FAINT, WHITE. Both
+; constants are compiled in and the theme decides which one is used, because
+; SetCtlColors cannot be handed a variable — it would take the dollar sign
+; for a colour and paint black.
+!macro NyaInk HWND ROLE
+  ${If} $nyaTheme == "light"
+    SetCtlColors ${HWND} ${NYA_${ROLE}_L} transparent
+  ${Else}
+    SetCtlColors ${HWND} ${NYA_${ROLE}} transparent
+  ${EndIf}
+!macroend
+!define ink "!insertmacro NyaInk"
+
+; A whole surface: dim text on the page background.
+!macro NyaPaper HWND
+  ${If} $nyaTheme == "light"
+    SetCtlColors ${HWND} ${NYA_DIM_L} ${NYA_BG_L}
+  ${Else}
+    SetCtlColors ${HWND} ${NYA_DIM} ${NYA_BG}
+  ${EndIf}
+!macroend
+!define paper "!insertmacro NyaPaper"
 
 !define /ifndef PBM_SETBARCOLOR 0x0409
 !define /ifndef PBM_SETBKCOLOR  0x2001
@@ -225,13 +245,13 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
 ; GDI draws a label from the top of its box, so a box the height of the
 ; design's line clips every descender - the tail of the y in Nya was the
 ; first to go. Each label gets air above and below and is centred in it.
-!macro NyaText OUT PARENT STYLE X Y W H FONT COLOUR
+!macro NyaText OUT PARENT STYLE X Y W H FONT ROLE
   IntOp $R4 ${Y} - ${NYA_TXT_PAD}
   IntOp $R5 ${H} + ${NYA_TXT_PAD}
   IntOp $R5 $R5 + ${NYA_TXT_PAD}
   ${control} ${OUT} ${PARENT} ${STYLE} ${X} $R4 ${W} $R5 ""
   SendMessage ${OUT} ${WM_SETFONT} ${FONT} 1
-  SetCtlColors ${OUT} ${COLOUR} transparent
+  ${ink} ${OUT} ${ROLE}
 !macroend
 !define text "!insertmacro NyaText"
 
@@ -381,7 +401,7 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
   System::Call 'dwmapi::DwmSetWindowAttribute(p $HWNDPARENT, i 2, p r2, i 4)'
   System::Free $2
 
-  SetCtlColors $HWNDPARENT $nyaDim $nyaBg
+  ${paper} $HWNDPARENT
 
 !macroend
 
@@ -441,7 +461,7 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
   ; leaves nsDialogs without the layout it measures against and the page is
   ; dropped — which is how the uninstaller ended up on MUI's own finish screen.
   !insertmacro NyaHideChrome
-  SetCtlColors $nyaDialog $nyaDim $nyaBg
+  ${paper} $nyaDialog
   System::Call 'user32::MoveWindow(p $nyaDialog, i 0, i 0, i $nyaW, i $nyaH, i 1)'
   ${backdrop} $nyaDialog "${FILE}"
 !macroend
@@ -466,7 +486,7 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
     Return
   ${EndIf}
 
-  SetCtlColors $R8 $nyaDim $nyaBg
+  ${paper} $R8
   System::Call 'user32::MoveWindow(p $R8, i 0, i 0, i $nyaW, i $nyaH, i 1)'
 
   GetDlgItem $R9 $R8 1016     ; the log
@@ -480,8 +500,13 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
 
   GetDlgItem $R9 $R8 1004
   System::Call 'uxtheme::SetWindowTheme(p $R9, w " ", w " ")'
-  SendMessage $R9 ${PBM_SETBARCOLOR} 0 $nyaAccentBgr
-  SendMessage $R9 ${PBM_SETBKCOLOR} 0 $nyaTrackBgr
+  ${If} $nyaTheme == "light"
+    SendMessage $R9 ${PBM_SETBARCOLOR} 0 ${NYA_ACCENT_BGR_L}
+    SendMessage $R9 ${PBM_SETBKCOLOR} 0 ${NYA_TRACK_BGR_L}
+  ${Else}
+    SendMessage $R9 ${PBM_SETBARCOLOR} 0 ${NYA_ACCENT_BGR}
+    SendMessage $R9 ${PBM_SETBKCOLOR} 0 ${NYA_TRACK_BGR}
+  ${EndIf}
   ${px} $0 ${${RECT}_X}
   ${px} $1 ${${RECT}_Y}
   ${px} $2 ${${RECT}_W}
@@ -505,27 +530,6 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
     StrCpy $nyaTheme "light"
   ${Else}
     StrCpy $nyaTheme "dark"
-  ${EndIf}
-  FunctionEnd
-
-  Function nyaApplyTheme
-  ; Which theme to draw. The installer follows Windows; the uninstaller
-  ; follows whatever the browser was installed as, since that is the one the
-  ; person chose and has been looking at ever since.
-  ${If} $nyaTheme == "light"
-    StrCpy $nyaBg    "${NYA_BG_L}"
-    StrCpy $nyaDim   "${NYA_DIM_L}"
-    StrCpy $nyaText  "${NYA_TEXT_L}"
-    StrCpy $nyaFaint "${NYA_FAINT_L}"
-    StrCpy $nyaAccentBgr "${NYA_ACCENT_BGR_L}"
-    StrCpy $nyaTrackBgr  "${NYA_TRACK_BGR_L}"
-  ${Else}
-    StrCpy $nyaBg    "${NYA_BG}"
-    StrCpy $nyaDim   "${NYA_DIM}"
-    StrCpy $nyaText  "${NYA_TEXT}"
-    StrCpy $nyaFaint "${NYA_FAINT}"
-    StrCpy $nyaAccentBgr "${NYA_ACCENT_BGR}"
-    StrCpy $nyaTrackBgr  "${NYA_TRACK_BGR}"
   ${EndIf}
   FunctionEnd
 
@@ -591,21 +595,20 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
     ${Else}
       StrCpy $nyaTheme "light"
     ${EndIf}
-    Call nyaApplyTheme
     Call nyaExtractArt
 
     ${scaledImage} $nyaBackdrop "welcome.bmp" $nyaW $nyaH
-    SetCtlColors $nyaDialog $nyaDim $nyaBg
-    SetCtlColors $HWNDPARENT $nyaDim $nyaBg
-    SetCtlColors $nyaPathLabel $nyaDim transparent
-    SetCtlColors $nyaTagline $nyaDim transparent
-    SetCtlColors $nyaInstallLabel ${NYA_WHITE} transparent
-    SetCtlColors $nyaPathTitle $nyaFaint transparent
-    SetCtlColors $nyaBrowseLabel $nyaText transparent
-    SetCtlColors $nyaDesktopLabel $nyaDim transparent
-    SetCtlColors $nyaDefaultLabel $nyaDim transparent
-    SetCtlColors $nyaVersionLabel $nyaFaint transparent
-    SetCtlColors $nyaLangLabel $nyaDim transparent
+    ${paper} $nyaDialog
+    ${paper} $HWNDPARENT
+    ${ink} $nyaPathLabel DIM
+    ${ink} $nyaTagline DIM
+    ${ink} $nyaInstallLabel WHITE
+    ${ink} $nyaPathTitle FAINT
+    ${ink} $nyaBrowseLabel TEXT
+    ${ink} $nyaDesktopLabel DIM
+    ${ink} $nyaDefaultLabel DIM
+    ${ink} $nyaVersionLabel FAINT
+    ${ink} $nyaLangLabel DIM
 
     ; The checkboxes and the language pill are patches of artwork of their
     ; own, so they are redrawn from the new set as well.
@@ -621,7 +624,10 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
     ${EndIf}
     Call nyaLangFit
 
-    System::Call 'user32::InvalidateRect(p $nyaDialog, p 0, i 1)'
+    ; The labels are windows of their own, so the dialog being invalidated
+    ; is not enough — they are redrawn with it, or half the page keeps the
+    ; colours of the theme that just left.
+    System::Call 'user32::RedrawWindow(p $nyaDialog, p 0, p 0, i 0x0585)'
   FunctionEnd
 
   Function nyaInitChrome
@@ -644,7 +650,7 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
       ${ART_WELCOME_PATH_X} ${ART_WELCOME_PATH_Y} \
       ${ART_WELCOME_PATH_W} ${ART_WELCOME_PATH_H} "$INSTDIR"
     SendMessage $nyaPathLabel ${WM_SETFONT} $nyaFontPath 1
-    SetCtlColors $nyaPathLabel $nyaDim transparent
+    ${ink} $nyaPathLabel DIM
 
     StrCpy $nyaDesktop "1"
     StrCpy $nyaDefault "1"
@@ -655,13 +661,13 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
 
     ; Everything the design used to have baked in. The artwork keeps the
     ; layout; these carry the words, so the page can speak any language.
-    ${text} $nyaTagline $nyaDialog ${NYA_TXT_C}       0 ${ART_WELCOME_TAGLINE_Y} 640 ${ART_WELCOME_TAGLINE_H}       $nyaFontBody $nyaDim
-    ${text} $nyaInstallLabel $nyaDialog ${NYA_TXT_CV}       ${ART_WELCOME_INSTALL_X} ${ART_WELCOME_INSTALL_Y}       ${ART_WELCOME_INSTALL_W} ${ART_WELCOME_INSTALL_H} $nyaFontBtn ${NYA_WHITE}
-    ${text} $nyaPathTitle $nyaDialog ${NYA_TXT_L}       ${ART_WELCOME_PATH_LABEL_X} ${ART_WELCOME_PATH_LABEL_Y}       300 ${ART_WELCOME_PATH_LABEL_H} $nyaFontSmall $nyaFaint
-    ${text} $nyaBrowseLabel $nyaDialog ${NYA_TXT_CV}       ${ART_WELCOME_BROWSE_X} ${ART_WELCOME_BROWSE_Y}       ${ART_WELCOME_BROWSE_W} ${ART_WELCOME_BROWSE_H} $nyaFontBtnSm $nyaText
-    ${text} $nyaDesktopLabel $nyaDialog ${NYA_TXT_LV}       ${ART_WELCOME_LABEL_DESKTOP_X} ${ART_WELCOME_LABEL_DESKTOP_Y}       ${ART_WELCOME_LABEL_DESKTOP_W} ${ART_WELCOME_LABEL_DESKTOP_H}       $nyaFontPath $nyaDim
-    ${text} $nyaDefaultLabel $nyaDialog ${NYA_TXT_LV}       ${ART_WELCOME_LABEL_DEFAULT_X} ${ART_WELCOME_LABEL_DEFAULT_Y}       ${ART_WELCOME_LABEL_DEFAULT_W} ${ART_WELCOME_LABEL_DEFAULT_H}       $nyaFontPath $nyaDim
-    ${text} $nyaVersionLabel $nyaDialog ${NYA_TXT_L}       ${ART_WELCOME_VERSION_LINE_X} ${ART_WELCOME_VERSION_LINE_Y}       400 ${ART_WELCOME_VERSION_LINE_H} $nyaFontSmall $nyaFaint
+    ${text} $nyaTagline $nyaDialog ${NYA_TXT_C}       0 ${ART_WELCOME_TAGLINE_Y} 640 ${ART_WELCOME_TAGLINE_H}       $nyaFontBody DIM
+    ${text} $nyaInstallLabel $nyaDialog ${NYA_TXT_CV}       ${ART_WELCOME_INSTALL_X} ${ART_WELCOME_INSTALL_Y}       ${ART_WELCOME_INSTALL_W} ${ART_WELCOME_INSTALL_H} $nyaFontBtn WHITE
+    ${text} $nyaPathTitle $nyaDialog ${NYA_TXT_L}       ${ART_WELCOME_PATH_LABEL_X} ${ART_WELCOME_PATH_LABEL_Y}       300 ${ART_WELCOME_PATH_LABEL_H} $nyaFontSmall FAINT
+    ${text} $nyaBrowseLabel $nyaDialog ${NYA_TXT_CV}       ${ART_WELCOME_BROWSE_X} ${ART_WELCOME_BROWSE_Y}       ${ART_WELCOME_BROWSE_W} ${ART_WELCOME_BROWSE_H} $nyaFontBtnSm TEXT
+    ${text} $nyaDesktopLabel $nyaDialog ${NYA_TXT_LV}       ${ART_WELCOME_LABEL_DESKTOP_X} ${ART_WELCOME_LABEL_DESKTOP_Y}       ${ART_WELCOME_LABEL_DESKTOP_W} ${ART_WELCOME_LABEL_DESKTOP_H}       $nyaFontPath DIM
+    ${text} $nyaDefaultLabel $nyaDialog ${NYA_TXT_LV}       ${ART_WELCOME_LABEL_DEFAULT_X} ${ART_WELCOME_LABEL_DEFAULT_Y}       ${ART_WELCOME_LABEL_DEFAULT_W} ${ART_WELCOME_LABEL_DEFAULT_H}       $nyaFontPath DIM
+    ${text} $nyaVersionLabel $nyaDialog ${NYA_TXT_L}       ${ART_WELCOME_VERSION_LINE_X} ${ART_WELCOME_VERSION_LINE_Y}       400 ${ART_WELCOME_VERSION_LINE_H} $nyaFontSmall FAINT
 
     ; The language pill: a patch of artwork with the pill drawn on it, a
     ; native STATIC for the name, and a click zone over the two. All three are
@@ -673,7 +679,7 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
       ${ART_WELCOME_LANG_STRIP_W} ${ART_WELCOME_LANG_STRIP_H} ""
     ${text} $nyaLangLabel $nyaDialog ${NYA_TXT_L} \
       ${ART_WELCOME_LANG_X} ${ART_WELCOME_LANG_Y} \
-      ${ART_WELCOME_LANG_W} ${ART_WELCOME_LANG_H} $nyaFontSmall $nyaDim
+      ${ART_WELCOME_LANG_W} ${ART_WELCOME_LANG_H} $nyaFontSmall DIM
     ${hit} $nyaDialog ART_WELCOME_LANG_HIT nyaLangClicked
     StrCpy $nyaLangHit $R1
 
@@ -1790,11 +1796,11 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
     ${If} ${isUpdated}
       !insertmacro NyaProgressBody "updating.bmp" ART_UPDATING_PROGRESS
 
-      ${text} $R6 $R8 ${NYA_TXT_C} 0 ${ART_UPDATING_TITLE_Y} 640         ${ART_UPDATING_TITLE_H} $nyaFontH20 $nyaText
+      ${text} $R6 $R8 ${NYA_TXT_C} 0 ${ART_UPDATING_TITLE_Y} 640         ${ART_UPDATING_TITLE_H} $nyaFontH20 TEXT
       ${setstr} $R6 "updating.title"
-      ${text} $R6 $R8 ${NYA_TXT_L} ${ART_UPDATING_SUBTITLE_X}         ${ART_UPDATING_SUBTITLE_Y} 260 ${ART_UPDATING_SUBTITLE_H}         $nyaFontSmall $nyaFaint
+      ${text} $R6 $R8 ${NYA_TXT_L} ${ART_UPDATING_SUBTITLE_X}         ${ART_UPDATING_SUBTITLE_Y} 260 ${ART_UPDATING_SUBTITLE_H}         $nyaFontSmall FAINT
       ${setstr} $R6 "updating.subtitle"
-      ${text} $R6 $R8 ${NYA_TXT_L} ${ART_UPDATING_HINT_X} ${ART_UPDATING_HINT_Y}         540 ${ART_UPDATING_HINT_H} $nyaFontPath $nyaDim
+      ${text} $R6 $R8 ${NYA_TXT_L} ${ART_UPDATING_HINT_X} ${ART_UPDATING_HINT_Y}         540 ${ART_UPDATING_HINT_H} $nyaFontPath DIM
       ${setstr} $R6 "updating.hint"
 
       ; The design shows which version is replacing which, and only the
@@ -1808,15 +1814,15 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
         ${ART_UPDATING_VERSION_Y} ${ART_UPDATING_VERSION_W} \
         ${ART_UPDATING_VERSION_H} "$R0"
       SendMessage $R9 ${WM_SETFONT} $nyaFontSmall 1
-      SetCtlColors $R9 $nyaDim transparent
+      ${ink} $R9 DIM
     ${Else}
       !insertmacro NyaProgressBody "installing.bmp" ART_INSTALLING_PROGRESS
 
-      ${text} $R6 $R8 ${NYA_TXT_C} 0 ${ART_INSTALLING_TITLE_Y} 640         ${ART_INSTALLING_TITLE_H} $nyaFontH20 $nyaText
+      ${text} $R6 $R8 ${NYA_TXT_C} 0 ${ART_INSTALLING_TITLE_Y} 640         ${ART_INSTALLING_TITLE_H} $nyaFontH20 TEXT
       ${setstr} $R6 "installing.title"
-      ${text} $R6 $R8 ${NYA_TXT_C} 0 ${ART_INSTALLING_SUBTITLE_Y} 640         ${ART_INSTALLING_SUBTITLE_H} $nyaFontPath $nyaDim
+      ${text} $R6 $R8 ${NYA_TXT_C} 0 ${ART_INSTALLING_SUBTITLE_Y} 640         ${ART_INSTALLING_SUBTITLE_H} $nyaFontPath DIM
       ${setstr} $R6 "installing.subtitle"
-      ${text} $R6 $R8 ${NYA_TXT_L} ${ART_INSTALLING_HINT_X}         ${ART_INSTALLING_HINT_Y} 570 ${ART_INSTALLING_HINT_H}         $nyaFontPath $nyaDim
+      ${text} $R6 $R8 ${NYA_TXT_L} ${ART_INSTALLING_HINT_X}         ${ART_INSTALLING_HINT_Y} 570 ${ART_INSTALLING_HINT_H}         $nyaFontPath DIM
       ${setstr} $R6 "installing.hint"
     ${EndIf}
   FunctionEnd
@@ -1827,13 +1833,13 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
     ${page} "installed.bmp"
     Call nyaLangIniPath
 
-    ${text} $R6 $nyaDialog ${NYA_TXT_C} 0 ${ART_INSTALLED_TITLE_Y} 640       ${ART_INSTALLED_TITLE_H} $nyaFontH24 $nyaText
+    ${text} $R6 $nyaDialog ${NYA_TXT_C} 0 ${ART_INSTALLED_TITLE_Y} 640       ${ART_INSTALLED_TITLE_H} $nyaFontH24 TEXT
     ${setstr} $R6 "installed.title"
-    ${text} $R6 $nyaDialog ${NYA_TXT_C} 0 ${ART_INSTALLED_SUBTITLE_Y} 640       ${ART_INSTALLED_SUBTITLE_H} $nyaFontBody $nyaDim
+    ${text} $R6 $nyaDialog ${NYA_TXT_C} 0 ${ART_INSTALLED_SUBTITLE_Y} 640       ${ART_INSTALLED_SUBTITLE_H} $nyaFontBody DIM
     ${setstr} $R6 "installed.subtitle"
-    ${text} $R6 $nyaDialog ${NYA_TXT_CV} ${ART_INSTALLED_LAUNCH_X}       ${ART_INSTALLED_LAUNCH_Y} ${ART_INSTALLED_LAUNCH_W}       ${ART_INSTALLED_LAUNCH_H} $nyaFontBtn ${NYA_WHITE}
+    ${text} $R6 $nyaDialog ${NYA_TXT_CV} ${ART_INSTALLED_LAUNCH_X}       ${ART_INSTALLED_LAUNCH_Y} ${ART_INSTALLED_LAUNCH_W}       ${ART_INSTALLED_LAUNCH_H} $nyaFontBtn WHITE
     ${setstr} $R6 "installed.launch"
-    ${text} $R6 $nyaDialog ${NYA_TXT_L} ${ART_INSTALLED_HINT_X}       ${ART_INSTALLED_HINT_Y} 500 ${ART_INSTALLED_HINT_H} $nyaFontPath $nyaDim
+    ${text} $R6 $nyaDialog ${NYA_TXT_L} ${ART_INSTALLED_HINT_X}       ${ART_INSTALLED_HINT_Y} 500 ${ART_INSTALLED_HINT_H} $nyaFontPath DIM
     ${setstr} $R6 "installed.hint"
 
     ${hit} $nyaDialog ART_INSTALLED_LAUNCH nyaLaunchClicked
@@ -1864,26 +1870,26 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
     ${page} "un-confirm.bmp"
 
     ${text} $R6 $nyaDialog ${NYA_TXT_C} 0 ${ART_UN_CONFIRM_TITLE_Y} 640 \
-      ${ART_UN_CONFIRM_TITLE_H} $nyaFontH26 $nyaText
+      ${ART_UN_CONFIRM_TITLE_H} $nyaFontH26 TEXT
     ${setstr} $R6 "unconfirm.title"
     ${text} $R6 $nyaDialog ${NYA_TXT_C} 0 ${ART_UN_CONFIRM_SUBTITLE_Y} 640 \
-      ${ART_UN_CONFIRM_SUBTITLE_H} $nyaFontBody $nyaDim
+      ${ART_UN_CONFIRM_SUBTITLE_H} $nyaFontBody DIM
     ${setstr} $R6 "unconfirm.subtitle"
     ${text} $R6 $nyaDialog ${NYA_TXT_CV} ${ART_UN_CONFIRM_REMOVE_X} \
       ${ART_UN_CONFIRM_REMOVE_Y} ${ART_UN_CONFIRM_REMOVE_W} \
-      ${ART_UN_CONFIRM_REMOVE_H} $nyaFontBtn ${NYA_WHITE}
+      ${ART_UN_CONFIRM_REMOVE_H} $nyaFontBtn WHITE
     ${setstr} $R6 "unconfirm.remove"
     ${text} $R6 $nyaDialog ${NYA_TXT_CV} ${ART_UN_CONFIRM_CANCEL_X} \
       ${ART_UN_CONFIRM_CANCEL_Y} ${ART_UN_CONFIRM_CANCEL_W} \
-      ${ART_UN_CONFIRM_CANCEL_H} $nyaFontBtn $nyaText
+      ${ART_UN_CONFIRM_CANCEL_H} $nyaFontBtn TEXT
     ${setstr} $R6 "unconfirm.cancel"
     ${text} $R6 $nyaDialog ${NYA_TXT_LV} ${ART_UN_CONFIRM_LABEL_WIPE_X} \
       ${ART_UN_CONFIRM_LABEL_WIPE_Y} 500 ${ART_UN_CONFIRM_LABEL_WIPE_H} \
-      $nyaFontPath $nyaDim
+      $nyaFontPath DIM
     ${setstr} $R6 "unconfirm.wipe"
     ${text} $R6 $nyaDialog ${NYA_TXT_L} ${ART_UN_CONFIRM_VERSION_LINE_X} \
       ${ART_UN_CONFIRM_VERSION_LINE_Y} 240 ${ART_UN_CONFIRM_VERSION_LINE_H} \
-      $nyaFontSmall $nyaFaint
+      $nyaFontSmall FAINT
     ${str} $R7 "unconfirm.version"
     ${un.WordReplace} "$R7" "{v}" "${VERSION}" "+" $R7
     SendMessage $R6 ${WM_SETTEXT} 0 "STR:$R7"
@@ -2008,17 +2014,17 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
     ${page} "un-done.bmp"
 
     ${text} $R6 $nyaDialog ${NYA_TXT_C} 0 ${ART_UN_DONE_TITLE_Y} 640 \
-      ${ART_UN_DONE_TITLE_H} $nyaFontH22 $nyaText
+      ${ART_UN_DONE_TITLE_H} $nyaFontH22 TEXT
     ${setstr} $R6 "undone.title"
     ${text} $R6 $nyaDialog ${NYA_TXT_C} 0 ${ART_UN_DONE_SUBTITLE_Y} 640 \
-      ${ART_UN_DONE_SUBTITLE_H} $nyaFontBody $nyaDim
+      ${ART_UN_DONE_SUBTITLE_H} $nyaFontBody DIM
     ${setstr} $R6 "undone.subtitle"
     ${text} $R6 $nyaDialog ${NYA_TXT_CV} ${ART_UN_DONE_CLOSE_X} \
       ${ART_UN_DONE_CLOSE_Y} ${ART_UN_DONE_CLOSE_W} ${ART_UN_DONE_CLOSE_H} \
-      $nyaFontBtn $nyaText
+      $nyaFontBtn TEXT
     ${setstr} $R6 "undone.close"
     ${text} $R6 $nyaDialog ${NYA_TXT_L} ${ART_UN_DONE_HINT_X} \
-      ${ART_UN_DONE_HINT_Y} 500 ${ART_UN_DONE_HINT_H} $nyaFontPath $nyaDim
+      ${ART_UN_DONE_HINT_Y} 500 ${ART_UN_DONE_HINT_H} $nyaFontPath DIM
     ${setstr} $R6 "undone.hint"
 
     ${hit} $nyaDialog ART_UN_DONE_CLOSE un.nyaDoneCloseClicked
@@ -2046,21 +2052,6 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
   ; Which theme to draw. The installer follows Windows; the uninstaller
   ; follows whatever the browser was installed as, since that is the one the
   ; person chose and has been looking at ever since.
-  ${If} $nyaTheme == "light"
-    StrCpy $nyaBg    "${NYA_BG_L}"
-    StrCpy $nyaDim   "${NYA_DIM_L}"
-    StrCpy $nyaText  "${NYA_TEXT_L}"
-    StrCpy $nyaFaint "${NYA_FAINT_L}"
-    StrCpy $nyaAccentBgr "${NYA_ACCENT_BGR_L}"
-    StrCpy $nyaTrackBgr  "${NYA_TRACK_BGR_L}"
-  ${Else}
-    StrCpy $nyaBg    "${NYA_BG}"
-    StrCpy $nyaDim   "${NYA_DIM}"
-    StrCpy $nyaText  "${NYA_TEXT}"
-    StrCpy $nyaFaint "${NYA_FAINT}"
-    StrCpy $nyaAccentBgr "${NYA_ACCENT_BGR}"
-    StrCpy $nyaTrackBgr  "${NYA_TRACK_BGR}"
-  ${EndIf}
   ; The artwork lives in the folder this program is about to delete, so a copy
   ; goes to the temp folder before any page needs it.
   InitPluginsDir
@@ -2085,7 +2076,6 @@ Var nyaUnBar          ; MUI's progress bar after it is re-hung on the window
 
   ; Which theme the machine is in, and the artwork drawn for it.
   Call nyaReadOsTheme
-  Call nyaApplyTheme
   Call nyaExtractArt
 
   ; Read before the install section overwrites it, so the update window can

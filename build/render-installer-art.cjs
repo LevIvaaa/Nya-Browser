@@ -91,11 +91,29 @@ const LIGHT = {
   // left alone: they are accents and status colours, and they read on both.
 }
 
+/**
+ * The glows behind the design are drawn with `screen`, which lightens what is
+ * under them — over near-black that is the purple haze the whole page is built
+ * on, and over white it is white, which is why the light version came out
+ * blank. `multiply` is the same idea the other way up: the colour tints the
+ * paper instead of lifting the ink, and the two look like one design again.
+ */
+const LIGHT_CSS =
+  THEME === 'light'
+    ? '<style>.blob { mix-blend-mode: multiply !important; }</style>'
+    : ''
+
 const reported = new Set()
 
 /** The same markup with the light palette in it. */
 function toLight(html) {
   return html
+    // A wash that tints white paper needs more of itself than one lifting a
+    // near-black background, so each glow is turned up by half and capped
+    // where it would start looking like a stain.
+    .replace(/(class="blob"[^>]*?opacity:\s*)([0-9.]+)/g, (whole, head, value) =>
+      head + Math.min(0.62, Number(value) * 1.5).toFixed(3)
+    )
     .replace(/#[0-9a-fA-F]{6}/g, (hex) => LIGHT[hex.toLowerCase()] ?? hex)
     .replace(/rgba\(([^)]*)\)/g, (whole, inside) => {
       const key = inside.split(',').map((part) => part.trim()).join(',')
@@ -242,7 +260,7 @@ function toStandalone(file) {
     // The design was drawn against a sample version.
     .replace(/1\.0\.0/g, version)
 
-  const page = `<!doctype html><html><head><meta charset="utf-8">${style[1]}</head><body>${markup}</body></html>`
+  const page = `<!doctype html><html><head><meta charset="utf-8">${style[1]}${LIGHT_CSS}</head><body>${markup}</body></html>`
   return THEME === 'light' ? toLight(page) : page
 }
 
