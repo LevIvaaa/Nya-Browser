@@ -530,9 +530,21 @@ export function TabStrip({
   useEffect(() => {
     const at = scroller.current?.querySelector('[data-active-tab]')
     at?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
-    measure()
   }, [activeId, tabs.length])
-  // The window being resized changes what fits without anything scrolling.
+
+  // A tab list that changed is measured now and again while it settles: a
+  // closed tab is still on screen, narrowing, for a fifth of a second, and
+  // measuring only at the start of that left an arrow pointing at nothing.
+  // Watched for a moment rather than after every paint — a measurement that
+  // sets state, run after every commit, has nothing to stop it going round.
+  useEffect(() => {
+    measure()
+    const timers = [80, 180, 300, 420].map((after) => window.setTimeout(measure, after))
+    return () => timers.forEach((timer) => window.clearTimeout(timer))
+  }, [tabs.length, rows.length, settings.tabMaxWidth, settings.tabPosition])
+
+  // The window being resized changes what fits without anything scrolling,
+  // and that is not a render, so it is watched for separately.
   useEffect(() => {
     const row = scroller.current
     if (!row) return
@@ -560,20 +572,14 @@ export function TabStrip({
           />
         ))}
       </div>
-      {more.left && (
-        <button
-          className="icon-btn h-6 w-5 shrink-0"
-          title={t('Прокрутить вкладки влево')}
-          aria-label={t('Прокрутить вкладки влево')}
-          onClick={() => slide(-1)}
-        >
-          <ChevronLeft width={13} height={13} />
-        </button>
-      )}
+      {/* The arrows sit over the ends of the run of tabs rather than beside
+          it. In the row they would take twenty pixels from the very width
+          that decides whether they are needed — show one and the tabs fit,
+          hide it and they do not, forever. */}
+      <div className="relative flex min-w-0 items-center" style={{ flex: '0 1 auto' }}>
       <div
         ref={scroller}
         className="no-bar flex min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden"
-        style={{ flex: '0 1 auto' }}
         onScroll={measure}
         // A wheel has one direction and the strip has the other, so whichever
         // way it is turned moves the tabs along — a touchpad's sideways swipe
@@ -615,21 +621,52 @@ export function TabStrip({
           )
         )}
       </div>
-      {more.right && (
-        <button
-          className="icon-btn h-6 w-5 shrink-0"
-          title={t('Прокрутить вкладки вправо')}
-          aria-label={t('Прокрутить вкладки вправо')}
-          onClick={() => slide(1)}
-        >
-          <ChevronRight width={13} height={13} />
-        </button>
-      )}
+      <Edge side="left" shown={more.left} onClick={() => slide(-1)} />
+      <Edge side="right" shown={more.right} onClick={() => slide(1)} />
+      </div>
       <button className="icon-btn shrink-0" title={t('Новая вкладка · Ctrl+T')} onClick={() => window.browser.newTab()}>
         <Plus />
       </button>
       <div className="flex-1" />
     </div>
+  )
+}
+
+/**
+ * One of the two arrows at the ends of a full strip. Always rendered, so the
+ * width of the strip never depends on whether it is showing; it fades in and
+ * out and takes no clicks while it is out.
+ */
+function Edge({
+  side,
+  shown,
+  onClick
+}: {
+  side: 'left' | 'right'
+  shown: boolean
+  onClick: () => void
+}) {
+  const label = side === 'left' ? t('Прокрутить вкладки влево') : t('Прокрутить вкладки вправо')
+  return (
+    <button
+      className="icon-btn absolute top-1/2 h-6 w-6"
+      title={label}
+      aria-label={label}
+      aria-hidden={!shown}
+      tabIndex={shown ? 0 : -1}
+      onClick={onClick}
+      style={{
+        [side]: 0,
+        transform: 'translateY(-50%)',
+        opacity: shown ? 1 : 0,
+        pointerEvents: shown ? 'auto' : 'none',
+        background: 'var(--surface-solid)',
+        boxShadow: 'var(--shadow-sm)',
+        transition: 'opacity var(--t-fast) linear, background var(--t-fast) linear'
+      }}
+    >
+      {side === 'left' ? <ChevronLeft width={13} height={13} /> : <ChevronRight width={13} height={13} />}
+    </button>
   )
 }
 

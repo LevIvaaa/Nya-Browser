@@ -451,6 +451,7 @@ function registerIpc() {
   ipcMain.handle('tab:mute', (event, id: unknown) => current(event).toggleMute(num(id)))
   ipcMain.handle('tab:sleep', (event, id: unknown) => current(event).sleepTab(num(id)))
   ipcMain.handle('tab:reload', (event, id: unknown) => current(event).reloadTab(num(id)))
+  ipcMain.handle('state:snapshot', (event) => current(event).snapshot())
   ipcMain.handle('tab:menu', (event, id: unknown) => current(event).showTabMenu(num(id)))
   ipcMain.handle('tab:pin', (event, id: unknown, pinned?: unknown) =>
     current(event).pinTab(num(id), pinned === undefined ? undefined : flag(pinned))
