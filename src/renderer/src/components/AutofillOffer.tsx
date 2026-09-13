@@ -67,6 +67,94 @@ export const BRAND_COLOURS: Record<string, string> = {
   discover: '#ff6000'
 }
 
+/**
+ * The payment systems, as badges.
+ *
+ * A card is known by its mark long before it is known by its number, and a
+ * grey pill with a word in it is not that mark. Each one here is a small card
+ * of its own: the system's colours, a quiet sheen across the top, a hairline
+ * to lift it off the surface, and inside it either the name in the shape the
+ * system writes it or — where the system is a picture rather than a word —
+ * that picture, drawn plainly.
+ *
+ * Nobody's logotype is reproduced: these are the colours and the geometry
+ * anybody can see on the card in their own pocket, drawn well enough to be
+ * recognised at twenty-eight pixels and no further.
+ */
+const BADGE: Record<
+  string,
+  { from: string; to: string; word?: string; italic?: boolean; size?: number; mark?: 'mastercard' | 'unionpay' }
+> = {
+  visa: { from: '#2b5cd8', to: '#16256e', word: 'VISA', italic: true, size: 11 },
+  mir: { from: '#13b467', to: '#087a42', word: 'МИР', size: 10.5 },
+  amex: { from: '#3a8fe0', to: '#1b5f9e', word: 'AMEX', size: 9.5 },
+  jcb: { from: '#2a6fd0', to: '#0e3f82', word: 'JCB', size: 10.5 },
+  discover: { from: '#ff8a2b', to: '#d85c00', word: 'DISCOVER', size: 6.6 },
+  mastercard: { from: '#2a2b31', to: '#16171b', mark: 'mastercard' },
+  unionpay: { from: '#2a2b31', to: '#16171b', mark: 'unionpay' }
+}
+
+export function BrandBadge({ brand, size = 'sm' }: { brand: string; size?: 'sm' | 'md' }) {
+  const known = BADGE[brand]
+  const width = size === 'md' ? 50 : 44
+  const height = size === 'md' ? 32 : 28
+
+  // A card nobody recognises still gets a card: the shape carries the meaning,
+  // and an empty space where the others have a badge would read as an error.
+  const from = known?.from ?? 'var(--field-idle)'
+  const to = known?.to ?? 'var(--field-idle)'
+
+  return (
+    <span
+      className="relative flex shrink-0 items-center justify-center overflow-hidden"
+      style={{
+        width,
+        height,
+        borderRadius: 7,
+        background: `linear-gradient(145deg, ${from}, ${to})`,
+        boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.16), 0 1px 2px rgba(0,0,0,0.28)'
+      }}
+    >
+      {/* The light that falls across the top of anything held in a hand. */}
+      <span
+        className="pointer-events-none absolute inset-x-0 top-0"
+        style={{
+          height: '52%',
+          background: 'linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0))'
+        }}
+      />
+      {known?.mark === 'mastercard' ? (
+        <svg width={width} height={height} viewBox="0 0 44 28" aria-hidden>
+          <circle cx="18.4" cy="14" r="7.6" fill="#eb001b" />
+          <circle cx="25.6" cy="14" r="7.6" fill="#f79e1b" opacity="0.88" />
+        </svg>
+      ) : known?.mark === 'unionpay' ? (
+        <svg width={width} height={height} viewBox="0 0 44 28" aria-hidden>
+          <path d="M13.6 6.5h7.2l-3 15h-7.2z" fill="#e21836" />
+          <path d="M20.4 6.5h7.2l-3 15h-7.2z" fill="#00447c" />
+          <path d="M27.2 6.5h7.2l-3 15h-7.2z" fill="#007b84" />
+        </svg>
+      ) : (
+        <svg width={width} height={height} viewBox="0 0 44 28" aria-hidden>
+          <text
+            x="22"
+            y="18.4"
+            textAnchor="middle"
+            fill="#fff"
+            fontSize={known?.size ?? 8}
+            fontWeight="700"
+            fontStyle={known?.italic ? 'italic' : 'normal'}
+            letterSpacing={known?.word && known.word.length > 5 ? '0.1' : '0.6'}
+            style={{ fontFamily: 'inherit' }}
+          >
+            {known?.word ?? '••••'}
+          </text>
+        </svg>
+      )}
+    </span>
+  )
+}
+
 /** The date on the front of a card: 04/30. */
 export const expiry = (card: { month: number; year: number }) =>
   `${String(card.month).padStart(2, '0')}/${String(card.year).slice(2)}`
@@ -129,15 +217,7 @@ function Entries({ offer, onClose }: { offer: AutofillOffer; onClose: () => void
                   <Mark width={13} height={13} />
                 </span>
               ) : (
-                <span
-                  className="flex h-7 min-w-[72px] shrink-0 items-center justify-center rounded-[9px] px-2 text-2xs font-medium"
-                  style={{
-                    background: `color-mix(in srgb, ${BRAND_COLOURS[row.brand] ?? 'var(--text-faint)'} 16%, transparent)`,
-                    color: 'var(--ink)'
-                  }}
-                >
-                  {BRANDS[row.brand] ?? t('Другая карта')}
-                </span>
+                <BrandBadge brand={row.brand} />
               )}
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm text-ink">{row.title}</span>
