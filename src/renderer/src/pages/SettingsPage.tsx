@@ -197,6 +197,23 @@ export default function SettingsPage({
   const [filters, setFilters] = useState<FilterStatus | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [extensions, setExtensions] = useState<InstalledExtension[] | null>(null)
+  /** A Chrome Web Store address, waiting to be turned into an extension. */
+  const [storeLink, setStoreLink] = useState('')
+  const [storeBusy, setStoreBusy] = useState(false)
+
+  /** Fetches what the address points at and installs it. */
+  const installFromStore = async () => {
+    if (storeBusy || storeLink.trim() === '') return
+    setStoreBusy(true)
+    const result = await window.browser.installFromStore(storeLink)
+    setStoreBusy(false)
+    setExtensions(await window.browser.extensions())
+    if (result.error) return flash(result.error)
+    if (result.added) {
+      setStoreLink('')
+      flash(t('Установлено: {name}', { name: result.added.name }))
+    }
+  }
   const [update, setUpdate] = useState<UpdateState | null>(null)
   const [drm, setDrm] = useState<(WidevineState & { needsRestart: boolean }) | null>(null)
   const [installedApps, setInstalledApps] = useState<InstalledApp[]>([])
@@ -1332,12 +1349,36 @@ export default function SettingsPage({
                     </Row>
                   ))
                 )}
+                {/* The store has no install for anyone but Chrome, but the
+                    service behind it will hand over the same package to
+                    anyone who asks by id — so an address pasted here is
+                    enough. */}
                 <Row
-                  title={t('Установить')}
+                  title={t('Из Chrome Web Store')}
+                  hint={t('Вставьте ссылку на страницу расширения в магазине')}
+                >
+                  <div className="flex items-center gap-2">
+                    <TextField
+                      value={storeLink}
+                      onChange={setStoreLink}
+                      width={260}
+                      onEnter={() => void installFromStore()}
+                    />
+                    <button
+                      className="btn btn-primary"
+                      disabled={storeBusy || storeLink.trim() === ''}
+                      onClick={() => void installFromStore()}
+                    >
+                      {storeBusy ? t('Ставим…') : t('Установить')}
+                    </button>
+                  </div>
+                </Row>
+                <Row
+                  title={t('Установить из файла')}
                   hint={t('Работает всё на content-скриптах: Dark Reader, Stylus и подобные. Блокировщики рекламы и менеджеры паролей — нет: Electron не даёт расширениям ни блокирующий webRequest, ни кнопку на панели')}
                 >
                   <button
-                    className="btn btn-primary"
+                    className="btn"
                     onClick={async () => {
                       const result = await window.browser.addExtension()
                       setExtensions(await window.browser.extensions())

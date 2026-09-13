@@ -24,7 +24,7 @@ await build({
   logLevel: 'error'
 })
 
-const { unzip, zipBodyOf, manifestRoot } = await import(
+const { unzip, zipBodyOf, manifestRoot, storeId } = await import(
   pathToFileURL(join(work, 'extensions.mjs')).href
 )
 
@@ -165,6 +165,26 @@ try {
   rejected = true
 }
 check('garbage rejected', rejected, true)
+
+/* ------------------------------------------- an address from the store */
+
+// Extension ids are thirty-two letters from a to p; that is specific enough
+// to pick one out of an address, and specific enough to refuse what is not one.
+check(
+  'the id comes out of a store address',
+  storeId('https://chromewebstore.google.com/detail/dark-reader/eimadpbcbfnmbkopoojfekhnkhdbieeh'),
+  'eimadpbcbfnmbkopoojfekhnkhdbieeh'
+)
+check(
+  'and out of the old-style one',
+  storeId('https://chrome.google.com/webstore/detail/stylus/clngdbkpkpeebahjckkjfobafhncgmne?hl=ru'),
+  'clngdbkpkpeebahjckkjfobafhncgmne'
+)
+check('a bare id is an id', storeId('EIMADPBCBFNMBKOPOOJFEKHNKHDBIEEH'), 'eimadpbcbfnmbkopoojfekhnkhdbieeh')
+check('a sentence is not', storeId('поставь мне дарк ридер'), null)
+check('and neither is a shorter string of letters', storeId('abcdefghijklmnop'), null)
+// q is not in the alphabet ids are written in.
+check('nor one with a letter that cannot occur', storeId('qimadpbcbfnmbkopoojfekhnkhdbieeh'), null)
 
 for (const { name, actual, expected } of failures) {
   console.log(`FAIL ${name}`)
