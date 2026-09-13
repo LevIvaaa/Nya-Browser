@@ -293,6 +293,21 @@ export interface Playing {
   host: string
 }
 
+/**
+ * Two pages side by side. `rect` is where the pair sits in the window, so
+ * the interface can draw the divider in the gap between them without
+ * measuring anything itself.
+ */
+export interface SplitState {
+  /** the tab on the left, which is the active one */
+  left: number
+  /** the tab on the right */
+  right: number
+  /** how much of the width the left one takes, 0.2 … 0.8 */
+  ratio: number
+  rect: { x: number; y: number; width: number; height: number }
+}
+
 /** How a search on the page is going: how many, and which one you are on. */
 export interface FindState {
   /** what was searched for, so a count from an old search is not shown against a new one */

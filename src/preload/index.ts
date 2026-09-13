@@ -11,6 +11,7 @@ import type {
   FilterStatus,
   FindState,
   Playing,
+  SplitState,
   InstalledExtension,
   UpdateState,
   WidevineState,
@@ -169,6 +170,8 @@ const api = {
   translatePage: (): Promise<boolean> => ipcRenderer.invoke('nav:translate'),
   toggleReader: () => ipcRenderer.invoke('nav:reader'),
   playing: (): Promise<Playing[]> => ipcRenderer.invoke('media:list'),
+  splitWith: (id: number | null) => ipcRenderer.invoke('tab:split', id),
+  setSplitRatio: (ratio: number) => ipcRenderer.invoke('tab:split-ratio', ratio),
   mediaCommand: (
     tabId: number,
     what: 'toggle' | 'play' | 'pause' | 'mute' | 'seek' | 'skip',
@@ -374,6 +377,7 @@ const api = {
   onUpdate: (cb: (state: UpdateState) => void) => on<UpdateState>('state:update', cb),
   onFind: (cb: (state: FindState) => void) => on<FindState>('state:find', cb),
   onMedia: (cb: (list: Playing[]) => void) => on<Playing[]>('state:media', cb),
+  onSplit: (cb: (state: SplitState | null) => void) => on<SplitState | null>('state:split', cb),
   onToast: (cb: (message: string) => void) => on<string>('toast', cb),
   onShortcut: (cb: (action: string) => void) => on<string>('shortcut', cb)
 }

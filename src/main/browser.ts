@@ -983,6 +983,27 @@ export class BrowserWindow {
       width: Math.round(r.width || inner.width),
       height: Math.round(r.height || Math.max(0, inner.height - r.y))
     }
+    // Split: the active page takes its share of the width, the other takes
+    // the rest, and the gap between them is left empty on purpose — the
+    // chrome shows through it, which is what makes a divider possible at all.
+    const other = this.splitId === null ? null : this.tabs.find((tab) => tab.id === this.splitId)
+    if (other?.view && other.id !== active.id) {
+      const gap = BrowserWindow.SPLIT_GAP
+      const leftWidth = Math.round((rect.width - gap) * this.splitRatio)
+      active.view.setBounds({ ...rect, width: leftWidth })
+      active.view.setBorderRadius(0)
+      active.view.setVisible(r.visible && active.hasContent && !active.sleeping)
+      other.view.setBounds({
+        x: rect.x + leftWidth + gap,
+        y: rect.y,
+        width: rect.width - leftWidth - gap,
+        height: rect.height
+      })
+      other.view.setBorderRadius(0)
+      other.view.setVisible(r.visible && other.hasContent)
+      return
+    }
+
     active.view.setBounds(rect)
     // Square. The page is flush against the left and right edges of the window,
     // so rounding its corners cut two notches out of it — one under the first
@@ -1619,6 +1640,10 @@ export class BrowserWindow {
     }
     tab.destroy(this.win)
     if (this.nowPlaying.delete(tab.id)) this.sendMedia()
+    if (this.splitId === tab.id) {
+      this.splitId = null
+      this.sendSplit()
+    }
 
     // The last tab out of a group takes the group with it. One left behind
     // was a row in the list holding nothing, which could not be opened,
@@ -2221,6 +2246,73 @@ export class BrowserWindow {
   }
 
   /* --------------------------------------------------------------- media */
+
+  /* --------------------------------------------------------------- split */
+
+  /** The tab shown beside the active one, if the window is split. */
+  private splitId: number | null = null
+  /** How much of the width the left page takes. */
+  private splitRatio = 0.5
+  /** The gap between the two pages, through which the divider shows. */
+  private static SPLIT_GAP = 8
+
+  /**
+   * Puts a tab beside the one in front. Picking the tab that is already
+   * beside it, or the active one itself, ends the split — one gesture for
+   * both directions, the way a toggle should be.
+   */
+  splitWith(tabId: number | null) {
+    if (tabId === null || tabId === this.activeId || tabId === this.splitId) {
+      this.splitId = null
+    } else if (this.tabs.some((tab) => tab.id === tabId)) {
+      this.splitId = tabId
+      const other = this.tabs.find((tab) => tab.id === tabId)
+      // A tab that has never been opened has no view to show.
+      if (other) {
+        other.ensureView(this.wire)
+        if (other.view) this.win.contentView.addChildView(other.view)
+        this.raiseOverlay()
+        this.wake(other)
+      }
+    }
+    this.showActive()
+    this.sendSplit()
+    this.broadcast()
+  }
+
+  /** Where the divider was dragged to. */
+  setSplitRatio(ratio: number) {
+    if (this.splitId === null) return
+    this.splitRatio = Math.max(0.2, Math.min(0.8, ratio))
+    this.layout()
+    this.sendSplit()
+  }
+
+  /** The tab beside this one, if any — the strip marks it. */
+  get splitTab() {
+    return this.splitId
+  }
+
+  private sendSplit() {
+    const other = this.splitId === null ? null : this.tabs.find((tab) => tab.id === this.splitId)
+    if (!other) {
+      this.splitId = null
+      return this.send('state:split', null)
+    }
+    const over = this.edgeOverflow()
+    const r = this.layoutRect
+    this.send('state:split', {
+      left: this.activeId,
+      right: other.id,
+      ratio: this.splitRatio,
+      rect: {
+        x: Math.round(r.x),
+        y: Math.round(r.y),
+        width: Math.round(r.width || this.win.getContentBounds().width - over.left - over.right),
+        height: Math.round(r.height)
+      }
+    })
+  }
 
   /** The window the media keys are pointed at, if any. */
   private static mediaKeys: BrowserWindow | null = null
@@ -2925,9 +3017,14 @@ export class BrowserWindow {
   }
 
   private showActive() {
+    // The tab beside the active one is on screen too, and it must not be the
+    // active one as well — switching to it is how a split ends up showing
+    // one page twice.
+    if (this.splitId === this.activeId) this.splitId = null
     for (const tab of this.tabs) {
       if (!tab.view) continue
-      tab.view.setVisible(tab.id === this.activeId && tab.hasContent && this.layoutRect.visible)
+      const shown = tab.id === this.activeId || tab.id === this.splitId
+      tab.view.setVisible(shown && tab.hasContent && this.layoutRect.visible)
     }
     this.layout()
     this.focusView()
