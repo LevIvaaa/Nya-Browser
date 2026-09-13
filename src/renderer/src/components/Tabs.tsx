@@ -836,22 +836,26 @@ export function TabRail({
     >
       {/* No heading: a column of tabs does not need a line above it saying
           how many tabs are in the column, and the way into the full list is
-          on the big group's chip just below. */}
-      <div className="flex items-center justify-end px-1 pb-0.5">
-        <button className="icon-btn h-6 w-6" title={t('Новая вкладка · Ctrl+T')} onClick={() => window.browser.newTab()}>
+          on the big group's chip. The new tab keeps the corner it had, and
+          the groups come up beside it into the row that heading was using. */}
+      <div className="flex items-start gap-1 px-0.5 pb-1">
+        <div className="flex min-w-0 flex-1 flex-wrap gap-1">
+          {chipsOf(spaces).map(({ space, index }) => (
+            <SpaceChip
+              key={space.id}
+              space={space}
+              index={index}
+              withArrow={space.id === arrowHolder(chipsOf(spaces))}
+            />
+          ))}
+        </div>
+        <button
+          className="icon-btn h-7 w-7 shrink-0"
+          title={t('Новая вкладка · Ctrl+T')}
+          onClick={() => window.browser.newTab()}
+        >
           <Plus width={14} height={14} />
         </button>
-      </div>
-
-      <div className="flex flex-wrap gap-1 px-0.5 pb-1">
-        {chipsOf(spaces).map(({ space, index }) => (
-          <SpaceChip
-            key={space.id}
-            space={space}
-            index={index}
-            withArrow={space.id === arrowHolder(chipsOf(spaces))}
-          />
-        ))}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto overflow-x-hidden pr-0.5">
