@@ -2422,6 +2422,21 @@ export class BrowserWindow {
     this.broadcast()
   }
 
+  /**
+   * Moves a big group in the row. The order is the order of this list, and
+   * the strip draws the pinned ones from it, so this is the whole of it.
+   */
+  moveSpace(id: number, toIndex: number) {
+    const from = this.spaces.findIndex((space) => space.id === id)
+    if (from === -1) return
+    const to = Math.max(0, Math.min(this.spaces.length - 1, Math.round(toIndex)))
+    if (from === to) return
+    const [moved] = this.spaces.splice(from, 1)
+    this.spaces.splice(to, 0, moved)
+    this.persistSession()
+    this.broadcast()
+  }
+
   editSpace(id: number, patch: { name?: string; colour?: string; pinned?: boolean }) {
     const space = this.spaces.find((item) => item.id === id)
     if (!space) return

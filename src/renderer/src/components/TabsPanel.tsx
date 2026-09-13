@@ -173,7 +173,7 @@ export default function TabsPanel({
                       setEditing(space.id)
                     }}
                   >
-                    {space.name || t('Группа {n}', { n: index + 1 })}
+                    {space.name || t('Группа {n}', { n: space.id })}
                   </button>
                 )}
 

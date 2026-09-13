@@ -117,6 +117,7 @@ const api = {
   switchSpace: (id: number) => ipcRenderer.invoke('space:switch', id),
   editSpace: (id: number, patch: { name?: string; colour?: string; pinned?: boolean }) =>
     ipcRenderer.invoke('space:edit', id, patch),
+  moveSpace: (id: number, toIndex: number) => ipcRenderer.invoke('space:move', id, toIndex),
   closeSpace: (id: number) => ipcRenderer.invoke('space:close', id),
   onSpaces: (cb: (spaces: TabSpace[]) => void) => on<TabSpace[]>('state:spaces', cb),
   groupTab: (id: number, name?: string) => ipcRenderer.invoke('tab:group-new', id, name),

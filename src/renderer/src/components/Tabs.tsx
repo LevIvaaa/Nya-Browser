@@ -475,7 +475,12 @@ export function TabStrip({
       {/* The group in force, and any pinned beside it. */}
       <div className="flex shrink-0 items-center gap-0.5 pr-1">
         {chipsOf(spaces).map(({ space, index }) => (
-          <SpaceChip key={space.id} space={space} index={index} />
+          <SpaceChip
+            key={space.id}
+            space={space}
+            index={index}
+            withArrow={space.id === arrowHolder(chipsOf(spaces))}
+          />
         ))}
       </div>
       <div className="flex min-w-0 items-center gap-1" style={{ flex: '0 1 auto' }}>
@@ -538,17 +543,65 @@ function chipsOf(spaces: TabSpace[]): Array<{ space: TabSpace; index: number }> 
 }
 
 /**
+ * Which of them carries the arrow: whichever is leftmost. With groups
+ * pinned that is the first pinned one — and it moves with them when they
+ * are dragged about — and with none pinned it is the one in force, which
+ * is the only chip there is then.
+ */
+function arrowHolder(chips: Array<{ space: TabSpace }>): number {
+  return chips[0]?.space.id ?? -1
+}
+
+/**
  * A big group in the strip: the one in force, and any that are pinned.
  *
- * The one in force carries the arrow and opens the list of tabs and groups —
- * it used to be a separate icon beside it, which said the same thing twice.
- * The others switch to themselves.
+ * Pressing it switches to that group. One of them also carries the arrow into
+ * the list of tabs and groups — the pinned one, because a pinned group is the
+ * one that is always there, and the group in force when none is pinned. The
+ * arrow is a target of its own inside the chip, so it never gets in the way of
+ * the switch.
  */
-function SpaceChip({ space, index }: { space: TabSpace; index: number }) {
+function SpaceChip({
+  space,
+  index,
+  withArrow
+}: {
+  space: TabSpace
+  index: number
+  /** whether this is the chip that opens the list */
+  withArrow: boolean
+}) {
+  // Only pinned ones are dragged: the loose one is wherever you happen to
+  // be, and moving it would be moving nothing.
+  const movable = space.pinned
   const tint = space.colour || 'var(--accent)'
+  // Numbered by the group itself, not by where it sits: a name that changes
+  // when something else is dragged past it is not a name.
+  const name = space.name || t('Группа {n}', { n: space.id })
+  const openList = (event: React.MouseEvent<HTMLElement>) => {
+    const box = (event.currentTarget as HTMLElement).getBoundingClientRect()
+    void window.browser.setOverlay(`tabs-panel:${Math.round(box.left)}`)
+  }
+
   return (
-    <button
-      className="no-drag flex h-7 shrink-0 items-center gap-1.5 rounded-[9px] pl-1 pr-1.5 text-2xs font-semibold"
+    <span
+      className="no-drag flex h-7 shrink-0 items-center rounded-[9px] pl-1 pr-0.5 text-2xs font-semibold"
+      draggable={movable}
+      onDragStart={(event) => {
+        event.dataTransfer.setData('text/nya-space', String(space.id))
+        event.dataTransfer.effectAllowed = 'move'
+      }}
+      onDragOver={(event) => {
+        if (!movable) return
+        event.preventDefault()
+        event.dataTransfer.dropEffect = 'move'
+      }}
+      onDrop={(event) => {
+        const dragged = Number(event.dataTransfer.getData('text/nya-space'))
+        if (!dragged || dragged === space.id) return
+        event.preventDefault()
+        void window.browser.moveSpace(dragged, index)
+      }}
       style={{
         background: space.active ? `color-mix(in srgb, ${tint} 22%, transparent)` : 'transparent',
         color: space.active ? 'var(--ink)' : 'var(--text-dim)',
@@ -557,37 +610,43 @@ function SpaceChip({ space, index }: { space: TabSpace; index: number }) {
           : 'none',
         transition: 'background var(--t-fast) linear, color var(--t-fast) linear'
       }}
-      title={
-        space.active
-          ? t('Все вкладки и группы')
-          : space.name || t('Группа {n}', { n: index + 1 })
-      }
-      onClick={(event) => {
-        if (!space.active) return void window.browser.switchSpace(space.id)
-        const box = (event.currentTarget as HTMLElement).getBoundingClientRect()
-        void window.browser.setOverlay(`tabs-panel:${Math.round(box.left)}`)
-      }}
     >
-      {/* How many tabs are in it, before its name. In a square of its own,
-          because a bare number beside a name reads as part of the name — and
-          it carries the group's colour, so the dot that used to sit in front
-          of it was the same thing said twice. */}
-      <span
-        className="flex h-[17px] min-w-[17px] shrink-0 items-center justify-center rounded-[6px] px-1 tabular-nums"
-        style={{
-          background: space.active
-            ? `color-mix(in srgb, ${tint} 34%, transparent)`
-            : 'var(--surface-hover)',
-          color: space.active ? 'var(--ink)' : 'var(--text-dim)'
+      <button
+        className="flex h-7 items-center gap-1.5 pr-1"
+        title={space.active ? t('Все вкладки и группы') : name}
+        onClick={(event) => {
+          if (space.active) return openList(event)
+          void window.browser.switchSpace(space.id)
         }}
       >
-        {space.count}
-      </span>
-      <span className="max-w-[120px] truncate">
-        {space.name || t('Группа {n}', { n: index + 1 })}
-      </span>
-      {space.active && <ChevronDown width={11} height={11} />}
-    </button>
+        {/* How many tabs are in it, before its name. In a square of its own,
+            because a bare number beside a name reads as part of the name — and
+            it carries the group's colour, so the dot that used to sit in front
+            of it was the same thing said twice. */}
+        <span
+          className="flex h-[17px] min-w-[17px] shrink-0 items-center justify-center rounded-[6px] px-1 tabular-nums"
+          style={{
+            background: space.active
+              ? `color-mix(in srgb, ${tint} 34%, transparent)`
+              : 'var(--surface-hover)',
+            color: space.active ? 'var(--ink)' : 'var(--text-dim)'
+          }}
+        >
+          {space.count}
+        </span>
+        <span className="max-w-[120px] truncate">{name}</span>
+      </button>
+      {withArrow && (
+        <button
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] hover:bg-[var(--surface-hover)]"
+          title={t('Все вкладки и группы')}
+          aria-label={t('Все вкладки и группы')}
+          onClick={openList}
+        >
+          <ChevronDown width={11} height={11} />
+        </button>
+      )}
+    </span>
   )
 }
 /* ---------------------------------------------------------------- vertical */
@@ -635,7 +694,12 @@ export function TabRail({
 
       <div className="flex flex-wrap gap-1 px-0.5 pb-1">
         {chipsOf(spaces).map(({ space, index }) => (
-          <SpaceChip key={space.id} space={space} index={index} />
+          <SpaceChip
+            key={space.id}
+            space={space}
+            index={index}
+            withArrow={space.id === arrowHolder(chipsOf(spaces))}
+          />
         ))}
       </div>
 
