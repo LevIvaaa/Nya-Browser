@@ -343,6 +343,8 @@ const api = {
   installUpdate: (): Promise<boolean> => ipcRenderer.invoke('updates:install'),
   extensions: (): Promise<InstalledExtension[]> => ipcRenderer.invoke('ext:list'),
   addExtension: (): Promise<AddExtensionResult> => ipcRenderer.invoke('ext:add'),
+  installFromStore: (input: string): Promise<AddExtensionResult> =>
+    ipcRenderer.invoke('ext:store', input),
   removeExtension: (path: string): Promise<boolean> => ipcRenderer.invoke('ext:remove', path),
   revealExtension: (path: string) => ipcRenderer.invoke('ext:reveal', path),
   filterStatus: (): Promise<FilterStatus> => ipcRenderer.invoke('filters:status'),

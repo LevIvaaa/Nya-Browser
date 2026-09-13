@@ -19,7 +19,13 @@ import { BLOCKLIST_SIZE, blockedLog, clearBrowsingData, hardenApp, hardenSession
 import { detectSources, importBookmarks, importHistory, importPasswordsCsv } from './import'
 import { translateBatch } from './translate'
 import { engine, filterStatus, hideCss, loadFilters } from './filters'
-import { addExtension, listExtensions, removeExtension, revealExtension } from './extensions'
+import {
+  addExtension,
+  installFromStore,
+  listExtensions,
+  removeExtension,
+  revealExtension
+} from './extensions'
 import { favicons } from './favicons'
 import { currentWeather, guessPlace, searchPlaces } from './weather'
 import { applyMainLanguage } from './i18n'
@@ -1033,6 +1039,7 @@ function registerIpc() {
   /* ---- extensions ---- */
   ipcMain.handle('ext:list', (event) => listExtensions())
   ipcMain.handle('ext:add', (event) => addExtension())
+  ipcMain.handle('ext:store', (event, input: unknown) => installFromStore(str(input, 500)))
   ipcMain.handle('ext:remove', (event, path: unknown) => removeExtension(str(path, 600)))
   ipcMain.handle('ext:reveal', (event, path: unknown) => revealExtension(str(path, 600)))
 

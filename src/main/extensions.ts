@@ -19,7 +19,7 @@
 // of them — so the paths live in extensions.json inside the profile.
 // ---------------------------------------------------------------------------
 
-import { dialog, session, shell, type Session } from 'electron'
+import { app, dialog, net, session, shell, type Session } from 'electron'
 import { createHash } from 'crypto'
 import { inflateRawSync } from 'zlib'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'fs'
@@ -261,6 +261,79 @@ export async function addExtension(): Promise<AddExtensionResult> {
 
   const added = listExtensions().find((item) => item.path === folder)
   log('extensions: installed', root)
+  return added ? { added } : { error: 'Установлено, но не удалось прочитать данные' }
+}
+
+/**
+ * The id inside a Chrome Web Store address, or a bare id typed by hand.
+ * Extension ids are thirty-two letters from a to p — the alphabet Google
+ * encodes them in — which is specific enough to pick out of a url.
+ */
+export function storeId(input: string): string | null {
+  const found = /\b([a-p]{32})\b/.exec(input.trim().toLowerCase())
+  return found ? found[1] : null
+}
+
+/**
+ * Installs from the store by address or id.
+ *
+ * The store itself has no install for anyone but Chrome; the update service
+ * behind it does, and hands back exactly the .crx the store would have
+ * installed. What happens to that file after it lands is the path a file
+ * picked by hand already takes.
+ */
+export async function installFromStore(input: string): Promise<AddExtensionResult> {
+  const id = storeId(input)
+  if (!id) return { error: 'Это не похоже на ссылку из Chrome Web Store' }
+
+  const chrome = process.versions.chrome.split('.')[0]
+  const url =
+    'https://clients2.google.com/service/update2/crx' +
+    '?response=redirect&acceptformat=crx2,crx3&prodversion=' +
+    chrome +
+    '&x=' +
+    encodeURIComponent(`id=${id}&uc`)
+
+  let body: Buffer
+  try {
+    const answer = await net.fetch(url)
+    if (!answer.ok) return { error: `Магазин ответил ${answer.status}` }
+    body = Buffer.from(await answer.arrayBuffer())
+  } catch (error) {
+    return { error: `Не удалось скачать: ${(error as Error).message}` }
+  }
+  if (body.length < 1000) return { error: 'Расширение не найдено в магазине' }
+
+  const folder = join(unpackedDir(), `${id}-${Date.now().toString(36)}`)
+  const crx = join(app.getPath('temp'), `nya-${id}.crx`)
+  try {
+    writeFileSync(crx, body)
+    unpackArchive(crx, folder)
+  } catch (error) {
+    rmSync(folder, { recursive: true, force: true })
+    return { error: `Не удалось распаковать: ${(error as Error).message}` }
+  } finally {
+    rmSync(crx, { force: true })
+  }
+
+  const root = manifestRoot(folder)
+  if (!root) {
+    rmSync(folder, { recursive: true, force: true })
+    return { error: 'В скачанном пакете нет manifest.json' }
+  }
+
+  const ses = current ?? session.defaultSession
+  try {
+    await ses.extensions.loadExtension(root, { allowFileAccess: false })
+  } catch (error) {
+    rmSync(folder, { recursive: true, force: true })
+    return { error: `Electron отказался загрузить: ${(error as Error).message}` }
+  }
+
+  const file = readStore()
+  if (!file.paths.includes(folder)) writeStore({ paths: [...file.paths, folder] })
+  const added = listExtensions().find((item) => item.path === folder)
+  log('extensions: installed from the store', id)
   return added ? { added } : { error: 'Установлено, но не удалось прочитать данные' }
 }
 
