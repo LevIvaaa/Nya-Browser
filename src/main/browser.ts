@@ -1574,8 +1574,16 @@ export class BrowserWindow {
     }
     tab.destroy(this.win)
 
-    // An empty group is still a group; it gets a blank tab rather than
-    // dumping you into somebody else's.
+    // The last tab out of a group takes the group with it. One left behind
+    // was a row in the list holding nothing, which could not be opened,
+    // filled or got rid of.
+    if (tab.groupId !== null && !this.tabs.some((t) => t.groupId === tab.groupId)) {
+      this.groups = this.groups.filter((group) => group.id !== tab.groupId)
+      this.sendGroups()
+    }
+
+    // An empty big group is still a big group; it gets a blank tab rather
+    // than dumping you into somebody else's.
     if (this.here().length === 0) {
       this.newTab()
       return
@@ -1819,10 +1827,17 @@ export class BrowserWindow {
       // under the click.
       const here = this.here()
       const outside = here.filter((t) => t.groupId !== groupId)
-      if (outside.length === 0) return
-      const index = here.findIndex((t) => t.id === this.activeId)
-      const after = here.slice(index).find((t) => t.groupId !== groupId)
-      this.switchTab((after ?? outside[outside.length - 1]).id)
+      if (outside.length === 0) {
+        // The group is every tab there is here. Refusing to fold it up was
+        // the wrong answer — the click did nothing and said nothing about
+        // why. A new tab is somewhere to be while it is folded.
+        this.newTab()
+        this.reorderStrip()
+      } else {
+        const index = here.findIndex((t) => t.id === this.activeId)
+        const after = here.slice(index).find((t) => t.groupId !== groupId)
+        this.switchTab((after ?? outside[outside.length - 1]).id)
+      }
     }
     group.collapsed = next
     this.persistSession()

@@ -151,6 +151,16 @@ button {
   background-clip: content-box;
 }
 
+/* Something that scrolls where a bar would be bigger than what it scrolls:
+   the strip of tabs is thirty-odd pixels tall, and ten of them a scrollbar. */
+.no-bar {
+  scrollbar-width: none;
+}
+.no-bar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
 /* ==========================================================================
    Wallpapers
    ========================================================================== */

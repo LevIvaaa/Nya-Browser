@@ -175,6 +175,11 @@ export const ChevronRight = (p: P) => (
     <path d="m9.5 6 6 6-6 6" />
   </svg>
 )
+export const ChevronLeft = (p: P) => (
+  <svg {...svg(p)}>
+    <path d="m14.5 6-6 6 6 6" />
+  </svg>
+)
 export const Sparkles = (p: P) => (
   <svg {...svg(p, 1.6)}>
     <path d="M12 3.5 13.7 9l5.5 1.7-5.5 1.7L12 18l-1.7-5.6L4.8 10.7 10.3 9z" />
