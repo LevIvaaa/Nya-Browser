@@ -42,11 +42,19 @@ function Bar({
 /* --------------------------------------------------------------- find bar */
 export function FindBar({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState('')
+  // How many there are and which one you are on. Without it the box could
+  // only shuffle the page about and leave you to guess whether the word was
+  // there at all.
+  const [found, setFound] = useState({ query: '', matches: 0, active: 0 })
   const input = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     input.current?.focus()
-    return () => void window.browser.stopFind()
+    const off = window.browser.onFind(setFound)
+    return () => {
+      off?.()
+      void window.browser.stopFind()
+    }
   }, [])
 
   const run = (forward: boolean) => {
@@ -76,6 +84,17 @@ export function FindBar({ onClose }: { onClose: () => void }) {
             if (event.key === 'Escape') onClose()
           }}
         />
+        {query.trim() !== '' && (
+          <span
+            className="shrink-0 text-2xs tabular-nums"
+            style={{
+              color:
+                found.query === query && found.matches === 0 ? 'var(--bad)' : 'var(--text-faint)'
+            }}
+          >
+            {found.query === query ? `${found.active}/${found.matches}` : '…'}
+          </span>
+        )}
         <button className="icon-btn h-6 w-6" title={t('Назад')} onClick={() => run(false)}>
           <ArrowLeft width={13} height={13} />
         </button>

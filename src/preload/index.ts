@@ -6,6 +6,7 @@ import type {
   DefaultBrowserState,
   DownloadItem,
   FilterStatus,
+  FindState,
   InstalledExtension,
   UpdateState,
   WidevineState,
@@ -329,6 +330,7 @@ const api = {
   onOverlay: (cb: (mode: string | null) => void) => on<string | null>('state:overlay', cb),
   onPageSection: (cb: (page: string) => void) => on<string>('state:page-section', cb),
   onUpdate: (cb: (state: UpdateState) => void) => on<UpdateState>('state:update', cb),
+  onFind: (cb: (state: FindState) => void) => on<FindState>('state:find', cb),
   onToast: (cb: (message: string) => void) => on<string>('toast', cb),
   onShortcut: (cb: (action: string) => void) => on<string>('shortcut', cb)
 }
