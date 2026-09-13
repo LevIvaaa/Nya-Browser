@@ -462,6 +462,9 @@ function registerIpc() {
       pinned: data.pinned === undefined ? undefined : flag(data.pinned)
     })
   })
+  ipcMain.handle('space:move', (event, id: unknown, toIndex: unknown) =>
+    current(event).moveSpace(num(id), num(toIndex))
+  )
   ipcMain.handle('space:close', (event, id: unknown) => current(event).closeSpace(num(id)))
 
   ipcMain.handle('tab:group-new', (event, id: unknown, name?: unknown) =>
