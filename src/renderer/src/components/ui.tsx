@@ -1,4 +1,12 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  isValidElement,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode
+} from 'react'
 import { createPortal } from 'react-dom'
 import { Check, ChevronDown, Cross } from './Icons'
 import type { AvatarCrop } from '../../../shared/types'
@@ -208,6 +216,28 @@ export function TextField({
 }
 
 /* ----------------------------------------------------------- layout pieces */
+/**
+ * What is being looked for in the settings, in lower case, or nothing.
+ *
+ * A search that only looked at headings would miss the one switch you came
+ * for, so a section is kept when anything written anywhere inside it matches
+ * — and taken away whole when nothing does.
+ */
+export const Looking = createContext('')
+
+/** Everything readable in a piece of the interface, heading and switch alike. */
+function wordsIn(node: ReactNode, out: string[], depth = 0) {
+  if (node === null || node === undefined || typeof node === 'boolean' || depth > 12) return
+  if (typeof node === 'string' || typeof node === 'number') return void out.push(String(node))
+  if (Array.isArray(node)) return void node.forEach((one) => wordsIn(one, out, depth + 1))
+  if (!isValidElement(node)) return
+  const props = node.props as Record<string, unknown>
+  for (const name of ['title', 'hint', 'label', 'description', 'placeholder', 'alt']) {
+    if (typeof props[name] === 'string') out.push(props[name] as string)
+  }
+  wordsIn(props.children as ReactNode, out, depth + 1)
+}
+
 export function Section({
   title,
   icon,
@@ -221,6 +251,12 @@ export function Section({
   children: ReactNode
   action?: ReactNode
 }) {
+  const looking = useContext(Looking)
+  if (looking) {
+    const words = [title, description ?? '']
+    wordsIn(children, words)
+    if (!words.join(' ').toLowerCase().includes(looking)) return null
+  }
   return (
     <section className="animate-fade-up contain">
       <header className="mb-3 flex items-center gap-2.5 px-1">

@@ -58,6 +58,7 @@ import {
 import {
   Avatar,
   ChoiceCard,
+  Looking,
   Modal,
   Pill,
   Row,
@@ -214,6 +215,9 @@ export default function SettingsPage({
       flash(t('Установлено: {name}', { name: result.added.name }))
     }
   }
+  /** What is being looked for, as typed and as compared. */
+  const [query, setQuery] = useState('')
+  const looking = query.trim().toLowerCase()
   const [update, setUpdate] = useState<UpdateState | null>(null)
   const [drm, setDrm] = useState<(WidevineState & { needsRestart: boolean }) | null>(null)
   const [installedApps, setInstalledApps] = useState<InstalledApp[]>([])
@@ -246,53 +250,15 @@ export default function SettingsPage({
     setTimeout(() => setNotice(''), 2600)
   }
 
-  return (
-    <div className="relative z-10 flex h-full min-h-0">
-      {/* nav */}
-      <nav className="contain flex w-[218px] shrink-0 flex-col gap-1 overflow-y-auto p-3" style={{ borderRight: '1px solid var(--line)' }}>
-        <div className="px-2 pb-3 pt-1">
-          <div className="text-[17px] font-semibold tracking-[-0.02em]">{t('Настройки')}</div>
-          <div className="text-sm text-dim">Nya Browser</div>
-        </div>
-        {TABS.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setTab(item.id)}
-            className="flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left text-base"
-            style={{
-              background: tab === item.id ? 'var(--surface-solid)' : 'transparent',
-              boxShadow: tab === item.id ? 'var(--shadow-sm)' : 'none',
-              color: tab === item.id ? 'var(--text)' : 'var(--text-dim)',
-              fontWeight: tab === item.id ? 500 : 400,
-              transition: 'background var(--t-base) var(--ease-out), color var(--t-fast) linear, box-shadow var(--t-base) var(--ease-out)'
-            }}
-          >
-            <span style={{ color: tab === item.id ? 'var(--accent)' : 'inherit' }}>{item.icon}</span>
-            {t(item.label)}
-          </button>
-        ))}
-        <div className="flex-1" />
-        <button
-          onClick={onReset}
-          className="rounded-[10px] px-2.5 py-2 text-left text-sm text-dim hover:bg-[var(--surface-hover)]"
-          style={{ transition: 'background var(--t-fast) linear' }}
-        >
-          {t('Сбросить настройки')}
-        </button>
-      </nav>
-
-      {/* content */}
-      <div className="min-w-0 flex-1 overflow-y-auto">
-        <div className="sticky top-0 z-10 flex items-center justify-end gap-3 p-3">
-          {notice && <span className="animate-fade text-sm" style={{ color: 'var(--good)' }}>{notice}</span>}
-          <button className="icon-btn" title={t('Закрыть · Esc')} onClick={onClose}>
-            <Cross />
-          </button>
-        </div>
-
-        <div key={tab} className="stagger mx-auto flex max-w-[720px] flex-col gap-7 px-6 pb-16">
+  /**
+   * Everything one tab holds. It is a function and not markup so that a
+   * search can ask for all thirteen of them at once without the page being
+   * written out thirteen times.
+   */
+  const body = (which: TabId) => (
+    <>
           {/* ---------------------------------------------------------- look */}
-          {tab === 'look' && (
+          {which === 'look' && (
             <>
               <Section
                 title={t('Язык браузера')}
@@ -391,7 +357,7 @@ export default function SettingsPage({
           )}
 
           {/* ----------------------------------------------------- wallpaper */}
-          {tab === 'wallpaper' && (
+          {which === 'wallpaper' && (
             <>
               <Section title={t('Тип фона')} icon={<Image width={15} height={15} />} description={t('Живая анимация или ваши обои')}>
                 <div className="grid grid-cols-3 gap-2 p-3">
@@ -477,7 +443,7 @@ export default function SettingsPage({
           )}
 
           {/* ---------------------------------------------------------- tabs */}
-          {tab === 'tabs' && (
+          {which === 'tabs' && (
             <>
               <Section title={t('Расположение')} icon={<LayoutTop width={15} height={15} />} description={t('Сверху или вертикально сбоку')}>
                 <div className="flex gap-2 p-3">
@@ -526,7 +492,7 @@ export default function SettingsPage({
           )}
 
           {/* --------------------------------------------------------- start */}
-          {tab === 'start' && (
+          {which === 'start' && (
             <Section title={t('Главная страница')} icon={<Sparkles width={15} height={15} />} description={t('Что показывать на стартовом экране')}>
               <Row title={t('Приветствие')}><Toggle checked={settings.startPage.greeting} onChange={(v) => onPatch({ startPage: { ...settings.startPage, greeting: v } })} /></Row>
               <Row title={t('Часы')}><Toggle checked={settings.startPage.clock} onChange={(v) => onPatch({ startPage: { ...settings.startPage, clock: v } })} /></Row>
@@ -612,7 +578,7 @@ export default function SettingsPage({
           )}
 
           {/* -------------------------------------------------------- search */}
-          {tab === 'search' && (
+          {which === 'search' && (
             <>
               <Section title={t('Поисковая система')} icon={<Search width={15} height={15} />} description={t('Используется для запросов из адресной строки')}>
                 {engines.map((item) => (
@@ -660,7 +626,7 @@ export default function SettingsPage({
           )}
 
           {/* ------------------------------------------------------ profiles */}
-          {tab === 'profiles' && profiles && (
+          {which === 'profiles' && profiles && (
             <Section
               title={t('Профили')}
               icon={<Users width={15} height={15} />}
@@ -720,7 +686,7 @@ export default function SettingsPage({
           )}
 
           {/* ------------------------------------------------------- privacy */}
-          {tab === 'privacy' && (
+          {which === 'privacy' && (
             <>
               <Section
                 title={t('Блокировка')}
@@ -949,7 +915,7 @@ export default function SettingsPage({
           )}
 
           {/* ------------------------------------------------------ passwords */}
-          {tab === 'passwords' && (
+          {which === 'passwords' && (
             <>
             <Section title={t('Хранилище паролей')} icon={<Key width={15} height={15} />} description={t('Шифрование AES-256-GCM для каждой записи')}>
               <Row title={t('Записей')} hint={vault?.mode === 'password' ? t('Ключ выводится из мастер-пароля') : t('Ключ запечатан средствами Windows (DPAPI)')}>
@@ -1018,7 +984,7 @@ export default function SettingsPage({
           )}
 
           {/* --------------------------------------------------------- speed */}
-          {tab === 'speed' && (
+          {which === 'speed' && (
             <>
               <Section title={t('Ускорение')} icon={<Zap width={15} height={15} />} description={t('Часть параметров вступает в силу после перезапуска')}>
                 <Row title={t('Аппаратное ускорение')} hint={t('Отрисовка и декодирование видео на видеокарте')}>
@@ -1061,7 +1027,7 @@ export default function SettingsPage({
           )}
 
           {/* ----------------------------------------------------- downloads */}
-          {tab === 'downloads' && (
+          {which === 'downloads' && (
             <Section title={t('Загрузки')} icon={<Download width={15} height={15} />}>
               <Row title={t('Папка для файлов')} hint={settings.downloadDir || t('Папка по умолчанию')}>
                 <button
@@ -1081,7 +1047,7 @@ export default function SettingsPage({
           )}
 
           {/* ---------------------------------------------------------- data */}
-          {tab === 'data' && (
+          {which === 'data' && (
             <>
               <Section title={t('Очистка')} icon={<Trash width={15} height={15} />}>
                 <Row title={t('История просмотров')} hint={t('Локальные подсказки адресной строки')}>
@@ -1129,7 +1095,7 @@ export default function SettingsPage({
           )}
 
           {/* -------------------------------------------------------- system */}
-          {tab === 'system' && (
+          {which === 'system' && (
             <>
               <Section
                 title={t('Установленные приложения')}
@@ -1410,7 +1376,7 @@ export default function SettingsPage({
           )}
 
           {/* --------------------------------------------------------- about */}
-          {tab === 'about' && (
+          {which === 'about' && (
             <>
               <div className="animate-fade-up flex flex-col items-center gap-3 py-4 text-center">
                 <img
@@ -1484,6 +1450,123 @@ export default function SettingsPage({
               </Section>
             </>
           )}
+    </>
+  )
+
+  return (
+    <Looking.Provider value={looking}>
+    <div className="relative z-10 flex h-full min-h-0">
+      {/* nav */}
+      <nav className="contain flex w-[218px] shrink-0 flex-col gap-1 overflow-y-auto p-3" style={{ borderRight: '1px solid var(--line)' }}>
+        <div className="px-2 pb-3 pt-1">
+          <div className="text-[17px] font-semibold tracking-[-0.02em]">{t('Настройки')}</div>
+          <div className="text-sm text-dim">Nya Browser</div>
+        </div>
+
+        <div className="relative mb-1.5 px-0.5">
+          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-faint">
+            <Search width={14} height={14} />
+          </span>
+          <input
+            className="field w-full"
+            style={{ height: 32, paddingLeft: 30, paddingRight: query ? 28 : 12 }}
+            placeholder={t('Поиск по настройкам')}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              // Escape closes the settings; while there is something typed in
+              // here it empties the field first, which is what it means here.
+              if (event.key === 'Escape' && query) {
+                event.stopPropagation()
+                setQuery('')
+              }
+            }}
+          />
+          {query && (
+            <button
+              className="icon-btn absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2"
+              title={t('Очистить')}
+              onClick={() => setQuery('')}
+            >
+              <Cross width={12} height={12} />
+            </button>
+          )}
+        </div>
+
+        {TABS.map((item) => {
+          // While something is being looked for, the answers come from every
+          // tab at once, so no one of them is the one you are on.
+          const here = !looking && tab === item.id
+          return (
+          <button
+            key={item.id}
+            onClick={() => {
+              setQuery('')
+              setTab(item.id)
+            }}
+            className="flex items-center gap-2.5 px-2.5 py-2 text-left text-base"
+            style={{
+              borderRadius: 'var(--radius-sm)',
+              background: here ? 'var(--surface-solid)' : 'transparent',
+              boxShadow: here ? 'var(--shadow-sm)' : 'none',
+              color: here ? 'var(--text)' : 'var(--text-dim)',
+              fontWeight: here ? 500 : 400,
+              transition: 'background var(--t-base) var(--ease-out), color var(--t-fast) linear, box-shadow var(--t-base) var(--ease-out)'
+            }}
+          >
+            <span style={{ color: here ? 'var(--accent)' : 'inherit' }}>{item.icon}</span>
+            {t(item.label)}
+          </button>
+          )
+        })}
+        <div className="flex-1" />
+        <button
+          onClick={onReset}
+          className="px-2.5 py-2 text-left text-sm text-dim hover:bg-[var(--surface-hover)]"
+          style={{ borderRadius: 'var(--radius-sm)', transition: 'background var(--t-fast) linear' }}
+        >
+          {t('Сбросить настройки')}
+        </button>
+      </nav>
+
+      {/* content */}
+      <div className="min-w-0 flex-1 overflow-y-auto">
+        <div className="sticky top-0 z-10 flex items-center justify-end gap-3 p-3">
+          {notice && <span className="animate-fade text-sm" style={{ color: 'var(--good)' }}>{notice}</span>}
+          <button className="icon-btn" title={t('Закрыть · Esc')} onClick={onClose}>
+            <Cross />
+          </button>
+        </div>
+
+        <div
+          key={looking ? 'looking' : tab}
+          className="stagger mx-auto flex max-w-[720px] flex-col gap-7 px-6 pb-16"
+        >
+          {/* While something is being looked for, every tab is asked, and only
+              the parts that answer are drawn. */}
+          {looking ? (
+            TABS.map((item) => (
+              <div key={item.id} className="found">
+                <button
+                  className="found-where"
+                  onClick={() => {
+                    setQuery('')
+                    setTab(item.id)
+                  }}
+                >
+                  {t(item.label)}
+                </button>
+                {body(item.id)}
+              </div>
+            ))
+          ) : (
+            body(tab)
+          )}
+          {looking && (
+            <p className="found-none py-10 text-center text-sm text-faint">
+              {t('Ничего не найдено')}
+            </p>
+          )}
         </div>
       </div>
 
@@ -1508,6 +1591,7 @@ export default function SettingsPage({
         />
       )}
     </div>
+    </Looking.Provider>
   )
 }
 
