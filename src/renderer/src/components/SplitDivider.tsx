@@ -44,7 +44,7 @@ export default function SplitDivider() {
   return (
     <div
       ref={box}
-      className="no-drag absolute"
+      className="no-drag animate-fade absolute flex items-center justify-center"
       title={t('Потяните, чтобы поделить')}
       style={{
         left,
@@ -61,6 +61,21 @@ export default function SplitDivider() {
         setDragging(true)
       }}
       onDoubleClick={() => void window.browser.setSplitRatio(0.5)}
-    />
+    >
+      {/* Something to take hold of. It grows under the pointer, which is the
+          only way a three-pixel line can say it is a control. */}
+      <span
+        className="pointer-events-none rounded-pill"
+        style={{
+          width: 3,
+          height: dragging ? 72 : 40,
+          // Light enough to be seen against the line it sits in, in either
+          // theme: a grip nobody can find is not a grip.
+          background: dragging ? 'var(--bg)' : 'var(--text-dim)',
+          opacity: dragging ? 0.85 : 0.75,
+          transition: 'height var(--t-base) var(--ease-out), opacity var(--t-fast) linear'
+        }}
+      />
+    </div>
   )
 }

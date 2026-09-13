@@ -275,6 +275,18 @@ button {
   from { opacity: 0; transform: translate3d(0, 14px, 0) scale(0.96); }
   to { opacity: 1; transform: none; }
 }
+/* Digits taking the place of dots: they come from where the dots were, */
+/* which is what makes it read as the same thing revealed rather than as */
+/* one thing swapped for another. */
+@keyframes digits-in {
+  from { opacity: 0; transform: translate3d(-6px, 0, 0); filter: blur(4px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+/* A whole section changing under a set of tabs. */
+@keyframes swap-in {
+  from { opacity: 0; transform: translate3d(0, 6px, 0); }
+  to { opacity: 1; transform: none; }
+}
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulse-soft {
   0%, 100% { opacity: 1; }
@@ -311,6 +323,8 @@ button {
 .animate-slide-right { animation: slide-right var(--t-base) var(--ease-snap) both; height: 100%; }
 .animate-slide-left { animation: slide-left var(--t-base) var(--ease-snap) both; height: 100%; }
 .animate-tab { animation: tab-in var(--t-base) var(--ease-out) both; }
+.animate-digits { animation: digits-in var(--t-base) var(--ease-out) both; }
+.animate-swap { animation: swap-in var(--t-base) var(--ease-emph) both; }
 .animate-toast { animation: toast-in var(--t-base) var(--ease-spring) both; }
 .animate-spin-slow { animation: spin calc(0.9s * var(--speed)) linear infinite; }
 .animate-pulse-soft { animation: pulse-soft calc(1.6s * var(--speed)) var(--ease-in-out) infinite; }

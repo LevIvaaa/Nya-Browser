@@ -888,7 +888,12 @@ if (isTop && httpOrigin) {
     const style = document.createElement('style')
     style.textContent = [
       `:host { all: initial }`,
-      `.sheet { position: absolute; inset: 0; overflow-y: auto; background: ${paper}; color: ${ink};`,
+      // It rises into place. A sheet that simply exists where a page was
+      // reads as the page breaking.
+      `@keyframes nya-read-in { from { opacity: 0; transform: translate3d(0, 10px, 0) }`,
+      `  to { opacity: 1; transform: none } }`,
+      `.sheet { animation: nya-read-in .26s cubic-bezier(.22,1,.36,1) both;`,
+      `  position: absolute; inset: 0; overflow-y: auto; background: ${paper}; color: ${ink};`,
       `  font: ${look.size}px/1.65 ${look.serif ? 'Georgia, "Times New Roman", serif' : 'system-ui, -apple-system, "Segoe UI", sans-serif'} }`,
             `.column { max-width: 44em; margin: 0 auto; padding: 56px 24px 96px }`,
       // The article brings its own class names with it; none of ours may be
@@ -996,11 +1001,16 @@ if (isTop && httpOrigin) {
     const shadow = host.attachShadow({ mode: 'open' })
     const style = document.createElement('style')
     style.textContent = [
-      '.veil { position: absolute; inset: 0; background: rgba(10,10,16,.45) }',
+      '@keyframes nya-veil-in { from { opacity: 0 } to { opacity: 1 } }',
+      '@keyframes nya-hint-in { from { opacity: 0; transform: translate(-50%, -8px) }',
+      '  to { opacity: 1; transform: translate(-50%, 0) } }',
+      '.veil { animation: nya-veil-in .16s ease-out both;',
+      '  position: absolute; inset: 0; background: rgba(10,10,16,.45) }',
       '.box { position: absolute; border: 1px solid #fff; box-shadow: 0 0 0 9999px rgba(10,10,16,.45); background: transparent }',
       '.size { position: absolute; transform: translate(0, -22px); font: 12px system-ui; color: #fff;',
       '  background: rgba(20,20,28,.9); padding: 2px 6px; border-radius: 6px; white-space: nowrap }',
-      '.hint { position: absolute; left: 50%; top: 24px; transform: translateX(-50%); font: 13px system-ui;',
+      '.hint { animation: nya-hint-in .24s cubic-bezier(.22,1,.36,1) both;',
+      '  position: absolute; left: 50%; top: 24px; transform: translateX(-50%); font: 13px system-ui;',
       '  color: #fff; background: rgba(20,20,28,.92); padding: 7px 12px; border-radius: 10px; white-space: nowrap }'
     ].join(' ')
     const veil = document.createElement('div')
