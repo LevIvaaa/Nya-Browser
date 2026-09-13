@@ -264,7 +264,12 @@ function Hero({ item, onClose }: { item: Playing; onClose: () => void }) {
   const running = useClock(item)
   const [held, setHeld] = useState<number | null>(null)
   const at = held ?? running
-  const live = item.duration <= 0
+  // No length to run along. That is what a live stream looks like — but so
+  // does a site that simply never says where in the track it is, and calling
+  // an ordinary song a live broadcast is a small lie. A source with a track
+  // list of its own is not a broadcast, so only the rest are called one.
+  const endless = item.duration <= 0
+  const live = endless && !item.next && !item.prev
   const send = (
     what: Parameters<typeof window.browser.mediaCommand>[1],
     to?: number
@@ -338,8 +343,8 @@ function Hero({ item, onClose }: { item: Playing; onClose: () => void }) {
           )}
         </div>
 
-        {/* A live stream has no length to run along, so it gets no line. */}
-        {!live && (
+        {/* Nothing to run along, nothing to draw. */}
+        {!endless && (
           <div className="mt-2.5">
             <Scrub
               value={Math.min(at, item.duration)}
@@ -358,13 +363,13 @@ function Hero({ item, onClose }: { item: Playing; onClose: () => void }) {
           </div>
         )}
 
-        <div className={`flex items-center justify-center gap-1 ${live ? 'mt-3' : 'mt-0.5'}`}>
+        <div className={`flex items-center justify-center gap-1 ${endless ? 'mt-3' : 'mt-0.5'}`}>
           {item.prev && (
             <button className="icon-btn h-9 w-9" title={t('Предыдущий трек')} onClick={() => send('prev')}>
               <SkipBack width={16} height={16} />
             </button>
           )}
-          {!live && (
+          {!endless && (
             <button
               className="icon-btn h-9 w-9"
               title={t('Назад на 10 секунд')}
@@ -381,7 +386,7 @@ function Hero({ item, onClose }: { item: Playing; onClose: () => void }) {
           >
             {item.playing ? <Pause width={19} height={19} /> : <Play width={19} height={19} />}
           </button>
-          {!live && (
+          {!endless && (
             <button
               className="icon-btn h-9 w-9"
               title={t('Вперёд на 10 секунд')}
