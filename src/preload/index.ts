@@ -5,6 +5,9 @@ import type {
   AddExtensionResult,
   DefaultBrowserState,
   DownloadItem,
+  AddressFields,
+  AddressMeta,
+  CardMeta,
   FilterStatus,
   FindState,
   InstalledExtension,
@@ -62,7 +65,11 @@ export interface VaultState {
 export interface AutofillOffer {
   host: string
   locked: boolean
+  /** what the field was asking for */
+  kind: 'login' | 'card' | 'address'
   entries: Array<{ id: string; username: string; origin: string }>
+  cards: CardMeta[]
+  addresses: AddressMeta[]
 }
 
 export interface SavePasswordOffer {
@@ -256,6 +263,31 @@ const api = {
   vaultCopy: (id: string): Promise<boolean> => ipcRenderer.invoke('vault:copy', id),
   copyText: (text: string): Promise<boolean> => ipcRenderer.invoke('clipboard:write', text),
   vaultRemove: (id: string): Promise<boolean> => ipcRenderer.invoke('vault:remove', id),
+
+  /* ---- cards and addresses ---- */
+  vaultCards: (): Promise<CardMeta[]> => ipcRenderer.invoke('vault:cards'),
+  vaultSaveCard: (input: {
+    id?: string
+    label: string
+    number: string
+    holder: string
+    month: number
+    year: number
+  }): Promise<boolean> => ipcRenderer.invoke('vault:save-card', input),
+  vaultRevealCard: (id: string): Promise<string | null> =>
+    ipcRenderer.invoke('vault:reveal-card', id),
+  vaultCopyCard: (id: string): Promise<boolean> => ipcRenderer.invoke('vault:copy-card', id),
+  vaultRemoveCard: (id: string): Promise<boolean> => ipcRenderer.invoke('vault:remove-card', id),
+  vaultFillCard: (id: string): Promise<boolean> => ipcRenderer.invoke('vault:fill-card', id),
+  vaultAddresses: (): Promise<AddressMeta[]> => ipcRenderer.invoke('vault:addresses'),
+  vaultSaveAddress: (input: { id?: string; label: string; fields: AddressFields }): Promise<boolean> =>
+    ipcRenderer.invoke('vault:save-address', input),
+  vaultRevealAddress: (id: string): Promise<AddressFields | null> =>
+    ipcRenderer.invoke('vault:reveal-address', id),
+  vaultRemoveAddress: (id: string): Promise<boolean> =>
+    ipcRenderer.invoke('vault:remove-address', id),
+  vaultFillAddress: (id: string): Promise<boolean> =>
+    ipcRenderer.invoke('vault:fill-address', id),
   vaultGenerate: (length?: number): Promise<string> => ipcRenderer.invoke('vault:generate', length),
   vaultSetMaster: (current: string | null, next: string): Promise<boolean> =>
     ipcRenderer.invoke('vault:set-master', current, next),

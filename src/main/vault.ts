@@ -8,6 +8,9 @@ import {
   timingSafeEqual
 } from 'crypto'
 import { JsonStore, track } from './store'
+import type { AddressFields, AddressMeta, CardMeta } from '../shared/types'
+
+export type { AddressFields, AddressMeta, CardMeta }
 
 const VAULT_VERSION = 1
 const KEY_LEN = 32
@@ -34,6 +37,16 @@ interface VaultEntry extends Credential {
   secret: Sealed
 }
 
+interface CardEntry extends CardMeta {
+  /** the card number, sealed */
+  secret: Sealed
+}
+
+interface AddressEntry extends AddressMeta {
+  /** the fields, sealed as one piece of JSON */
+  secret: Sealed
+}
+
 interface VaultFile {
   /** how the master key is protected: OS keychain, or a password only the user knows */
   mode: 'os' | 'password'
@@ -50,6 +63,8 @@ interface VaultFile {
    */
   helloKey: string
   entries: VaultEntry[]
+  cards: CardEntry[]
+  addresses: AddressEntry[]
 }
 
 const emptyVault = (): VaultFile => ({
@@ -58,7 +73,9 @@ const emptyVault = (): VaultFile => ({
   salt: '',
   verifier: null,
   helloKey: '',
-  entries: []
+  entries: [],
+  cards: [],
+  addresses: []
 })
 
 /**
@@ -150,6 +167,14 @@ class Vault {
           ? data.entries.filter(
               (e) => e && typeof e.origin === 'string' && typeof e.username === 'string' && e.secret
             )
+          : [],
+        // Cards and addresses are newer than the first vaults written, so a
+        // file from before them opens with none rather than with nothing.
+        cards: Array.isArray(data?.cards)
+          ? data.cards.filter((c) => c && typeof c.id === 'string' && c.secret)
+          : [],
+        addresses: Array.isArray(data?.addresses)
+          ? data.addresses.filter((a) => a && typeof a.id === 'string' && a.secret)
           : []
       })
     )
@@ -293,6 +318,8 @@ class Vault {
       ...item.meta,
       secret: seal(key, item.password, `${item.meta.origin}|${item.meta.username}`)
     }))
+    const rest = this.resealRest(key)
+    if (!rest) return false
     this.store.replace({
       mode: 'password',
       osKey: '',
@@ -301,7 +328,8 @@ class Vault {
       // The key changed, so any copy Hello was holding is stale. Turning Hello
       // back on re-seals the new one.
       helloKey: '',
-      entries
+      entries,
+      ...rest
     })
     this.store.flush()
     this.key?.fill(0)
@@ -323,13 +351,16 @@ class Vault {
       ...item.meta,
       secret: seal(key, item.password, `${item.meta.origin}|${item.meta.username}`)
     }))
+    const rest = this.resealRest(key)
+    if (!rest) return false
     this.store.replace({
       mode: 'os',
       osKey: b64(safeStorage.encryptString(b64(key))),
       salt: '',
       verifier: null,
       helloKey: '',
-      entries
+      entries,
+      ...rest
     })
     this.store.flush()
     this.key?.fill(0)
@@ -436,6 +467,145 @@ class Vault {
     })
   }
 
+  /* --------------------------------------------------------------- cards */
+
+  cards(): CardMeta[] {
+    return this.store
+      .get()
+      .cards.map(({ secret: _secret, ...meta }) => meta)
+      .sort((a, b) => b.used - a.used)
+  }
+
+  /**
+   * Saves a card. The number is sealed under the card's own id, so a sealed
+   * number cannot be moved onto another card's record; `cvc` is not a
+   * parameter here and never will be.
+   */
+  saveCard(input: {
+    id?: string
+    label: string
+    number: string
+    holder: string
+    month: number
+    year: number
+  }): boolean {
+    if (this.locked || !this.key) return false
+    const digits = input.number.replace(/\D/g, '')
+    if (digits.length < 12 || digits.length > 19) return false
+    const file = this.store.get()
+    const existing = input.id ? file.cards.find((c) => c.id === input.id) : undefined
+    const meta: CardMeta = {
+      id: existing?.id ?? randomUUID(),
+      label: input.label.slice(0, 60),
+      brand: brandOf(digits),
+      last4: digits.slice(-4),
+      holder: input.holder.slice(0, 100),
+      month: Math.min(12, Math.max(1, Math.round(input.month))),
+      year: Math.min(2100, Math.max(2000, Math.round(input.year))),
+      created: existing?.created ?? Date.now(),
+      used: Date.now()
+    }
+    const entry: CardEntry = { ...meta, secret: seal(this.key, digits, `card|${meta.id}`) }
+    const cards = existing
+      ? file.cards.map((c) => (c.id === existing.id ? entry : c))
+      : [...file.cards, entry]
+    this.store.replace({ ...file, cards })
+    this.store.flush()
+    return true
+  }
+
+  /** The number of one card. Callers must have a user action behind them. */
+  revealCard(id: string): string | null {
+    if (this.locked || !this.key) return null
+    const card = this.store.get().cards.find((c) => c.id === id)
+    if (!card) return null
+    try {
+      return open(this.key, card.secret, `card|${card.id}`)
+    } catch {
+      return null
+    }
+  }
+
+  removeCard(id: string): boolean {
+    if (this.locked) return false
+    const file = this.store.get()
+    const cards = file.cards.filter((c) => c.id !== id)
+    if (cards.length === file.cards.length) return false
+    this.store.replace({ ...file, cards })
+    this.store.flush()
+    return true
+  }
+
+  touchCard(id: string) {
+    const file = this.store.get()
+    this.store.replace({
+      ...file,
+      cards: file.cards.map((c) => (c.id === id ? { ...c, used: Date.now() } : c))
+    })
+  }
+
+  /* ----------------------------------------------------------- addresses */
+
+  addresses(): AddressMeta[] {
+    return this.store
+      .get()
+      .addresses.map(({ secret: _secret, ...meta }) => meta)
+      .sort((a, b) => b.used - a.used)
+  }
+
+  saveAddress(input: { id?: string; label: string; fields: AddressFields }): boolean {
+    if (this.locked || !this.key) return false
+    const fields = cleanAddress(input.fields)
+    const file = this.store.get()
+    const existing = input.id ? file.addresses.find((a) => a.id === input.id) : undefined
+    const meta: AddressMeta = {
+      id: existing?.id ?? randomUUID(),
+      label: input.label.slice(0, 60),
+      city: fields.city,
+      created: existing?.created ?? Date.now(),
+      used: Date.now()
+    }
+    const entry: AddressEntry = {
+      ...meta,
+      secret: seal(this.key, JSON.stringify(fields), `address|${meta.id}`)
+    }
+    const addresses = existing
+      ? file.addresses.map((a) => (a.id === existing.id ? entry : a))
+      : [...file.addresses, entry]
+    this.store.replace({ ...file, addresses })
+    this.store.flush()
+    return true
+  }
+
+  revealAddress(id: string): AddressFields | null {
+    if (this.locked || !this.key) return null
+    const address = this.store.get().addresses.find((a) => a.id === id)
+    if (!address) return null
+    try {
+      return cleanAddress(JSON.parse(open(this.key, address.secret, `address|${address.id}`)))
+    } catch {
+      return null
+    }
+  }
+
+  removeAddress(id: string): boolean {
+    if (this.locked) return false
+    const file = this.store.get()
+    const addresses = file.addresses.filter((a) => a.id !== id)
+    if (addresses.length === file.addresses.length) return false
+    this.store.replace({ ...file, addresses })
+    this.store.flush()
+    return true
+  }
+
+  touchAddress(id: string) {
+    const file = this.store.get()
+    this.store.replace({
+      ...file,
+      addresses: file.addresses.map((a) => (a.id === id ? { ...a, used: Date.now() } : a))
+    })
+  }
+
   /** Generates a strong password: 20 chars from a 74-symbol alphabet ≈ 124 bits. */
   generate(length = 20): string {
     const alphabet = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%^&*-_=+?'
@@ -468,6 +638,35 @@ class Vault {
     return out
   }
 
+  /**
+   * The cards and addresses, opened with the key in force and sealed again
+   * under a new one. Changing the master password rewrites the whole file, and
+   * anything left behind would be sealed under a key that no longer exists —
+   * which is losing it, quietly, at the moment somebody tightens their
+   * security.
+   */
+  private resealRest(next: Buffer): { cards: CardEntry[]; addresses: AddressEntry[] } | null {
+    if (!this.key) return null
+    const file = this.store.get()
+    try {
+      const cards = file.cards.map((card) => ({
+        ...card,
+        secret: seal(next, open(this.key as Buffer, card.secret, `card|${card.id}`), `card|${card.id}`)
+      }))
+      const addresses = file.addresses.map((address) => ({
+        ...address,
+        secret: seal(
+          next,
+          open(this.key as Buffer, address.secret, `address|${address.id}`),
+          `address|${address.id}`
+        )
+      }))
+      return { cards, addresses }
+    } catch {
+      return null
+    }
+  }
+
   /** Used by the security self-test: proves the file on disk is not readable. */
   cipherSample(): { file: string; sample: string; mode: string } {
     const file = this.store.get()
@@ -477,6 +676,60 @@ class Vault {
       sample: first ? `${first.secret.iv}.${first.secret.data.slice(0, 24)}…` : '',
       mode: file.mode
     }
+  }
+}
+
+/**
+ * Which card this is, by the digits it starts with. Only for the icon and
+ * for telling two cards apart in a list — nothing is decided by it.
+ */
+export function brandOf(digits: string): string {
+  if (/^4/.test(digits)) return 'visa'
+  if (/^220[0-4]/.test(digits)) return 'mir'
+  if (/^5[1-5]/.test(digits) || /^2[2-7]/.test(digits)) return 'mastercard'
+  if (/^3[47]/.test(digits)) return 'amex'
+  if (/^35/.test(digits)) return 'jcb'
+  if (/^62/.test(digits)) return 'unionpay'
+  if (/^6(011|5)/.test(digits)) return 'discover'
+  return ''
+}
+
+/**
+ * The Luhn check every card number satisfies. It catches a typed digit that
+ * is wrong; it says nothing about whether a card exists, and nothing is
+ * refused because of it — the person may know better than we do.
+ */
+export function looksLikeCard(digits: string): boolean {
+  if (digits.length < 12 || digits.length > 19) return false
+  let sum = 0
+  let double = false
+  for (let i = digits.length - 1; i >= 0; i--) {
+    let n = digits.charCodeAt(i) - 48
+    if (n < 0 || n > 9) return false
+    if (double) {
+      n *= 2
+      if (n > 9) n -= 9
+    }
+    sum += n
+    double = !double
+  }
+  return sum % 10 === 0
+}
+
+/** Every field a string, every string trimmed and bounded. */
+function cleanAddress(fields: Partial<AddressFields> | null): AddressFields {
+  const text = (value: unknown, max = 120) => String(value ?? '').trim().slice(0, max)
+  return {
+    name: text(fields?.name),
+    phone: text(fields?.phone, 40),
+    email: text(fields?.email),
+    country: text(fields?.country, 80),
+    region: text(fields?.region, 80),
+    city: text(fields?.city, 80),
+    street: text(fields?.street, 200),
+    house: text(fields?.house, 40),
+    flat: text(fields?.flat, 40),
+    postcode: text(fields?.postcode, 20)
   }
 }
 

@@ -41,6 +41,18 @@ export const Plus = (p: P) => (
     <path d="M12 5.5v13M5.5 12h13" />
   </svg>
 )
+export const CardIcon = (p: P) => (
+  <svg {...svg(p)}>
+    <rect x="3" y="5.5" width="18" height="13" rx="2.5" />
+    <path d="M3 10h18" />
+  </svg>
+)
+export const MapPin = (p: P) => (
+  <svg {...svg(p)}>
+    <path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z" />
+    <circle cx="12" cy="10" r="2.6" />
+  </svg>
+)
 export const Home = (p: P) => (
   <svg {...svg(p)}>
     <path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19z" />
