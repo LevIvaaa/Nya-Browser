@@ -1,7 +1,7 @@
 import { t } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
 import type { InternalPage, Settings, TabGroup, TabSpace, TabState } from '../../../shared/types'
-import { ChevronDown, Clock, Cross, Download, Gear, Globe, Key, Pin, Plus, Sleep, Star, Volume, VolumeOff } from './Icons'
+import { ChevronDown, ChevronLeft, ChevronRight, Clock, Cross, Download, Gear, Globe, Key, Pin, Plus, Sleep, Star, Volume, VolumeOff } from './Icons'
 import { cx } from './ui'
 
 /** The same icons these pages carry in the toolbar and in the menu. */
@@ -138,6 +138,7 @@ function TabItem({
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       title={vertical ? undefined : `${title}${tab.origin ? ` — ${tab.origin}` : ''}`}
+      data-active-tab={tab.active ? '' : undefined}
       className={cx(
         'animate-tab no-drag group relative flex cursor-default select-none items-center gap-2 px-2.5',
         vertical ? 'w-full' : 'min-w-[54px] flex-1'
@@ -465,6 +466,43 @@ export function TabStrip({
 }) {
   const reorder = useReorder()
   const rows = rowsOf(tabs, groups)
+  // More tabs than the window is wide used to be drawn past its edge and cut
+  // off there — tabs you could neither read nor click. The run of them slides
+  // instead, and the tab in front of you is brought back into sight whenever
+  // it changes.
+  const scroller = useRef<HTMLDivElement>(null)
+  const activeId = tabs.find((tab) => tab.active)?.id
+  // Whether there are tabs behind either end of what you can see. An arrow
+  // appears on that side and nowhere else: an arrow pointing at nothing is
+  // worse than no arrow.
+  const [more, setMore] = useState({ left: false, right: false })
+  const measure = () => {
+    const row = scroller.current
+    if (!row) return
+    // A few pixels over is not something to put an arrow next to.
+    const room = row.scrollWidth - row.clientWidth
+    const left = room > 8 && row.scrollLeft > 4
+    const right = room > 8 && row.scrollLeft + row.clientWidth < row.scrollWidth - 4
+    setMore((was) => (was.left === left && was.right === right ? was : { left, right }))
+  }
+  const slide = (way: -1 | 1) => {
+    const row = scroller.current
+    if (!row) return
+    row.scrollBy({ left: way * Math.max(140, row.clientWidth * 0.8), behavior: 'smooth' })
+  }
+  useEffect(() => {
+    const at = scroller.current?.querySelector('[data-active-tab]')
+    at?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
+    measure()
+  }, [activeId, tabs.length])
+  // The window being resized changes what fits without anything scrolling.
+  useEffect(() => {
+    const row = scroller.current
+    if (!row) return
+    const watch = new ResizeObserver(() => measure())
+    watch.observe(row)
+    return () => watch.disconnect()
+  }, [])
 
   return (
     <div
@@ -472,8 +510,10 @@ export function TabStrip({
       onDragEnd={reorder.onDragEnd}
       onDoubleClick={() => window.browser.maximize()}
     >
-      {/* The group in force, and any pinned beside it. */}
-      <div className="flex shrink-0 items-center gap-0.5 pr-1">
+      {/* The group in force, and any pinned beside it — never more than a
+          slice of the window, however many are pinned, because the tabs are
+          what the strip is for. */}
+      <div className="no-bar flex max-w-[42%] shrink-0 items-center gap-0.5 overflow-x-auto pr-1">
         {chipsOf(spaces).map(({ space, index }) => (
           <SpaceChip
             key={space.id}
@@ -483,7 +523,31 @@ export function TabStrip({
           />
         ))}
       </div>
-      <div className="flex min-w-0 items-center gap-1" style={{ flex: '0 1 auto' }}>
+      {more.left && (
+        <button
+          className="icon-btn h-6 w-5 shrink-0"
+          title={t('Прокрутить вкладки влево')}
+          aria-label={t('Прокрутить вкладки влево')}
+          onClick={() => slide(-1)}
+        >
+          <ChevronLeft width={13} height={13} />
+        </button>
+      )}
+      <div
+        ref={scroller}
+        className="no-bar flex min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden"
+        style={{ flex: '0 1 auto' }}
+        onScroll={measure}
+        // A wheel has one direction and the strip has the other, so whichever
+        // way it is turned moves the tabs along — a touchpad's sideways swipe
+        // included.
+        onWheel={(event) => {
+          const row = scroller.current
+          if (!row || row.scrollWidth <= row.clientWidth) return
+          const by = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
+          if (by) row.scrollLeft += by
+        }}
+      >
         {rows.map((row) =>
           row.kind === 'group' ? (
             <GroupChip
@@ -513,6 +577,16 @@ export function TabStrip({
           )
         )}
       </div>
+      {more.right && (
+        <button
+          className="icon-btn h-6 w-5 shrink-0"
+          title={t('Прокрутить вкладки вправо')}
+          aria-label={t('Прокрутить вкладки вправо')}
+          onClick={() => slide(1)}
+        >
+          <ChevronRight width={13} height={13} />
+        </button>
+      )}
       <button className="icon-btn shrink-0" title={t('Новая вкладка · Ctrl+T')} onClick={() => window.browser.newTab()}>
         <Plus />
       </button>

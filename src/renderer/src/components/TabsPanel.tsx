@@ -125,7 +125,12 @@ export default function TabsPanel({
             another. Only worth showing once there is more than the one every
             browser starts with. */}
         {spaces.length > 1 && (
-          <div className="shrink-0 border-b px-1.5 pb-1" style={{ borderColor: 'var(--line)' }}>
+          <div
+            // Five of them and then it scrolls: however many big groups you
+            // keep, the tabs in the one you are in still have the room.
+            className="shrink-0 overflow-y-auto border-b px-1.5 pb-1"
+            style={{ borderColor: 'var(--line)', maxHeight: 172 }}
+          >
             {spaces.map((space, index) => (
               <div
                 key={space.id}
@@ -229,37 +234,42 @@ export default function TabsPanel({
         <div className="min-h-0 overflow-y-auto px-1.5 pb-1">
           {loose.map((tab) => row(tab))}
 
-          {groups.map((group) => {
-            const inside = grouped.get(group.id) ?? []
-            return (
-              <div key={group.id} className="mt-1">
-                <button
-                  className="flex h-7 w-full items-center gap-2 rounded-[8px] px-2 text-left hover:bg-[var(--surface-hover)]"
-                  onClick={() => void window.browser.toggleGroup(group.id)}
-                  title={group.collapsed ? t('Развернуть группу') : t('Свернуть группу')}
-                >
-                  <span className="shrink-0 text-faint">
-                    {group.collapsed ? (
-                      <ChevronRight width={12} height={12} />
-                    ) : (
-                      <ChevronDown width={12} height={12} />
-                    )}
-                  </span>
-                  <span
-                    className="h-2 w-2 shrink-0 rounded-pill"
-                    style={{ background: group.color }}
-                  />
-                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
-                    {group.name || t('Группа')}
-                  </span>
-                  <span className="shrink-0 text-2xs text-faint">{inside.length}</span>
-                </button>
-                {!group.collapsed && (
-                  <div className="pl-3">{inside.map((tab) => row(tab, group.color))}</div>
-                )}
-              </div>
-            )
-          })}
+          {/* Only the groups of the big group you are in: the others have no
+              tabs here, and a group showing nothing is a row you cannot open,
+              fill or be rid of. */}
+          {groups
+            .filter((group) => (grouped.get(group.id) ?? []).length > 0)
+            .map((group) => {
+              const inside = grouped.get(group.id) ?? []
+              return (
+                <div key={group.id} className="mt-1">
+                  <button
+                    className="flex h-7 w-full items-center gap-2 rounded-[8px] px-2 text-left hover:bg-[var(--surface-hover)]"
+                    onClick={() => void window.browser.toggleGroup(group.id)}
+                    title={group.collapsed ? t('Развернуть группу') : t('Свернуть группу')}
+                  >
+                    <span className="shrink-0 text-faint">
+                      {group.collapsed ? (
+                        <ChevronRight width={12} height={12} />
+                      ) : (
+                        <ChevronDown width={12} height={12} />
+                      )}
+                    </span>
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-pill"
+                      style={{ background: group.color }}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
+                      {group.name || t('Группа')}
+                    </span>
+                    <span className="shrink-0 text-2xs text-faint">{inside.length}</span>
+                  </button>
+                  {!group.collapsed && (
+                    <div className="pl-3">{inside.map((tab) => row(tab, group.color))}</div>
+                  )}
+                </div>
+              )
+            })}
         </div>
 
         <div className="shrink-0 border-t px-1.5 py-1" style={{ borderColor: 'var(--line)' }}>
