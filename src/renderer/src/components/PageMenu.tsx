@@ -1,7 +1,7 @@
 import { t } from '../i18n'
 import { useState } from 'react'
 import type { TabState } from '../../../shared/types'
-import { Copy, Download, Globe, Grid, Minus, Plus, Printer, Search } from './Icons'
+import { Copy, Download, Globe, Grid, Minus, Plus, Printer, Reader, Search } from './Icons'
 
 /**
  * What can be done with the page that is open, next to the address it is at.
@@ -70,6 +70,13 @@ export default function PageMenu({
         }}
       >
         <div className="py-1.5">
+          {item(
+            <Reader width={15} height={15} />,
+            tab?.reading ? t('Выйти из режима чтения') : t('Режим чтения'),
+            () => void window.browser.toggleReader(),
+            usable
+          )}
+
           {item(
             <Globe width={15} height={15} />,
             tab?.translated ? t('Показать оригинал') : t('Перевести страницу'),
