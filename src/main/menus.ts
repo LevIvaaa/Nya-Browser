@@ -202,8 +202,8 @@ export function tabContextMenu(browser: BrowserWindow, tabId: number) {
     {
       // Choosing the one already beside you is how a split ends: the same
       // gesture both ways round.
-      label: browser.splitTab === tabId ? t('Убрать со второй половины') : t('Показать рядом'),
-      enabled: many && tabId !== browser.activeId,
+      label: browser.inPair(tabId) ? t('Убрать со второй половины') : t('Показать рядом'),
+      enabled: many && (browser.inPair(tabId) || tabId !== browser.activeId),
       click: () => browser.splitWith(tabId)
     },
     {

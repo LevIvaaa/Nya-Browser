@@ -531,11 +531,11 @@ export const Note = (p: P) => (
  */
 export const Translate = (p: P) => (
   <svg {...svg(p, 1.6)}>
-    <path d="M2.8 13.6 6.6 4.2l3.8 9.4" />
-    <path d="M4.3 10.4h4.6" />
-    <path d="M12.6 15.2h8.6M16.9 12.6v2.6" />
-    <path d="M20.6 17.4c-1 2.6-3.1 4.5-5.9 5.4" />
-    <path d="M16 18.6c.8 2 2.4 3.5 4.4 4.2" />
+    <path d="M2.6 20.4 6.4 11l3.8 9.4" />
+    <path d="M4.1 17.2h4.6" />
+    <path d="M12.8 6.6h8.6M17.1 4v2.6" />
+    <path d="M20.8 8.8c-1 2.6-3.1 4.5-5.9 5.4" />
+    <path d="M16.2 10c.8 2 2.4 3.5 4.4 4.2" />
   </svg>
 )
 /** Reading mode: a long sheet, rolled at the ends, with the text on it. */
