@@ -576,8 +576,12 @@ function registerIpc() {
   ipcMain.handle('nav:reader', (event) => current(event).toggleReader())
   ipcMain.on('media:state', (event, payload: unknown) => {
     const data = payload as Record<string, unknown> | null
+    // Every frame of a page may have something to say; they are kept apart,
+    // because the film and the advert on top of it are not the same track.
+    const frame = event.senderFrame?.routingId ?? 0
     current(event).handleMediaState(
       event.sender.id,
+      frame,
       data
         ? {
             title: str(data.title, 200),
@@ -585,9 +589,15 @@ function registerIpc() {
             art: /^https?:|^data:image\//.test(String(data.art ?? '')) ? String(data.art).slice(0, 2000) : '',
             playing: data.playing === true,
             muted: data.muted === true,
+            volume: Math.max(0, Math.min(1, num(data.volume))),
             position: num(data.position),
             duration: num(data.duration),
-            video: data.video === true
+            video: data.video === true,
+            seekable: data.seekable === true,
+            rate: Math.max(0, Math.min(4, num(data.rate))),
+            next: data.next === true,
+            prev: data.prev === true,
+            pip: data.pip === true
           }
         : null
     )
@@ -600,7 +610,9 @@ function registerIpc() {
     current(event).setSplitRatio(num(ratio))
   )
   ipcMain.handle('media:command', (event, tabId: unknown, what: unknown, to: unknown) => {
-    const allowed = ['toggle', 'play', 'pause', 'mute', 'seek', 'skip'] as const
+    const allowed = [
+      'toggle', 'play', 'pause', 'mute', 'seek', 'skip', 'volume', 'rate', 'next', 'prev', 'pip'
+    ] as const
     const command = allowed.find((name) => name === what)
     if (!command) return false
     return current(event).mediaCommand(num(tabId), command, to === undefined ? undefined : num(to))

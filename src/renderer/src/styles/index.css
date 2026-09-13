@@ -8,6 +8,11 @@
 :root {
   --accent: #7c6cff;
   --radius: 14px;
+  /* Everything that is not a card is rounded from the same number, so one
+     slider decides the shape of the whole browser. The floors keep a small
+     control from going square when the setting is at its lowest. */
+  --radius-md: max(7px, calc(var(--radius) - 3px));
+  --radius-sm: max(6px, calc(var(--radius) - 4px));
 
   /* motion: every duration is derived from these, so one setting scales all */
   --speed: 1;
@@ -408,7 +413,8 @@ button {
   }
 
   .icon-btn {
-    @apply no-drag inline-flex shrink-0 items-center justify-center rounded-[10px];
+    @apply no-drag inline-flex shrink-0 items-center justify-center;
+    border-radius: var(--radius-sm);
     height: 30px;
     width: 30px;
     color: var(--text-dim);
@@ -428,7 +434,8 @@ button {
   }
 
   .btn {
-    @apply no-drag inline-flex items-center justify-center gap-2 rounded-[11px] px-3.5 text-sm font-medium;
+    @apply no-drag inline-flex items-center justify-center gap-2 px-3.5 text-sm font-medium;
+    border-radius: var(--radius-md);
     height: 34px;
     background: var(--field-idle);
     transition: background var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-spring),
@@ -485,7 +492,8 @@ button {
   }
 
   .field {
-    @apply no-drag rounded-[10px] border px-3 text-sm outline-none;
+    @apply no-drag border px-3 text-sm outline-none;
+    border-radius: var(--radius-sm);
     height: 34px;
     background: var(--field-idle);
     border-color: var(--line);
@@ -563,6 +571,120 @@ input[type='color']::-webkit-color-swatch {
   border: none;
   border-radius: 999px;
 }
+
+/* ==========================================================================
+   The light an avatar gives off
+   ========================================================================== */
+
+.halo {
+  position: absolute;
+  inset: -7px;
+  border-radius: 999px;
+  opacity: 0;
+  transform: scale(0.8);
+  pointer-events: none;
+  filter: blur(7px) saturate(220%);
+  /* Brightest at the picture's edge and gone by the outside, so it reads as
+     light coming off it rather than a second, larger copy of it. */
+  -webkit-mask-image: radial-gradient(closest-side, #000 52%, rgba(0, 0, 0, 0) 100%);
+  mask-image: radial-gradient(closest-side, #000 52%, rgba(0, 0, 0, 0) 100%);
+  transition: opacity var(--t-base) var(--ease-out), transform var(--t-slow) var(--ease-emph),
+    filter var(--t-base) var(--ease-out);
+}
+
+/* The pane the other buttons draw under themselves would only cover it. */
+.icon-btn.halo-host:hover:not(:disabled),
+.icon-btn.halo-host[data-open='true'] {
+  background: transparent;
+}
+.halo-host:hover .halo,
+.halo-host[data-open='true'] .halo {
+  opacity: 0.85;
+  transform: scale(1.3);
+  filter: blur(9px) saturate(240%);
+}
+.halo-host:hover .avatar-face {
+  transform: scale(1.06);
+}
+.halo-host:active .avatar-face {
+  transform: scale(0.94);
+}
+
+/* ==========================================================================
+   The player
+   ========================================================================== */
+
+/* Three bars keeping time. The only moving picture in the interface that is
+   allowed to run forever, because it stops the moment the music does. */
+.eq {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+.eq i {
+  width: 2px;
+  border-radius: 1px;
+  background: currentColor;
+  transform-origin: bottom;
+  animation: eq-bar calc(760ms * var(--speed)) var(--ease-in-out) infinite alternate;
+}
+.eq i:nth-child(1) { height: 60%; animation-delay: -160ms; }
+.eq i:nth-child(2) { height: 100%; animation-delay: -420ms; }
+.eq i:nth-child(3) { height: 45%; animation-delay: -60ms; }
+.eq.still i { animation-play-state: paused; transform: scaleY(0.45); }
+@keyframes eq-bar {
+  from { transform: scaleY(0.28); }
+  to { transform: scaleY(1); }
+}
+
+/* The cover, brought up to size as it loads rather than appearing whole. */
+@keyframes art-in {
+  from { opacity: 0; transform: scale(1.06); }
+  to { opacity: 1; transform: none; }
+}
+.art-in { animation: art-in calc(420ms * var(--speed)) var(--ease-emph) both; }
+
+/* The line a track is played along. Thin at rest, thick under the hand. */
+.scrub {
+  position: relative;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  touch-action: none;
+}
+.scrub-rail {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line-strong);
+  overflow: hidden;
+  transition: height var(--t-fast) var(--ease-out);
+}
+.scrub:hover .scrub-rail,
+.scrub.holding .scrub-rail { height: 6px; }
+.scrub-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.scrub-thumb {
+  position: absolute;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  margin-left: -5.5px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  transform: translateY(-50%) scale(0);
+  transition: transform var(--t-fast) var(--ease-spring);
+}
+.scrub:hover .scrub-thumb { transform: translateY(-50%) scale(1); }
+.scrub.holding .scrub-thumb { transform: translateY(-50%) scale(1.18); }
 
 /*
  * Someone who has asked their computer to stop moving things has asked this

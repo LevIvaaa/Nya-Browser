@@ -98,6 +98,36 @@ const hostOfUrl = (raw: string): string => {
     return ''
   }
 }
+/** A site's name as a person would say it: no scheme, no leading www. */
+const hostOf = (raw: string): string => hostOfUrl(raw).replace(/^www\./, '')
+
+/** What a frame says about the one thing it is playing. */
+type MediaReport = Omit<Playing, 'tabId' | 'host' | 'favicon'>
+
+export type MediaCommand =
+  | 'toggle'
+  | 'play'
+  | 'pause'
+  | 'mute'
+  | 'seek'
+  | 'skip'
+  | 'volume'
+  | 'rate'
+  | 'next'
+  | 'prev'
+  | 'pip'
+
+/**
+ * Which of two frames of the same tab speaks for it: the one playing, and of
+ * two playing ones the video — an advert in an iframe should not be allowed
+ * to answer for the film it interrupted.
+ */
+const louder = (a: Playing, b: Playing) => {
+  if (a.playing !== b.playing) return a.playing
+  if (a.video !== b.video) return a.video
+  return a.duration > b.duration
+}
+
 const isDev = !app.isPackaged
 
 interface PersistedTab {
@@ -713,7 +743,7 @@ export class BrowserWindow {
       }
       // A window that is gone is not playing anything, and must not be
       // holding the machine's media keys.
-      this.nowPlaying.clear()
+      this.frameMedia.clear()
       this.dropMediaKeys()
       this.persistSession()
       this.saveBounds()
@@ -1288,9 +1318,18 @@ export class BrowserWindow {
       }
       this.broadcast()
     })
-    wc.on('audio-state-changed', () => this.broadcast())
-    wc.on('media-started-playing', () => this.broadcast())
-    wc.on('media-paused', () => this.broadcast())
+    wc.on('audio-state-changed', () => {
+      this.broadcast()
+      this.mediaHeard()
+    })
+    wc.on('media-started-playing', () => {
+      this.broadcast()
+      this.mediaHeard()
+    })
+    wc.on('media-paused', () => {
+      this.broadcast()
+      this.mediaHeard()
+    })
     wc.on('zoom-changed', () => this.broadcast())
 
     // HTML fullscreen — a video's ⛶ button. The view normally lives in the
@@ -1640,7 +1679,7 @@ export class BrowserWindow {
       this.send('state:closed', this.closedStack.slice(-10).reverse())
     }
     tab.destroy(this.win)
-    if (this.nowPlaying.delete(tab.id)) this.sendMedia()
+    if (this.dropMedia(tab.id)) this.sendMedia()
     if (this.splitId === tab.id) {
       this.splitId = null
       this.sendSplit()
@@ -2331,39 +2370,122 @@ export class BrowserWindow {
   /** The window the media keys are pointed at, if any. */
   private static mediaKeys: BrowserWindow | null = null
 
-  /** What each tab says it is playing, by tab id. */
-  private nowPlaying = new Map<number, Playing>()
+  /**
+   * What each frame of each tab says it is playing, keyed by tab and frame.
+   * Frames matter: a video on a page is as often as not inside somebody
+   * else's player, in an iframe of its own.
+   */
+  private frameMedia = new Map<string, { tabId: number; media: MediaReport; since: number }>()
 
   /**
-   * A tab said what it is playing, or that it has stopped. The list is the
-   * browser's, not the tab's: what people want is one place that answers
+   * A frame said what it is playing, or that it has stopped. The list is the
+   * browser's, not the page's: what people want is one place that answers
    * «where is that sound coming from».
    */
-  handleMediaState(webContentsId: number, state: Omit<Playing, 'tabId' | 'host'> | null) {
+  handleMediaState(webContentsId: number, frameId: number, state: MediaReport | null) {
     const tab = this.tabs.find((t) => t.wc?.id === webContentsId)
     if (!tab) return
+    const key = `${webContentsId}:${frameId}`
     if (!state) {
-      if (!this.nowPlaying.delete(tab.id)) return
+      if (!this.frameMedia.delete(key)) return
     } else {
-      let host = ''
-      try {
-        host = new URL(tab.url).hostname.replace(/^www\./, '')
-      } catch {
-        /* a page with no address of its own */
-      }
-      this.nowPlaying.set(tab.id, { ...state, tabId: tab.id, host })
+      // When it started, so that the one you pressed play on last is the one
+      // the panel opens with — that is the one you are listening to.
+      const before = this.frameMedia.get(key)
+      const since = state.playing && !before?.media.playing ? Date.now() : (before?.since ?? Date.now())
+      this.frameMedia.set(key, { tabId: tab.id, media: state, since })
     }
     this.sendMedia()
   }
 
-  private sendMedia() {
-    // Playing first, then whatever was played last — the order a person
-    // would put them in.
-    const list = [...this.nowPlaying.values()].sort(
-      (a, b) => Number(b.playing) - Number(a.playing)
+  /** Forgets everything a tab was playing. */
+  private dropMedia(tabId: number) {
+    let gone = false
+    for (const [key, entry] of this.frameMedia) {
+      if (entry.tabId === tabId) {
+        this.frameMedia.delete(key)
+        gone = true
+      }
+    }
+    return gone
+  }
+
+  /**
+   * One row per tab, out of however many frames reported — and one for every
+   * tab that is making a noise without having said a word about it, so that
+   * the list can never be emptier than the room is loud.
+   */
+  playingNow(): Playing[] {
+    const rows = new Map<number, Playing>()
+
+    const started = new Map<number, number>()
+    for (const { tabId, media, since } of this.frameMedia.values()) {
+      const tab = this.tabs.find((t) => t.id === tabId)
+      const wc = tab?.wc
+      if (!tab || !wc || wc.isDestroyed()) continue
+      const muted = wc.isAudioMuted()
+      const row: Playing = {
+        ...media,
+        tabId,
+        // A page that plays through a detached element tells nobody it
+        // started; the browser can hear it, so the browser says so.
+        playing: media.playing || wc.isCurrentlyAudible(),
+        muted,
+        host: hostOf(tab.url),
+        favicon: tab.favicon || ''
+      }
+      const had = rows.get(tabId)
+      if (!had || louder(row, had)) {
+        rows.set(tabId, row)
+        started.set(tabId, since)
+      }
+    }
+
+    for (const tab of this.here()) {
+      const wc = tab.wc
+      if (!wc || wc.isDestroyed() || rows.has(tab.id)) continue
+      if (!wc.isCurrentlyAudible()) continue
+      started.set(tab.id, 0)
+      rows.set(tab.id, {
+        tabId: tab.id,
+        title: tab.title || hostOf(tab.url),
+        artist: '',
+        art: '',
+        playing: true,
+        muted: wc.isAudioMuted(),
+        volume: 1,
+        position: 0,
+        duration: 0,
+        video: false,
+        seekable: false,
+        rate: 0,
+        next: false,
+        prev: false,
+        pip: false,
+        host: hostOf(tab.url),
+        favicon: tab.favicon || ''
+      })
+    }
+
+    // Playing first, and of those the one started last — the order a person
+    // would put them in, because the last thing you pressed play on is the
+    // thing you meant to listen to.
+    return [...rows.values()].sort(
+      (a, b) =>
+        Number(b.playing) - Number(a.playing) ||
+        (started.get(b.tabId) ?? 0) - (started.get(a.tabId) ?? 0)
     )
-    this.send('state:media', list)
+  }
+
+  private sendMedia() {
+    this.send('state:media', this.playingNow())
     this.syncMediaKeys()
+  }
+
+  /** The browser heard a tab start or stop; the list is about to be wrong. */
+  private mediaHeard() {
+    // The flag Chromium answers with settles a moment after the event.
+    setTimeout(() => !this.win.isDestroyed() && this.sendMedia(), 250)
   }
 
   /**
@@ -2380,8 +2502,9 @@ export class BrowserWindow {
       BrowserWindow.mediaKeys = this
       try {
         globalShortcut.register('MediaPlayPause', () => this.mediaKey('toggle'))
-        globalShortcut.register('MediaNextTrack', () => this.mediaKey('skip', 10))
-        globalShortcut.register('MediaPreviousTrack', () => this.mediaKey('skip', -10))
+        globalShortcut.register('MediaNextTrack', () => this.mediaKey('next'))
+        globalShortcut.register('MediaPreviousTrack', () => this.mediaKey('prev'))
+        globalShortcut.register('MediaStop', () => this.mediaKey('pause'))
       } catch {
         /* another application holds them; it is welcome to them */
       }
@@ -2392,7 +2515,7 @@ export class BrowserWindow {
 
   private dropMediaKeys() {
     if (BrowserWindow.mediaKeys === this) BrowserWindow.mediaKeys = null
-    for (const key of ['MediaPlayPause', 'MediaNextTrack', 'MediaPreviousTrack']) {
+    for (const key of ['MediaPlayPause', 'MediaNextTrack', 'MediaPreviousTrack', 'MediaStop']) {
       try {
         globalShortcut.unregister(key)
       } catch {
@@ -2401,30 +2524,59 @@ export class BrowserWindow {
     }
   }
 
-  /** Everything playing in this window. */
-  playingNow(): Playing[] {
-    return [...this.nowPlaying.values()].sort((a, b) => Number(b.playing) - Number(a.playing))
-  }
-
   /** Tells one tab's player what to do. */
-  mediaCommand(tabId: number, what: 'toggle' | 'play' | 'pause' | 'mute' | 'seek' | 'skip', to?: number) {
+  mediaCommand(tabId: number, what: MediaCommand, to?: number) {
     const tab = this.tabs.find((t) => t.id === tabId)
     const wc = tab?.wc
     if (!wc || wc.isDestroyed()) return false
+
+    // Silence is the browser's own to give: a page playing through an element
+    // it never put in the document has no mute button to press.
+    if (what === 'mute') {
+      wc.setAudioMuted(!wc.isAudioMuted())
+      this.sendMedia()
+      return true
+    }
+
+    // A window of its own is a privilege pages are only granted when a person
+    // asked for it, so the asking is done as a person.
+    if (what === 'pip') {
+      void wc
+        .executeJavaScript(
+          `document.dispatchEvent(new CustomEvent('nya-media-do', { detail: '{"do":"pip"}' }))`,
+          true
+        )
+        .catch(() => undefined)
+      return true
+    }
+
+    // A page that says nothing about whether it is playing still has to be
+    // told which way to toggle; the browser knows, because it can hear it.
+    if (what === 'toggle' && to === undefined) {
+      const row = this.playingNow().find((item) => item.tabId === tabId)
+      to = row?.playing ? 1 : 0
+    }
+
     wc.send('media:command', { do: what, to })
+    // Pages report a second later at the slowest; this is so the button under
+    // the finger changes at the speed of the finger.
+    setTimeout(() => !this.win.isDestroyed() && this.sendMedia(), 300)
     return true
   }
 
   /** Whether the media keys should be listened for at all. */
   anythingPlaying() {
-    return [...this.nowPlaying.values()].some((item) => item.playing)
+    return this.playingNow().some((item) => item.playing)
   }
 
   /** The one the media keys act on: whatever is playing, newest first. */
-  mediaKey(what: 'toggle' | 'skip', to?: number) {
+  mediaKey(what: 'toggle' | 'next' | 'prev' | 'pause') {
     const first = this.playingNow()[0]
     if (!first) return false
-    return this.mediaCommand(first.tabId, what, to)
+    // A page with no track list still answers a skip: ten seconds of it.
+    if (what === 'next' && !first.next) return this.mediaCommand(first.tabId, 'skip', 10)
+    if (what === 'prev' && !first.prev) return this.mediaCommand(first.tabId, 'skip', -10)
+    return this.mediaCommand(first.tabId, what)
   }
 
   /** Whether a picture's area is being drawn over the page right now. */

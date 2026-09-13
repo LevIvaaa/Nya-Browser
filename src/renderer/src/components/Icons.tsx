@@ -464,3 +464,63 @@ export const Printer = (p: P) => (
     <path d="M7 14h10v5.5H7z" />
   </svg>
 )
+export const SkipBack = (p: P) => (
+  <svg {...svg(p, 1.6)}>
+    <path d="M18.5 6v12L9.5 12z" />
+    <path d="M6 5.5v13" />
+  </svg>
+)
+export const SkipForward = (p: P) => (
+  <svg {...svg(p, 1.6)}>
+    <path d="M5.5 6v12l9-6z" />
+    <path d="M18 5.5v13" />
+  </svg>
+)
+/** Back ten seconds — the arrow goes round, the number says how far. */
+export const Back10 = (p: P) => (
+  <svg {...svg(p, 1.6)}>
+    <path d="M4.2 11a8 8 0 1 0 2.3-5.1" />
+    <path d="M3.6 4.6v4h4" />
+    <text
+      x="12"
+      y="15.4"
+      fontSize="7.6"
+      fontWeight="600"
+      textAnchor="middle"
+      fill="currentColor"
+      stroke="none"
+    >
+      10
+    </text>
+  </svg>
+)
+export const Forward10 = (p: P) => (
+  <svg {...svg(p, 1.6)}>
+    <path d="M19.8 11a8 8 0 1 1-2.3-5.1" />
+    <path d="M20.4 4.6v4h-4" />
+    <text
+      x="12"
+      y="15.4"
+      fontSize="7.6"
+      fontWeight="600"
+      textAnchor="middle"
+      fill="currentColor"
+      stroke="none"
+    >
+      10
+    </text>
+  </svg>
+)
+export const Pip = (p: P) => (
+  <svg {...svg(p, 1.6)}>
+    <rect x="3" y="5" width="18" height="14" rx="2.5" />
+    <rect x="11.5" y="11" width="7.5" height="6" rx="1.5" />
+  </svg>
+)
+export const Note = (p: P) => (
+  <svg {...svg(p, 1.6)}>
+    <path d="M9 17.5V6l10-2v11.5" />
+    <circle cx="6.5" cy="17.5" r="2.5" />
+    <circle cx="16.5" cy="15.5" r="2.5" />
+  </svg>
+)

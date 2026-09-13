@@ -1076,72 +1076,411 @@ if (isTop && httpOrigin) {
    What is playing here
    ========================================================================== */
 
-if (isTop && httpOrigin) {
-  /** The element making the noise: the first one playing, video before audio. */
-  const playing = (): HTMLMediaElement | null => {
-    const all = Array.from(document.querySelectorAll<HTMLMediaElement>('video, audio'))
-    return all.find((el) => !el.paused && !el.ended && el.currentTime > 0) ?? null
+/**
+ * A page that plays something does not have to leave anything in the document
+ * to do it: `new Audio(url).play()` never touches the DOM, and a good half of
+ * the music sites on the internet work exactly that way. Looking for `<audio>`
+ * tags therefore finds nothing on them.
+ *
+ * So the looking is done from inside the page itself. The small script below
+ * is put into the page's own world before its scripts run, and from there it
+ * sees what no amount of searching from outside would find: every element the
+ * page has ever pressed play on, what it told the system it is playing, and
+ * which of the buttons on a pair of headphones it knows how to answer.
+ *
+ * It reports over a custom event and takes its orders the same way — a string
+ * each way, the only thing that safely crosses between the page's world and
+ * this one.
+ */
+const PAGE_SCRIPT = `(() => {
+  if (document.documentElement.dataset.nyaMedia === 'on') return
+  document.documentElement.dataset.nyaMedia = 'on'
+
+  /* Everything the page has pressed play on, whether it is in the document
+     or not. */
+  const played = new Set()
+  const remember = (el) => { try { if (el && el.tagName) played.add(el) } catch (e) {} }
+  try {
+    const proto = HTMLMediaElement.prototype
+    const play = proto.play
+    proto.play = function () { remember(this); later(); return play.apply(this, arguments) }
+  } catch (e) {}
+
+  /* What the page says about itself: the same words the machine's own media
+     popup shows, plus the buttons it has offered to answer. */
+  const handlers = new Map()
+  const told = { position: 0, duration: 0, rate: 1, at: 0, moved: 0 }
+  try {
+    const ms = navigator.mediaSession
+    if (ms && ms.setActionHandler) {
+      const set = ms.setActionHandler.bind(ms)
+      ms.setActionHandler = function (name, fn) {
+        try { fn ? handlers.set(name, fn) : handlers.delete(name) } catch (e) {}
+        later()
+        return set(name, fn)
+      }
+    }
+    if (ms && ms.setPositionState) {
+      const put = ms.setPositionState.bind(ms)
+      ms.setPositionState = function (state) {
+        try {
+          if (state) {
+            const to = Number(state.position) || 0
+            /* A page that never says whether it is playing still moves: the
+               moment it last moved is the honest answer to that question —
+               and a word that comes with no movement behind it means it has
+               stopped, which is the answer arriving rather than timing out. */
+            const now = Date.now()
+            if (to > told.position + 0.05) told.moved = now
+            else if (now - told.at > 600) told.moved = 0
+            told.duration = Number(state.duration) || 0
+            told.position = to
+            told.rate = Number(state.playbackRate) || 1
+            told.at = Date.now()
+          }
+        } catch (e) {}
+        later()
+        return put(state)
+      }
+    }
+  } catch (e) {}
+
+  /* Elements in the document, including ones a page keeps inside its own
+     components. The deep walk only earns its cost when the plain look finds
+     nothing at all. */
+  /* Which window an element was found in, so that what that window says
+     about the track can be read along with it. */
+  const homes = new WeakMap()
+  const claim = (list, win) => {
+    for (let i = 0; i < list.length; i++) { try { homes.set(list[i], win) } catch (e) {} }
+    return list
   }
 
-  /** Anything that has been played, whether it is playing right now or not. */
-  const current = (): HTMLMediaElement | null =>
-    playing() ??
-    Array.from(document.querySelectorAll<HTMLMediaElement>('video, audio')).find(
-      (el) => el.currentTime > 0 && !el.ended
-    ) ??
-    null
+  /* Players one document down, where the document is ours to look into.
+     A frame from somewhere else keeps its secrets; the browser still hears
+     it, and says so on its own. */
+  const framed = () => {
+    const out = []
+    let frames
+    try { frames = document.querySelectorAll('iframe') } catch (e) { return out }
+    for (let i = 0; i < frames.length && i < 12; i++) {
+      try {
+        const doc = frames[i].contentDocument
+        if (!doc) continue
+        const found = Array.prototype.slice.call(doc.querySelectorAll('video, audio'))
+        claim(found, frames[i].contentWindow)
+        for (let k = 0; k < found.length; k++) out.push(found[k])
+      } catch (e) {
+        /* another origin, and none of our business */
+      }
+    }
+    return out
+  }
 
-  let last = ''
+  /* A page that has never made a sound is never searched through: the walk
+     below is only ever worth doing for a page that plays something we have
+     failed to find the ordinary way. */
+  let heard = false
+  let deepAt = 0
+  const inDocument = () => {
+    const plain = claim(
+      Array.prototype.slice.call(document.querySelectorAll('video, audio')),
+      window
+    ).concat(framed())
+    if (plain.length || played.size || !heard || Date.now() - deepAt < 4000) return plain
+    deepAt = Date.now()
+    const out = []
+    const walk = (root, depth) => {
+      if (depth > 6) return
+      let all
+      try { all = root.querySelectorAll('*') } catch (e) { return }
+      for (let i = 0; i < all.length; i++) {
+        const el = all[i]
+        if (el.tagName === 'VIDEO' || el.tagName === 'AUDIO') out.push(el)
+        if (el.shadowRoot) walk(el.shadowRoot, depth + 1)
+      }
+    }
+    walk(document, 0)
+    return claim(out, window)
+  }
 
-  const tell = () => {
+  /* Playing, for a page with nothing in the document to look at: what it
+     said, and failing that whether the place it says it is keeps changing. */
+  const running = () => {
+    const ms = navigator.mediaSession
+    const said = ms ? ms.playbackState : 'none'
+    if (said === 'playing') return true
+    if (said === 'paused') return false
+    return Date.now() - told.moved < 2500
+  }
+
+  const alive = (el) => { try { return !el.ended && (el.currentTime > 0 || el.readyState > 0) } catch (e) { return false } }
+  const going = (el) => { try { return !el.paused && !el.ended } catch (e) { return false } }
+
+  /** The one that speaks for this frame: what plays, else what was played. */
+  const current = () => {
+    const all = inDocument().concat(Array.prototype.slice.call(played))
+    let best = null
+    for (let i = 0; i < all.length; i++) {
+      const el = all[i]
+      if (going(el)) { if (!best || !going(best) || el.tagName === 'VIDEO') best = el }
+      else if (!best && alive(el)) best = el
+    }
+    return best
+  }
+
+  const state = () => {
     const el = current()
-    if (!el) {
-      if (last === '') return
-      last = ''
-      ipcRenderer.send('media:state', null)
-      return
+    /* The words belong to the frame the sound is in: a player inside a frame
+       of ours names its own track, not its host page's. */
+    let home = window
+    try { home = (el && homes.get(el)) || window } catch (e) { home = window }
+    let ms = null
+    try { ms = home.navigator.mediaSession || null } catch (e) { ms = null }
+    if (!ms) ms = navigator.mediaSession || null
+    const meta = (ms && ms.metadata) || null
+    const session = ms ? ms.playbackState : 'none'
+    /* Neither an element nor a word about itself: nothing is playing here. */
+    if (!el && !meta) return null
+    const art = meta && meta.artwork && meta.artwork.length
+      ? (meta.artwork[meta.artwork.length - 1] || {}).src || ''
+      : ''
+    /* Where it is: what the element knows, else what the page announced,
+       carried forward by the clock since it said so. */
+    let position = 0
+    let duration = 0
+    let seekable = false
+    if (el) {
+      position = el.currentTime || 0
+      duration = isFinite(el.duration) ? el.duration : 0
+      seekable = duration > 0
+    } else if (told.at) {
+      const on = running()
+      position = told.position + (on ? ((Date.now() - told.at) / 1000) * told.rate : 0)
+      duration = told.duration
+      seekable = duration > 0 && handlers.has('seekto')
+      if (duration > 0) position = Math.min(position, duration)
     }
-    // What the page says about itself, which is what the system's own media
-    // popup shows. It is set on the frame, so this side can read it.
-    const meta = navigator.mediaSession?.metadata ?? null
-    const state = {
-      title: meta?.title || document.title || location.host,
-      artist: meta?.artist || meta?.album || location.host,
-      art: meta?.artwork?.[meta.artwork.length - 1]?.src ?? '',
-      playing: !el.paused && !el.ended,
-      muted: el.muted,
-      position: Math.round(el.currentTime),
-      duration: Number.isFinite(el.duration) ? Math.round(el.duration) : 0,
-      video: el.tagName === 'VIDEO'
+    const video = !!el && el.tagName === 'VIDEO'
+    return {
+      title: (meta && meta.title) || document.title || location.host,
+      artist: (meta && (meta.artist || meta.album)) || '',
+      art: art,
+      playing: el ? going(el) : running(),
+      muted: el ? !!el.muted : false,
+      volume: el && typeof el.volume === 'number' ? el.volume : 1,
+      position: Math.max(0, Math.round(position)),
+      duration: Math.max(0, Math.round(duration)),
+      video: video,
+      seekable: seekable,
+      /* Only a player we hold can be asked to go faster; nought means the
+         question does not arise. */
+      rate: el ? el.playbackRate || 1 : 0,
+      next: handlers.has('nexttrack'),
+      prev: handlers.has('previoustrack'),
+      pip: !!(video && document.pictureInPictureEnabled && el && !el.disablePictureInPicture)
     }
-    // Only when something a person would notice has changed: a timeupdate
-    // fires four times a second and none of them are news.
-    const key = `${state.title}|${state.playing}|${state.muted}|${state.position}|${state.duration}`
+  }
+
+  let last = 'start'
+  const tell = () => {
+    let now = null
+    try { now = state() } catch (e) { now = null }
+    const key = now
+      ? [now.title, now.artist, now.playing, now.muted, now.volume, now.position, now.duration, now.next, now.prev, now.pip, now.rate].join('|')
+      : ''
     if (key === last) return
     last = key
-    ipcRenderer.send('media:state', state)
+    try {
+      document.dispatchEvent(new CustomEvent('nya-media', { detail: now ? JSON.stringify(now) : '' }))
+    } catch (e) {}
+  }
+  let soon = 0
+  const later = () => { if (!soon) soon = setTimeout(() => { soon = 0; tell() }, 60) }
+
+  const act = (name, arg) => {
+    const fn = handlers.get(name)
+    if (!fn) return false
+    try { fn(Object.assign({ action: name }, arg || {})) } catch (e) {}
+    return true
   }
 
-  for (const event of ['play', 'pause', 'ended', 'volumechange', 'loadedmetadata', 'emptied']) {
-    document.addEventListener(event, tell, true)
+  document.addEventListener('nya-media-do', (event) => {
+    let c = null
+    try { c = JSON.parse(String(event.detail || '{}')) } catch (e) { return }
+    const el = current()
+    const to = typeof c.to === 'number' ? c.to : 0
+    const where = () => (el ? el.currentTime || 0 : told.position + (Date.now() - told.at) / 1000)
+    try {
+      const guess = (on) => { told.moved = on ? Date.now() : 0; told.at = Date.now() }
+      if (c.do === 'play') el ? el.play() : (act('play'), guess(true))
+      else if (c.do === 'pause') el ? el.pause() : (act('pause'), guess(false))
+      else if (c.do === 'toggle') {
+        if (el) el.paused ? el.play() : el.pause()
+        else if (typeof c.to === 'number' ? c.to : running()) { act('pause'); guess(false) }
+        else { act('play'); guess(true) }
+      } else if (c.do === 'seek') {
+        if (el) el.currentTime = to
+        else if (act('seekto', { seekTime: to })) { told.position = to; told.at = Date.now() }
+      } else if (c.do === 'skip') {
+        const at = Math.max(0, where() + to)
+        if (el) el.currentTime = at
+        else if (act('seekto', { seekTime: at })) { told.position = at; told.at = Date.now() }
+        else act(to > 0 ? 'seekforward' : 'seekbackward', { seekOffset: Math.abs(to) })
+      } else if (c.do === 'next') act('nexttrack')
+      else if (c.do === 'prev') act('previoustrack')
+      else if (c.do === 'rate') {
+        if (el) el.playbackRate = Math.max(0.25, Math.min(4, to || 1))
+      } else if (c.do === 'volume') {
+        if (el) { el.volume = Math.max(0, Math.min(1, to)); if (to > 0) el.muted = false }
+      } else if (c.do === 'pip') {
+        if (el && el.tagName === 'VIDEO') {
+          if (document.pictureInPictureElement) document.exitPictureInPicture()
+          else el.requestPictureInPicture()
+        }
+      }
+    } catch (e) {}
+    setTimeout(tell, 60)
+    setTimeout(tell, 400)
+  })
+
+  for (const name of ['play', 'pause', 'ended', 'volumechange', 'loadedmetadata', 'durationchange', 'emptied', 'seeked']) {
+    document.addEventListener(name, () => { heard = true; later() }, true)
   }
-  // The position only has to be right to the second, and only while playing.
-  setInterval(() => playing() && tell(), 1000)
-  window.addEventListener('pagehide', () => ipcRenderer.send('media:state', null))
+  setInterval(tell, 1000)
+  tell()
+})()`
+
+if (httpOrigin) {
+  /** Puts the watcher into the page, as early as there is a page to put it in. */
+  const inject = () => {
+    try {
+      const holder = document.documentElement || document.head || document.body
+      if (!holder) return false
+      const script = document.createElement('script')
+      script.textContent = PAGE_SCRIPT
+      holder.appendChild(script)
+      script.remove()
+      const ran = document.documentElement?.dataset.nyaMedia === 'on'
+      // The mark was only ever a way of asking «did that run», and a page has
+      // no business finding our fingerprints on its own root element.
+      if (ran && document.documentElement) delete document.documentElement.dataset.nyaMedia
+      return ran
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * What can be seen from outside the page, for a site whose rules do not
+   * allow a script to be put into it. Elements in the document are all this
+   * can find — but that is most of the web, and it costs one look a second.
+   */
+  const fromOutside = () => {
+    let last = 'start'
+    const pick = () => {
+      const all = Array.from(document.querySelectorAll<HTMLMediaElement>('video, audio'))
+      return (
+        all.find((el) => !el.paused && !el.ended) ??
+        all.find((el) => el.currentTime > 0 && !el.ended) ??
+        null
+      )
+    }
+    const tell = () => {
+      const el = pick()
+      if (!el) {
+        if (last === '') return
+        last = ''
+        return ipcRenderer.send('media:state', null)
+      }
+      const meta = navigator.mediaSession?.metadata ?? null
+      const duration = Number.isFinite(el.duration) ? Math.round(el.duration) : 0
+      const state = {
+        title: meta?.title || document.title || location.host,
+        artist: meta?.artist || meta?.album || '',
+        art: meta?.artwork?.[meta.artwork.length - 1]?.src ?? '',
+        playing: !el.paused && !el.ended,
+        muted: el.muted,
+        volume: typeof el.volume === 'number' ? el.volume : 1,
+        position: Math.round(el.currentTime || 0),
+        duration,
+        video: el.tagName === 'VIDEO',
+        seekable: duration > 0,
+        rate: el.playbackRate || 1,
+        next: false,
+        prev: false,
+        pip:
+          el.tagName === 'VIDEO' &&
+          document.pictureInPictureEnabled &&
+          !(el as HTMLVideoElement).disablePictureInPicture
+      }
+      const key = Object.values(state).join('|')
+      if (key === last) return
+      last = key
+      ipcRenderer.send('media:state', state)
+    }
+    for (const name of ['play', 'pause', 'ended', 'volumechange', 'loadedmetadata', 'ratechange']) {
+      document.addEventListener(name, tell, true)
+    }
+    setInterval(tell, 1000)
+
+    ipcRenderer.on('media:command', (_event, command: { do: string; to?: number }) => {
+      const el = pick()
+      if (!el) return
+      const to = typeof command.to === 'number' ? command.to : 0
+      if (command.do === 'play') void el.play()
+      else if (command.do === 'pause') el.pause()
+      else if (command.do === 'toggle') el.paused ? void el.play() : el.pause()
+      else if (command.do === 'seek') el.currentTime = to
+      else if (command.do === 'skip') el.currentTime = Math.max(0, (el.currentTime || 0) + to)
+      else if (command.do === 'volume') {
+        el.volume = Math.max(0, Math.min(1, to))
+        if (to > 0) el.muted = false
+      } else if (command.do === 'rate') el.playbackRate = Math.max(0.25, Math.min(4, to || 1))
+      setTimeout(tell, 60)
+    })
+  }
+
+  /** Everything heard from inside the page goes straight on to the browser. */
+  document.addEventListener('nya-media', (event) => {
+    const detail = String((event as CustomEvent).detail || '')
+    let state: unknown = null
+    try {
+      state = detail ? JSON.parse(detail) : null
+    } catch {
+      state = null
+    }
+    ipcRenderer.send('media:state', state)
+  })
 
   ipcRenderer.on('media:command', (_event, command: { do: string; to?: number }) => {
-    const el = current()
-    if (!el) return
-    if (command.do === 'play') void el.play()
-    if (command.do === 'pause') el.pause()
-    if (command.do === 'toggle') el.paused ? void el.play() : el.pause()
-    if (command.do === 'mute') el.muted = !el.muted
-    if (command.do === 'seek' && typeof command.to === 'number') {
-      el.currentTime = Math.max(0, Math.min(el.duration || 0, command.to))
+    try {
+      document.dispatchEvent(new CustomEvent('nya-media-do', { detail: JSON.stringify(command) }))
+    } catch {
+      /* the page is going away */
     }
-    if (command.do === 'skip' && typeof command.to === 'number') {
-      el.currentTime = Math.max(0, el.currentTime + command.to)
-    }
-    setTimeout(tell, 50)
   })
+
+  window.addEventListener('pagehide', () => ipcRenderer.send('media:state', null))
+
+  if (!inject()) {
+    // No root element yet: the page is still being built. The moment it has
+    // one the watcher goes in — still before the page's own scripts run.
+    //
+    // Once, and once only. Putting a script into a page is itself a change to
+    // the page, so an observer that tried again on every change would answer
+    // its own work for ever, and a site that refuses the script at all would
+    // never stop it. That is a frozen tab, and it was one.
+    const watch = new MutationObserver(() => {
+      if (!document.documentElement) return
+      watch.disconnect()
+      if (!inject()) fromOutside()
+    })
+    try {
+      watch.observe(document, { childList: true })
+      setTimeout(() => watch.disconnect(), 10000)
+    } catch {
+      fromOutside()
+    }
+  }
 }
