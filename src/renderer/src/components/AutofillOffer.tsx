@@ -130,16 +130,12 @@ function Entries({ offer, onClose }: { offer: AutofillOffer; onClose: () => void
                 </span>
               ) : (
                 <span
-                  className="flex h-7 shrink-0 items-center gap-1.5 rounded-[9px] px-2 text-2xs font-medium"
+                  className="flex h-7 min-w-[72px] shrink-0 items-center justify-center rounded-[9px] px-2 text-2xs font-medium"
                   style={{
                     background: `color-mix(in srgb, ${BRAND_COLOURS[row.brand] ?? 'var(--text-faint)'} 16%, transparent)`,
                     color: 'var(--ink)'
                   }}
                 >
-                  <span
-                    className="h-2 w-2 shrink-0 rounded-pill"
-                    style={{ background: BRAND_COLOURS[row.brand] ?? 'var(--text-faint)' }}
-                  />
                   {BRANDS[row.brand] ?? t('Другая карта')}
                 </span>
               )}

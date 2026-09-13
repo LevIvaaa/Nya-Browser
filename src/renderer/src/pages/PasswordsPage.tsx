@@ -175,6 +175,9 @@ export default function PasswordsPage() {
           </button>
         </div>
 
+        {/* Keyed by section, so changing tabs is the new list arriving and
+            not the old one being overwritten in place. */}
+        <div key={section} className="animate-swap">
         {section === 'cards' ? (
           <CardsTab
             cards={cards}
@@ -199,7 +202,7 @@ export default function PasswordsPage() {
           /* A list of sites, and nothing else until one is opened. Every row
              used to carry a password box and three buttons, so a screenful of
              saved logins read as a wall of dots. */
-          <div className="card overflow-hidden">
+          <div className="card stagger overflow-hidden">
             {filtered.map((item) => {
               const open = expanded === item.id
               return (
@@ -284,6 +287,8 @@ export default function PasswordsPage() {
             })}
           </div>
         )}
+
+        </div>
 
         {section === 'passwords' && (
           <p className="mt-4 flex items-center gap-2 text-sm text-faint">

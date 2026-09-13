@@ -57,7 +57,7 @@ export function CardsTab({
           hint={t('Добавьте карту — она подставится на оплате, а код CVC вы введёте сами.')}
         />
       ) : (
-        <div className="card overflow-hidden">
+        <div className="card stagger overflow-hidden">
           {cards.map((card) => (
             <div key={card.id} style={{ borderTop: '1px solid var(--line)' }}>
               <div className="flex w-full items-center gap-3 px-4 py-3">
@@ -71,8 +71,17 @@ export function CardsTab({
                   <CardIcon width={16} height={16} />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-base font-medium">
-                    {shown[card.id] ?? cardLine(card)}
+                  {/* The payment system stays put and the dots become digits:
+                      what is being looked at is which card this is, and that
+                      answer should not disappear at the moment of asking. */}
+                  <span className="flex items-baseline gap-1.5 truncate text-base font-medium">
+                    <span className="shrink-0">{BRANDS[card.brand] ?? t('Карта')}</span>
+                    <span
+                      key={shown[card.id] ? 'shown' : 'hidden'}
+                      className="animate-digits truncate tabular-nums"
+                    >
+                      {shown[card.id] ?? `•••• ${card.last4}`}
+                    </span>
                   </span>
                   <span className="block truncate text-sm text-dim">
                     {[card.label, card.holder, expiry(card)].filter(Boolean).join(' · ')}
@@ -186,14 +195,14 @@ function BrandChip({ digits }: { digits: string }) {
   const colour = BRAND_COLOURS[brand] ?? 'var(--text-faint)'
   return (
     <span
-      className="flex h-[34px] shrink-0 items-center gap-1.5 rounded-[10px] px-2.5 text-sm"
+      key={brand || 'other'}
+      className="animate-digits flex h-[34px] min-w-[96px] shrink-0 items-center justify-center rounded-[10px] px-2.5 text-sm"
       style={{
         background: `color-mix(in srgb, ${colour} 14%, transparent)`,
         color: brand ? 'var(--ink)' : 'var(--text-dim)',
         transition: 'background var(--t-fast) linear'
       }}
     >
-      <span className="h-2 w-2 shrink-0 rounded-pill" style={{ background: colour }} />
       {BRANDS[brand] ?? t('Другая карта')}
     </span>
   )
@@ -345,7 +354,7 @@ export function AddressesTab({
           hint={t('Добавьте адрес — он подставится в форме доставки целиком.')}
         />
       ) : (
-        <div className="card overflow-hidden">
+        <div className="card stagger overflow-hidden">
           {addresses.map((address) => (
             <div key={address.id} style={{ borderTop: '1px solid var(--line)' }}>
               <div className="flex w-full items-center gap-3 px-4 py-3">

@@ -45,7 +45,7 @@ export default function MediaPanel({ x, onClose }: { x: number; onClose: () => v
           {t('Сейчас играет')}
         </div>
 
-        <div className="min-h-0 overflow-y-auto px-1.5 pb-2">
+        <div className="stagger min-h-0 overflow-y-auto px-1.5 pb-2">
           {list.length === 0 && (
             <p className="px-2 py-3 text-sm text-faint">{t('Ничего не играет')}</p>
           )}
@@ -127,7 +127,12 @@ function Row({ item, onClose }: { item: Playing; onClose: () => void }) {
             onChange={(event) =>
               void window.browser.mediaCommand(item.tabId, 'seek', Number(event.target.value))
             }
-            style={{ background: `color-mix(in srgb, var(--accent) ${Math.round(done * 100)}%, var(--line))` }}
+            style={{
+              background: `color-mix(in srgb, var(--accent) ${Math.round(done * 100)}%, var(--line))`,
+              // The line fills as the track plays rather than stepping once a
+              // second, which is how often the page reports where it is.
+              transition: 'background 1s linear'
+            }}
           />
           <span className="shrink-0 text-2xs tabular-nums text-faint">{clock(item.duration)}</span>
         </div>
