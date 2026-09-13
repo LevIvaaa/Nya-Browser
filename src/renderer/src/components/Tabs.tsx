@@ -474,11 +474,9 @@ export function TabStrip({
     >
       {/* The group in force, and any pinned beside it. */}
       <div className="flex shrink-0 items-center gap-0.5 pr-1">
-        {spaces.map((space, index) =>
-          space.pinned || space.active ? (
-            <SpaceChip key={space.id} space={space} index={index} />
-          ) : null
-        )}
+        {chipsOf(spaces).map(({ space, index }) => (
+          <SpaceChip key={space.id} space={space} index={index} />
+        ))}
       </div>
       <div className="flex min-w-0 items-center gap-1" style={{ flex: '0 1 auto' }}>
         {rows.map((row) =>
@@ -524,6 +522,21 @@ export function TabStrip({
  * the strip is favicons and guesswork.
  */
 /**
+ * Which big groups the strip shows, in the order it shows them: the one in
+ * force first — so switching puts the new one in the same left-hand place —
+ * then the pinned ones as they are. A pinned group that is also in force
+ * keeps its own place in the row, since that is what pinning it was for.
+ *
+ * The index travels with each, because an unnamed group is called by its
+ * number and that number is where it sits in the list, not in this row.
+ */
+function chipsOf(spaces: TabSpace[]): Array<{ space: TabSpace; index: number }> {
+  const all = spaces.map((space, index) => ({ space, index }))
+  const lead = all.filter((item) => item.space.active && !item.space.pinned)
+  return [...lead, ...all.filter((item) => item.space.pinned)]
+}
+
+/**
  * A big group in the strip: the one in force, and any that are pinned.
  *
  * The one in force carries the arrow and opens the list of tabs and groups —
@@ -555,9 +568,19 @@ function SpaceChip({ space, index }: { space: TabSpace; index: number }) {
       }}
     >
       <span className="h-2 w-2 shrink-0 rounded-pill" style={{ background: tint }} />
-      {/* How many tabs are in it, before its name: "4 Работа" reads as a
-          sentence, and trailing off the end read as a stray number. */}
-      <span className="tabular-nums opacity-60">{space.count}</span>
+      {/* How many tabs are in it, before its name. In a square of its own,
+          because a bare number beside a name reads as part of the name. */}
+      <span
+        className="flex h-[17px] min-w-[17px] shrink-0 items-center justify-center rounded-[6px] px-1 tabular-nums"
+        style={{
+          background: space.active
+            ? `color-mix(in srgb, ${tint} 34%, transparent)`
+            : 'var(--surface-hover)',
+          color: space.active ? 'var(--ink)' : 'var(--text-dim)'
+        }}
+      >
+        {space.count}
+      </span>
       <span className="max-w-[120px] truncate">
         {space.name || t('Группа {n}', { n: index + 1 })}
       </span>
@@ -609,11 +632,9 @@ export function TabRail({
       </div>
 
       <div className="flex flex-wrap gap-1 px-0.5 pb-1">
-        {spaces.map((space, index) =>
-          space.pinned || space.active ? (
-            <SpaceChip key={space.id} space={space} index={index} />
-          ) : null
-        )}
+        {chipsOf(spaces).map(({ space, index }) => (
+          <SpaceChip key={space.id} space={space} index={index} />
+        ))}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto overflow-x-hidden pr-0.5">
