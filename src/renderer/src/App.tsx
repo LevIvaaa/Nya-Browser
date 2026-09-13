@@ -16,6 +16,7 @@ const BookmarksPage = lazy(() => import('./pages/BookmarksPage'))
 const PasswordsPage = lazy(() => import('./pages/PasswordsPage'))
 import ErrorPage from './pages/ErrorPage'
 import type { UpdateState } from '../../shared/types'
+import SplitDivider from './components/SplitDivider'
 
 type View = 'page' | 'settings' | 'history' | 'downloads' | 'bookmarks' | 'passwords'
 type Overlay = 'menu' | 'profiles' | 'update' | null
@@ -261,6 +262,11 @@ export default function App() {
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
+      {/* Between two pages shown side by side, and nowhere else. It is drawn
+          here, at the root, because the gap it lives in is measured from the
+          window and not from anything inside this layout. */}
+      <SplitDivider />
+
       {overlayVisible && (
         <Wallpaper
           background={settings.background}

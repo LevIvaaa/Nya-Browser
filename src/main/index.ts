@@ -586,6 +586,12 @@ function registerIpc() {
     )
   })
   ipcMain.handle('media:list', (event) => current(event).playingNow())
+  ipcMain.handle('tab:split', (event, id: unknown) =>
+    current(event).splitWith(id === null || id === undefined ? null : num(id))
+  )
+  ipcMain.handle('tab:split-ratio', (event, ratio: unknown) =>
+    current(event).setSplitRatio(num(ratio))
+  )
   ipcMain.handle('media:command', (event, tabId: unknown, what: unknown, to: unknown) => {
     const allowed = ['toggle', 'play', 'pause', 'mute', 'seek', 'skip'] as const
     const command = allowed.find((name) => name === what)
