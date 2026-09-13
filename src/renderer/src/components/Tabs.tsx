@@ -834,17 +834,10 @@ export function TabRail({
       }}
       onDragEnd={reorder.onDragEnd}
     >
-      <div className="flex items-center justify-between px-1 pb-0.5">
-        <button
-          className="rounded-[7px] px-1 py-0.5 text-2xs font-semibold uppercase tracking-wider text-faint hover:bg-[var(--surface-hover)]"
-          title={t('Все вкладки и группы')}
-          onClick={(event) => {
-            const box = (event.currentTarget as HTMLElement).getBoundingClientRect()
-            void window.browser.setOverlay(`tabs-panel:${Math.round(box.left)}`)
-          }}
-        >
-          {t('Вкладки')} · {tabs.length}
-        </button>
+      {/* No heading: a column of tabs does not need a line above it saying
+          how many tabs are in the column, and the way into the full list is
+          on the big group's chip just below. */}
+      <div className="flex items-center justify-end px-1 pb-0.5">
         <button className="icon-btn h-6 w-6" title={t('Новая вкладка · Ctrl+T')} onClick={() => window.browser.newTab()}>
           <Plus width={14} height={14} />
         </button>
