@@ -193,12 +193,15 @@ function BrandChip({ digits }: { digits: string }) {
   if (digits.length < 2) return null
   const brand = brandGuess(digits)
   const colour = BRAND_COLOURS[brand] ?? 'var(--text-faint)'
+  // The same chip the offer under a payment form uses, to the pixel: one size,
+  // one weight, one tint, the name in the middle of it and nothing else in
+  // there beside the name.
   return (
     <span
       key={brand || 'other'}
-      className="animate-digits flex h-[34px] min-w-[96px] shrink-0 items-center justify-center rounded-[10px] px-2.5 text-sm"
+      className="animate-digits flex h-7 min-w-[72px] shrink-0 items-center justify-center self-center rounded-[9px] px-2 text-2xs font-medium"
       style={{
-        background: `color-mix(in srgb, ${colour} 14%, transparent)`,
+        background: `color-mix(in srgb, ${colour} 16%, transparent)`,
         color: brand ? 'var(--ink)' : 'var(--text-dim)',
         transition: 'background var(--t-fast) linear'
       }}
