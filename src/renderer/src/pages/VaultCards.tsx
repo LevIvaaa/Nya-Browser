@@ -2,7 +2,7 @@ import { t } from '../i18n'
 import { useEffect, useState } from 'react'
 import type { AddressFields, AddressMeta, CardMeta } from '../../../shared/types'
 import { CardIcon, Copy, Cross, Eye, EyeOff, MapPin, Plus } from '../components/Icons'
-import { BRANDS, BRAND_COLOURS, cardLine, expiry } from '../components/AutofillOffer'
+import { BRANDS, BrandBadge, cardLine, expiry } from '../components/AutofillOffer'
 import { EmptyState, Modal, TextField, formatDate } from '../components/ui'
 
 /**
@@ -61,15 +61,7 @@ export function CardsTab({
           {cards.map((card) => (
             <div key={card.id} style={{ borderTop: '1px solid var(--line)' }}>
               <div className="flex w-full items-center gap-3 px-4 py-3">
-                <span
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]"
-                  style={{
-                    background: `color-mix(in srgb, ${BRAND_COLOURS[card.brand] ?? 'var(--text-faint)'} 16%, transparent)`,
-                    color: BRAND_COLOURS[card.brand] ?? 'var(--text-dim)'
-                  }}
-                >
-                  <CardIcon width={16} height={16} />
-                </span>
+                <BrandBadge brand={card.brand} />
                 <span className="min-w-0 flex-1">
                   {/* The payment system stays put and the dots become digits:
                       what is being looked at is which card this is, and that
@@ -192,21 +184,11 @@ export function CardsTab({
 function BrandChip({ digits }: { digits: string }) {
   if (digits.length < 2) return null
   const brand = brandGuess(digits)
-  const colour = BRAND_COLOURS[brand] ?? 'var(--text-faint)'
-  // The same chip the offer under a payment form uses, to the pixel: one size,
-  // one weight, one tint, the name in the middle of it and nothing else in
-  // there beside the name.
+  // The badge the card itself carries, and the same one the offer under a
+  // payment form shows: recognised long before the number is read.
   return (
-    <span
-      key={brand || 'other'}
-      className="animate-digits flex h-7 min-w-[72px] shrink-0 items-center justify-center self-center rounded-[9px] px-2 text-2xs font-medium"
-      style={{
-        background: `color-mix(in srgb, ${colour} 16%, transparent)`,
-        color: brand ? 'var(--ink)' : 'var(--text-dim)',
-        transition: 'background var(--t-fast) linear'
-      }}
-    >
-      {BRANDS[brand] ?? t('Другая карта')}
+    <span key={brand || 'other'} className="animate-digits self-center" title={BRANDS[brand] ?? t('Другая карта')}>
+      <BrandBadge brand={brand} size="md" />
     </span>
   )
 }
