@@ -1021,24 +1021,27 @@ export class BrowserWindow {
     // Split: the active page takes its share of the width, the other takes
     // the rest, and the gap between them is left empty on purpose — the
     // chrome shows through it, which is what makes a divider possible at all.
-    const other = this.splitId === null ? null : this.tabs.find((tab) => tab.id === this.splitId)
-    if (other?.view && other.id !== active.id) {
+    const shown = this.pairShown()
+    const firstView = shown?.[0].view
+    const secondView = shown?.[1].view
+    if (shown && firstView && secondView) {
+      const [first, second] = shown
       const gap = BrowserWindow.SPLIT_GAP
       const leftWidth = Math.max(
         0,
         Math.min(rect.width - gap, Math.round((rect.width - gap) * this.splitRatio))
       )
-      active.view.setBounds({ ...rect, width: leftWidth })
-      active.view.setBorderRadius(0)
-      active.view.setVisible(r.visible && active.hasContent && !active.sleeping)
-      other.view.setBounds({
+      firstView.setBounds({ ...rect, width: leftWidth })
+      firstView.setBorderRadius(0)
+      firstView.setVisible(r.visible && first.hasContent)
+      secondView.setBounds({
         x: rect.x + leftWidth + gap,
         y: rect.y,
         width: rect.width - leftWidth - gap,
         height: rect.height
       })
-      other.view.setBorderRadius(0)
-      other.view.setVisible(r.visible && other.hasContent)
+      secondView.setBorderRadius(0)
+      secondView.setVisible(r.visible && second.hasContent)
       return
     }
 
@@ -1706,8 +1709,8 @@ export class BrowserWindow {
     }
     tab.destroy(this.win)
     if (this.dropMedia(tab.id)) this.sendMedia()
-    if (this.splitId === tab.id) {
-      this.splitId = null
+    if (this.inPair(tab.id)) {
+      this.pair = null
       this.sendSplit()
     }
 
@@ -2328,28 +2331,50 @@ export class BrowserWindow {
 
   /* --------------------------------------------------------------- split */
 
-  /** The tab shown beside the active one, if the window is split. */
-  private splitId: number | null = null
+  /**
+   * The two tabs shown side by side, left first. A pair, not «the active tab
+   * and another one»: clicking either half must leave the pair standing, and
+   * which of the two you are typing in is a separate question from which of
+   * them is on the left.
+   */
+  private pair: [number, number] | null = null
   /** How much of the width the left page takes. */
   private splitRatio = 0.5
   /** The gap between the two pages, through which the divider shows. */
   private static SPLIT_GAP = 8
 
+  /** Whether a tab is one of the two shown side by side. */
+  inPair(tabId: number) {
+    return this.pair !== null && (this.pair[0] === tabId || this.pair[1] === tabId)
+  }
+
   /**
-   * Puts a tab beside the one in front. Picking the tab that is already
-   * beside it, or the active one itself, ends the split — one gesture for
-   * both directions, the way a toggle should be.
+   * The pair as it can actually be drawn: both tabs still exist, both have a
+   * view to show, and one of them is the tab in front. Anything else — a
+   * third tab in front, a half closed — means there is nothing to divide.
+   */
+  private pairShown(): [Tab, Tab] | null {
+    if (!this.pair) return null
+    const left = this.tabs.find((tab) => tab.id === this.pair?.[0])
+    const right = this.tabs.find((tab) => tab.id === this.pair?.[1])
+    if (!left || !right || left.id === right.id) return null
+    if (!this.inPair(this.activeId)) return null
+    return [left, right]
+  }
+
+  /**
+   * Puts a tab beside the one in front. Picking either half of a pair that
+   * already exists ends it — one gesture for both directions, the way a
+   * toggle should be.
    */
   splitWith(tabId: number | null) {
-    const ending = tabId === null || tabId === this.activeId || tabId === this.splitId
-    if (ending) {
+    if (tabId === null || this.inPair(tabId) || (this.pair === null && tabId === this.activeId)) {
       // The second page leaves the way it came: the division slides to the
       // right edge, and only then is the page taken away. Snapping it out of
       // existence is what made this read as a glitch rather than a gesture.
-      const going = this.splitId
-      if (going === null) return
+      if (!this.pair) return
       return this.slideSplit(this.splitRatio, 1, () => {
-        this.splitId = null
+        this.pair = null
         this.splitRatio = 0.5
         this.showActive()
         this.sendSplit()
@@ -2357,24 +2382,39 @@ export class BrowserWindow {
       })
     }
 
-    if (this.tabs.some((tab) => tab.id === tabId)) {
-      this.splitId = tabId
-      // Closed before it is opened: the first frame must show the second page
-      // with no width at all, or the join begins with a jump.
-      this.splitRatio = 1
-      const other = this.tabs.find((tab) => tab.id === tabId)
-      // A tab that has never been opened has neither a view nor a page in it.
-      if (other) this.summon(other)
-      this.showActive()
-      this.broadcast()
-      // And it arrives the same way: from the right edge, opening the window
-      // into two as it comes.
-      return this.slideSplit(1, 0.5)
-    }
+    const other = this.tabs.find((tab) => tab.id === tabId)
+    const here = this.getActive()
+    if (!other || !here || other.id === here.id) return
 
+    this.pair = [here.id, other.id]
+    // Closed before it is opened: the first frame must show the second page
+    // with no width at all, or the join begins with a jump.
+    this.splitRatio = 1
+    // A tab that has never been opened has neither a view nor a page in it.
+    this.summon(other)
+    // And in the strip the two of them come together: the far one travels to
+    // the tab it is joining, and from then on they sit as one.
+    this.drawTogether(here, other)
     this.showActive()
-    this.sendSplit()
     this.broadcast()
+    // The pages arrive the same way: from the right edge, opening the window
+    // into two as they come.
+    this.slideSplit(1, 0.5)
+  }
+
+  /**
+   * Puts the joined tab immediately after the one it joined, so the pair reads
+   * as one thing in the strip. A tab in somebody else's group stays where it
+   * is: moving it would take it out of a run it belongs to, and that is a
+   * bigger change than was asked for.
+   */
+  private drawTogether(here: Tab, other: Tab) {
+    if (here.groupId !== other.groupId || here.space !== other.space) return
+    const from = this.tabs.indexOf(other)
+    const at = this.tabs.indexOf(here)
+    if (from === -1 || at === -1 || from === at + 1) return
+    this.tabs.splice(from, 1)
+    this.tabs.splice(this.tabs.indexOf(here) + 1, 0, other)
   }
 
   /** A running join or parting, so a second one cannot fight the first. */
@@ -2415,15 +2455,10 @@ export class BrowserWindow {
 
   /** Where the divider was dragged to. */
   setSplitRatio(ratio: number) {
-    if (this.splitId === null) return
+    if (!this.pair) return
     this.splitRatio = Math.max(0.2, Math.min(0.8, ratio))
     this.layout()
     this.sendSplit()
-  }
-
-  /** The tab beside this one, if any — the strip marks it. */
-  get splitTab() {
-    return this.splitId
   }
 
   private sendSplit() {
@@ -2436,25 +2471,30 @@ export class BrowserWindow {
    * hear it is how a restored pair came back invisible.
    */
   splitNow(): SplitState | null {
-    const other = this.splitId === null ? null : this.tabs.find((tab) => tab.id === this.splitId)
-    if (!other) {
-      // Asking what the pair is must not be what ends it: only a tab that has
-      // really gone clears the pairing, and closing a tab already does that.
-      return null
-    }
+    if (!this.pair) return null
+    const left = this.tabs.find((tab) => tab.id === this.pair?.[0])
+    const right = this.tabs.find((tab) => tab.id === this.pair?.[1])
+    if (!left || !right) return null
     // One of the browser's own pages is drawn by the interface itself and
-    // fills the window: there are no two halves to divide, and a line down
-    // the middle of the home page is the divider for a split nobody can see.
-    // The pairing is kept — going back to a site brings it up again.
+    // fills the window: there are no two halves to divide, and a line down the
+    // middle of the home page is the divider for a split nobody can see. The
+    // pairing is kept — the strip still shows it, and going back to either of
+    // the two brings the division up again.
     const active = this.getActive()
-    if (!active || !active.hasContent || active.internal || active.sleeping) {
-      return { left: this.activeId, right: other.id, ratio: this.splitRatio, rect: null }
+    const drawable =
+      this.pairShown() !== null &&
+      active &&
+      active.hasContent &&
+      !active.internal &&
+      !active.sleeping
+    if (!drawable) {
+      return { left: left.id, right: right.id, ratio: this.splitRatio, rect: null }
     }
     const over = this.edgeOverflow()
     const r = this.layoutRect
     return {
-      left: this.activeId,
-      right: other.id,
+      left: left.id,
+      right: right.id,
       ratio: this.splitRatio,
       rect: {
         x: Math.round(r.x),
@@ -3310,13 +3350,14 @@ export class BrowserWindow {
   }
 
   private showActive() {
-    // The tab beside the active one is on screen too, and it must not be the
-    // active one as well — switching to it is how a split ends up showing
-    // one page twice.
-    if (this.splitId === this.activeId) this.splitId = null
+    // Both halves of a pair stay on screen while either of them is in front:
+    // clicking the page on the right is not a reason to take it away.
+    const paired = this.pairShown()
     for (const tab of this.tabs) {
       if (!tab.view) continue
-      const shown = tab.id === this.activeId || tab.id === this.splitId
+      const shown =
+        tab.id === this.activeId ||
+        (paired !== null && (tab.id === paired[0].id || tab.id === paired[1].id))
       tab.view.setVisible(shown && tab.hasContent && this.layoutRect.visible)
     }
     this.layout()
@@ -3749,7 +3790,12 @@ export class BrowserWindow {
         activeIndex: kept.findIndex((t) => t.id === this.activeId),
         // Two pages put side by side stay side by side tomorrow: the pair is
         // as much a part of how the window was left as which tabs were open.
-        splitIndex: this.splitId === null ? -1 : kept.findIndex((t) => t.id === this.splitId),
+        splitPair: this.pair
+          ? [
+              kept.findIndex((t) => t.id === (this.pair as [number, number])[0]),
+              kept.findIndex((t) => t.id === (this.pair as [number, number])[1])
+            ]
+          : null,
         splitRatio: this.splitRatio
       }
       const file = this.sessionFile()
@@ -3767,7 +3813,7 @@ export class BrowserWindow {
     let payload: {
       tabs: PersistedTab[]
       activeIndex: number
-      splitIndex?: number
+      splitPair?: [number, number] | null
       splitRatio?: number
       groups?: TabGroup[]
       spaces?: Array<{ id: number; name: string; colour: string; pinned?: boolean }>
@@ -3831,14 +3877,19 @@ export class BrowserWindow {
       if (isActive) this.activeId = tab.id
     })
 
-    // The tab that was beside the active one, found again by its place in the
-    // list that was saved.
-    const beside = payload.splitIndex ?? -1
-    if (beside >= 0 && beside < this.tabs.length && this.tabs[beside].id !== this.activeId) {
-      this.splitId = this.tabs[beside].id
-      const ratio = Number(payload.splitRatio)
-      if (ratio >= 0.2 && ratio <= 0.8) this.splitRatio = ratio
-      this.summon(this.tabs[beside])
+    // The two that were side by side, found again by their places in the list
+    // that was saved.
+    const saved = payload.splitPair
+    if (Array.isArray(saved) && saved.length === 2) {
+      const first = this.tabs[saved[0]]
+      const second = this.tabs[saved[1]]
+      if (first && second && first !== second) {
+        this.pair = [first.id, second.id]
+        const ratio = Number(payload.splitRatio)
+        if (ratio >= 0.2 && ratio <= 0.8) this.splitRatio = ratio
+        this.summon(first)
+        this.summon(second)
+      }
     }
 
     if (this.activeId === -1 && this.tabs[0]) this.activeId = this.tabs[0].id

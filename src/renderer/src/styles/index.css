@@ -659,9 +659,11 @@ input[type='color']::-webkit-color-swatch {
   opacity: 0.88;
   transform: scale(1.3);
 }
-.halo-host:hover .avatar-face {
-  transform: scale(1.05);
-}
+/* The picture itself is left alone. A 22-pixel photograph blown up by five
+   per cent is drawn from the same few pixels it already had, and the warping
+   that comes of it is the one thing a face cannot afford. The light around it
+   is what answers the pointer; only a press moves the picture, and only
+   inward, where nothing is invented. */
 .halo-host:active .avatar-face {
   transform: scale(0.96);
   transition-duration: 90ms;

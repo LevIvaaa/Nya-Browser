@@ -1,5 +1,5 @@
 import { t } from '../i18n'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import type {
   InternalPage,
   Settings,
@@ -94,6 +94,8 @@ interface ItemProps {
   tab: TabState
   /** the half of a side-by-side pair this tab is, if it is in one */
   half?: Half
+  /** set when the other half is the tab immediately beside this one */
+  joined?: Half | null
   /** gone from the browser, still on screen for a moment */
   leaving?: boolean
   settings: Settings
@@ -112,6 +114,7 @@ interface ItemProps {
 function TabItem({
   tab,
   half,
+  joined,
   leaving,
   settings,
   vertical,
@@ -159,6 +162,7 @@ function TabItem({
       onMouseLeave={() => setHover(false)}
       title={vertical ? undefined : `${title}${tab.origin ? ` — ${tab.origin}` : ''}`}
       data-active-tab={tab.active ? '' : undefined}
+      data-tab-id={tab.id}
       className={cx(
         leaving ? (vertical ? 'animate-tab-out-tall' : 'animate-tab-out') : 'animate-tab',
         'no-drag group relative flex cursor-default select-none items-center gap-2',
@@ -181,6 +185,20 @@ function TabItem({
               boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${group.color} 38%, transparent)`
             }
           : { borderRadius: 11 }),
+        // Two tabs shown as one window are drawn as one tab: round on the
+        // outside, square where they meet, and touching.
+        ...(joined === 'left' && !vertical
+          ? { borderTopRightRadius: 3, borderBottomRightRadius: 3, marginRight: -4 }
+          : {}),
+        ...(joined === 'right' && !vertical
+          ? { borderTopLeftRadius: 3, borderBottomLeftRadius: 3 }
+          : {}),
+        ...(joined === 'left' && vertical
+          ? { borderBottomLeftRadius: 3, borderBottomRightRadius: 3, marginBottom: -4 }
+          : {}),
+        ...(joined === 'right' && vertical
+          ? { borderTopLeftRadius: 3, borderTopRightRadius: 3 }
+          : {}),
         height,
         // A pinned tab is its icon and nothing else: it is there to be found
         // in the same place every time, not to be read.
@@ -211,8 +229,18 @@ function TabItem({
 
       {half && (
         <span
-          className="bond pointer-events-none absolute inset-x-1.5 bottom-[2px] h-[2px] rounded-pill"
-          style={{ background: 'var(--accent)' }}
+          className="bond pointer-events-none absolute bottom-[2px] h-[2px] rounded-pill"
+          style={{
+            background: 'var(--accent)',
+            // Where the two halves touch, the line runs straight through: one
+            // window, one line, however many tabs it is drawn under.
+            left: joined === 'right' ? 0 : 6,
+            right: joined === 'left' ? 0 : 6,
+            borderTopLeftRadius: joined === 'right' ? 0 : undefined,
+            borderBottomLeftRadius: joined === 'right' ? 0 : undefined,
+            borderTopRightRadius: joined === 'left' ? 0 : undefined,
+            borderBottomRightRadius: joined === 'left' ? 0 : undefined
+          }}
         />
       )}
 
@@ -530,6 +558,60 @@ function useReorder() {
 type Reorder = ReturnType<typeof useReorder>
 
 /* -------------------------------------------------------------- horizontal */
+/**
+ * Tabs that have moved are seen to move.
+ *
+ * When a tab changes places — joined to another, dragged, or shifted along by
+ * one that left — it is put back where it was for an instant and then let go,
+ * so the eye can follow it to its new place instead of finding it already
+ * there. Everything here is measured and written straight to the elements:
+ * a measurement that set state would measure its own result for ever.
+ */
+function useFlight(row: RefObject<HTMLDivElement | null>, key: string) {
+  const seen = useRef(new Map<number, { x: number; y: number }>())
+  useLayoutEffect(() => {
+    const strip = row.current
+    if (!strip) return
+    const items = strip.querySelectorAll<HTMLElement>('[data-tab-id]')
+    const now = new Map<number, { x: number; y: number }>()
+    items.forEach((el) => {
+      const id = Number(el.dataset.tabId)
+      const at = el.getBoundingClientRect()
+      const here = { x: at.left, y: at.top }
+      const from = seen.current.get(id)
+      now.set(id, here)
+      if (!from) return
+      // Along the strip, or down the rail: whichever way this one is stacked.
+      const dx = from.x - here.x
+      const dy = from.y - here.y
+      if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return
+      el.style.transition = 'none'
+      el.style.transform = `translate3d(${dx}px, ${dy}px, 0)`
+      requestAnimationFrame(() => {
+        el.style.transition = 'transform calc(420ms * var(--speed)) var(--ease-emph)'
+        el.style.transform = 'translate3d(0, 0, 0)'
+      })
+    })
+    seen.current = now
+  }, [key, row])
+}
+
+/**
+ * Whether a tab's other half is standing right next to it. Only then are the
+ * two drawn as one thing — otherwise they are simply two marked tabs, which
+ * is the honest picture when something else sits between them.
+ */
+function joinedAt(rows: Row[], id: number, halfOf: (id: number) => Half): Half | null {
+  const line = rows.filter((row): row is Extract<Row, { kind: 'tab' }> => row.kind === 'tab')
+  const at = line.findIndex((row) => row.tab.id === id)
+  if (at === -1) return null
+  const mine = halfOf(id)
+  if (!mine) return null
+  const next = mine === 'left' ? line[at + 1] : line[at - 1]
+  if (!next || halfOf(next.tab.id) === mine || !halfOf(next.tab.id)) return null
+  return mine
+}
+
 /** The two tabs shown side by side, as the strip needs to know them. */
 function useSplitPair() {
   const [pair, setPair] = useState<SplitState | null>(null)
@@ -566,6 +648,11 @@ export function TabStrip({
   // appears on that side and nowhere else: an arrow pointing at nothing is
   // worse than no arrow.
   const [more, setMore] = useState({ left: false, right: false })
+  // The order of the tabs, as a single word: when it changes, they fly.
+  useFlight(
+    scroller,
+    rows.map((row) => (row.kind === 'tab' ? row.tab.id : `g${row.group.id}`)).join(',')
+  )
   const measure = () => {
     const row = scroller.current
     if (!row) return
@@ -660,6 +747,7 @@ export function TabStrip({
               key={row.tab.id}
               tab={row.tab}
               half={halfOf(row.tab.id)}
+              joined={joinedAt(rows, row.tab.id, halfOf)}
               leaving={leaving.has(row.tab.id)}
               settings={settings}
               index={row.index}
@@ -878,6 +966,11 @@ export function TabRail({
   const reorder = useReorder()
   const { drawn, leaving } = useFarewell(tabs)
   const rows = rowsOf(drawn, groups)
+  const column = useRef<HTMLDivElement>(null)
+  useFlight(
+    column,
+    rows.map((row) => (row.kind === 'tab' ? row.tab.id : `g${row.group.id}`)).join(',')
+  )
 
   return (
     <aside
@@ -913,7 +1006,10 @@ export function TabRail({
         </button>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto overflow-x-hidden pr-0.5">
+      <div
+        ref={column}
+        className="flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto overflow-x-hidden pr-0.5"
+      >
         {rows.map((row) =>
           row.kind === 'group' ? (
             <GroupChip
@@ -930,6 +1026,7 @@ export function TabRail({
               key={row.tab.id}
               tab={row.tab}
               half={halfOf(row.tab.id)}
+              joined={joinedAt(rows, row.tab.id, halfOf)}
               leaving={leaving.has(row.tab.id)}
               settings={settings}
               index={row.index}

@@ -1,5 +1,6 @@
 import type { Profile, Settings, TabState, UpdateState, WebAppCandidate } from '../../../shared/types'
 import { currentLanguage, t } from '../i18n'
+import { useEffect, useState } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
@@ -41,6 +42,61 @@ interface Props {
   view: string
   onOpenAddress: () => void
   onToggleView: (view: 'settings' | 'downloads' | 'menu' | 'profiles' | 'update') => void
+}
+
+/**
+ * The offer to translate, and the sign that it was taken.
+ *
+ * Translating a page takes a second or two, and a button that does nothing
+ * visible in that second reads as a button that did not work. So it lights up
+ * the moment it is pressed, keeps its colour while the page is translated, and
+ * says so in its own background rather than only in its outline.
+ */
+function TranslateButton({ translated }: { translated: boolean }) {
+  const [working, setWorking] = useState(false)
+
+  // Whatever happened, it has happened by the time the page says so.
+  useEffect(() => setWorking(false), [translated])
+
+  const press = () => {
+    setWorking(true)
+    // A page that refuses to translate must not leave the button spinning.
+    window.setTimeout(() => setWorking(false), 6000)
+    void window.browser.translatePage()
+  }
+
+  const lit = translated || working
+
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      title={translated ? t('Показать оригинал') : t('Перевести страницу')}
+      aria-label={translated ? t('Показать оригинал') : t('Перевести страницу')}
+      aria-pressed={translated}
+      className={cx(
+        'no-drag animate-pop flex shrink-0 items-center rounded-[7px] p-1',
+        working && 'animate-pulse-soft'
+      )}
+      style={{
+        color: lit ? 'var(--accent)' : undefined,
+        background: lit ? 'color-mix(in srgb, var(--accent) 18%, transparent)' : undefined,
+        transition: 'background var(--t-fast) linear, color var(--t-fast) linear'
+      }}
+      onClick={(event) => {
+        event.stopPropagation()
+        press()
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.stopPropagation()
+        event.preventDefault()
+        press()
+      }}
+    >
+      <Translate width={14} height={14} />
+    </span>
+  )
 }
 
 export default function Toolbar({
@@ -212,26 +268,7 @@ export default function Toolbar({
               be found in a menu. It stays while the translation is up, because
               that is also how you get the original back. */}
           {canBookmark && (foreign || tab?.translated) && (
-            <span
-              role="button"
-              tabIndex={0}
-              title={tab?.translated ? t('Показать оригинал') : t('Перевести страницу')}
-              aria-label={tab?.translated ? t('Показать оригинал') : t('Перевести страницу')}
-              className="no-drag animate-pop flex shrink-0 items-center rounded-[7px] p-1 hover:bg-[var(--line)]"
-              style={tab?.translated ? { color: 'var(--accent)' } : undefined}
-              onClick={(event) => {
-                event.stopPropagation()
-                void window.browser.translatePage()
-              }}
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter' && event.key !== ' ') return
-                event.stopPropagation()
-                event.preventDefault()
-                void window.browser.translatePage()
-              }}
-            >
-              <Translate width={14} height={14} />
-            </span>
+            <TranslateButton translated={tab?.translated === true} />
           )}
 
           {/* And while a page is being read rather than looked at, the way out
