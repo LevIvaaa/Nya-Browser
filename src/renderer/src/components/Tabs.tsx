@@ -578,13 +578,21 @@ function SpaceChip({
   // Numbered by the group itself, not by where it sits: a name that changes
   // when something else is dragged past it is not a name.
   const name = space.name || t('Группа {n}', { n: space.id })
+  /**
+   * The list opens under the chip, aligned with its left edge — the arrow is a
+   * button of its own at the right end of it, and measuring from there put the
+   * whole panel a chip's width too far over.
+   */
   const openList = (event: React.MouseEvent<HTMLElement>) => {
-    const box = (event.currentTarget as HTMLElement).getBoundingClientRect()
+    const target = event.currentTarget as HTMLElement
+    const chip = target.closest('[data-space-chip]') ?? target
+    const box = chip.getBoundingClientRect()
     void window.browser.setOverlay(`tabs-panel:${Math.round(box.left)}`)
   }
 
   return (
     <span
+      data-space-chip=""
       className="no-drag flex h-7 shrink-0 items-center rounded-[9px] pl-1 pr-0.5 text-2xs font-semibold"
       draggable={movable}
       onDragStart={(event) => {
