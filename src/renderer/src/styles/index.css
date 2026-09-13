@@ -573,6 +573,39 @@ input[type='color']::-webkit-color-swatch {
 }
 
 /* ==========================================================================
+   Looking through the settings
+   ========================================================================== */
+
+/* A tab whose every section was taken away by the search has nothing left to
+   say, and says nothing — including the name it would have been listed under.
+   Likewise the whole list, which is how «nothing found» knows to appear. */
+.found:not(:has(section)) {
+  display: none;
+}
+.found-where {
+  display: block;
+  margin: 0 0 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  transition: color var(--t-fast) linear;
+}
+.found-where:hover {
+  color: var(--accent);
+}
+.found + .found {
+  margin-top: 10px;
+}
+.found-none {
+  display: none;
+}
+.stagger:not(:has(section)) .found-none {
+  display: block;
+}
+
+/* ==========================================================================
    The light an avatar gives off
    ========================================================================== */
 
