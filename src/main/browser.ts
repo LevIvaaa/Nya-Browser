@@ -45,7 +45,7 @@ import {
   setPermissionPrompt,
   stats, isBlockedPopup } from './security'
 import { engine, hideCss } from './filters'
-import { loadExtensions, setExtensionSession } from './extensions'
+import { extensionActions, loadExtensions, setExtensionSession } from './extensions'
 import { normalizeInput } from '../shared/search'
 import type {
   ContentLayout,
@@ -55,6 +55,7 @@ import type {
   InstalledApp,
   PrintOptions,
   Playing,
+  ExtensionAction,
   SiteInfo,
   SiteRules,
   SplitState,
@@ -1331,6 +1332,21 @@ export class BrowserWindow {
       }
       this.broadcast()
     })
+    // Whichever page you are working in is the one the browser is «on»: click
+    // into the half on the right and that tab comes forward, with its address
+    // in the bar and its name open in the strip. Without this, using the
+    // second page left the first one looking like the one in front.
+    wc.on('focus', () => {
+      if (this.activeId === tab.id || !this.inPair(tab.id)) return
+      this.activeId = tab.id
+      tab.lastActive = Date.now()
+      this.candidate = tab.candidate
+      this.sendApp()
+      this.layout()
+      this.sendSplit()
+      this.broadcast()
+    })
+
     wc.on('audio-state-changed', () => {
       this.broadcast()
       this.mediaHeard()
@@ -3366,6 +3382,199 @@ export class BrowserWindow {
     // and a pair that has just ended has to be announced too, or the line
     // stays on screen for ever, dividing nothing.
     this.sendSplit()
+  }
+
+  /* ----------------------------------------------------------- extensions */
+
+  /**
+   * An extension's own window, hanging off its button.
+   *
+   * Chromium draws these; here the toolbar is the browser's own, so the popup
+   * is too: a view of its own holding the extension's page, put under the
+   * button, measured to whatever the page turns out to be, and taken away the
+   * moment attention moves elsewhere. It is a real extension page — the same
+   * origin, the same APIs — because anything less would be a picture of an
+   * extension rather than the extension.
+   */
+  private popup: WebContentsView | null = null
+  private popupId = ''
+  private popupWatch: ReturnType<typeof setInterval> | null = null
+
+  extensionActions(): ExtensionAction[] {
+    return extensionActions()
+  }
+
+  /** One more extension, or one fewer: the toolbar is told. */
+  sendExtensions() {
+    this.send('state:extensions', extensionActions())
+  }
+
+  /** Opens, or closes, the popup of one extension. `x` is where its button is. */
+  openExtension(id: string, x: number) {
+    if (this.popupId === id) return this.closeExtension()
+    this.closeExtension()
+    const action = extensionActions().find((one) => one.id === id)
+    if (!action) return false
+    if (!action.popup) {
+      // An extension with no page of its own has nothing to show; saying so is
+      // better than a window that opens empty.
+      this.send('toast', t('У этого расширения нет своего окна'))
+      return false
+    }
+
+    // An extension's background sleeps until it is needed, and its popup is
+    // exactly when it is needed: everything the popup asks for is answered
+    // from there, so it is woken before the window opens rather than left to
+    // be knocked on by a page that has already given up waiting.
+    void this.ses.serviceWorkers
+      .startWorkerForScope(`chrome-extension://${id}/`)
+      .catch(() => undefined)
+
+    const view = new WebContentsView({
+      webPreferences: {
+        session: this.ses,
+        // The shim has to stand in the extension's own world to be of any use:
+        // it is the extension's `chrome.tabs` it is fixing, not a copy of it.
+        contextIsolation: false,
+        nodeIntegration: false,
+        sandbox: false,
+        webSecurity: true,
+        preload: join(__dirname, '../preload/extension.js')
+      }
+    })
+    this.popup = view
+    this.popupId = id
+    view.setBackgroundColor('#00000000')
+    this.win.contentView.addChildView(view)
+    this.place(view, x, 360, 220)
+    view.webContents.loadURL(action.popup).catch((error) => {
+      log('extension popup failed: ' + String(error))
+      this.closeExtension()
+      this.send('toast', t('Окно расширения не открылось'))
+    })
+    view.webContents.on('did-fail-load', (_e, code, description, url) =>
+      log(`extension popup ${code} ${description} ${url}`)
+    )
+
+    const fit = () => this.fitExtension(x)
+    view.webContents.on('did-finish-load', () => {
+      fit()
+      view.webContents.focus()
+    })
+    // A popup grows and shrinks as it is used — a menu opens, a list fills in.
+    this.popupWatch = setInterval(fit, 400)
+    view.webContents.on('blur', () => setTimeout(() => this.closeExtension(), 120))
+    view.webContents.setWindowOpenHandler(({ url }) => {
+      if (/^https?:/i.test(url)) this.newTab(url)
+      this.closeExtension()
+      return { action: 'deny' }
+    })
+    return true
+  }
+
+  /** Where a popup sits: under its button, and never off the window's edge. */
+  private place(view: WebContentsView, x: number, width: number, height: number) {
+    const bounds = this.win.getContentBounds()
+    const top = Math.round(this.layoutRect.y > 0 ? this.layoutRect.y - 4 : 40)
+    const left = Math.max(8, Math.min(Math.round(x - width / 2), bounds.width - width - 8))
+    view.setBounds({ x: left, y: top, width, height })
+    view.setBorderRadius(12)
+  }
+
+  /** Measures the extension's page and gives it exactly that much room. */
+  private fitExtension(x: number) {
+    const view = this.popup
+    if (!view || view.webContents.isDestroyed()) return
+    void view.webContents
+      .executeJavaScript(
+        `[Math.ceil(Math.max(document.documentElement.scrollWidth, document.body ? document.body.scrollWidth : 0)),
+          Math.ceil(Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0))]`,
+        false
+      )
+      .then((size: [number, number]) => {
+        if (!this.popup || this.popup !== view) return
+        const bounds = this.win.getContentBounds()
+        const width = Math.max(180, Math.min(Math.round(size[0]) + 2, 760, bounds.width - 16))
+        const height = Math.max(80, Math.min(Math.round(size[1]) + 2, 620, bounds.height - 80))
+        const at = view.getBounds()
+        if (Math.abs(at.width - width) < 2 && Math.abs(at.height - height) < 2) return
+        this.place(view, x, width, height)
+      })
+      .catch(() => undefined)
+  }
+
+  /** This window's tabs, in the shape an extension expects to be given. */
+  extensionTabs() {
+    return this.here()
+      .filter((tab) => tab.wc && !tab.wc.isDestroyed())
+      .map((tab, index) => ({
+        id: tab.wc?.id ?? 0,
+        index,
+        windowId: 1,
+        active: tab.id === this.activeId,
+        url: tab.url,
+        title: tab.title,
+        favIconUrl: tab.favicon ?? '',
+        audible: tab.wc?.isCurrentlyAudible() ?? false,
+        muted: tab.muted,
+        pinned: tab.pinned,
+        incognito: this.incognito,
+        width: Math.round(this.layoutRect.width),
+        height: Math.round(this.layoutRect.height)
+      }))
+  }
+
+  /** The tab an extension names, found by the id it was given. */
+  private byContentsId(id: number) {
+    return this.tabs.find((tab) => tab.wc?.id === id)
+  }
+
+  extensionTabCreate(url: string, active: boolean) {
+    const id = this.newTab(url || undefined, !active)
+    const tab = this.tabs.find((one) => one.id === id)
+    return this.extensionTabs().find((one) => one.id === tab?.wc?.id) ?? null
+  }
+
+  extensionTabUpdate(id: number, patch: { url: string; active: boolean; muted: boolean | null }) {
+    const tab = id === 0 ? this.getActive() : this.byContentsId(id)
+    if (!tab) return null
+    if (patch.url) this.navigate(patch.url, tab.id)
+    if (patch.active) this.switchTab(tab.id)
+    if (patch.muted !== null) tab.wc?.setAudioMuted(patch.muted)
+    this.broadcast()
+    return this.extensionTabs().find((one) => one.id === tab.wc?.id) ?? null
+  }
+
+  extensionTabRemove(ids: number[]) {
+    for (const id of ids) {
+      const tab = this.byContentsId(id)
+      if (tab) this.closeTab(tab.id)
+    }
+    return true
+  }
+
+  extensionTabReload(id: number) {
+    const tab = id === 0 ? this.getActive() : this.byContentsId(id)
+    if (!tab?.wc || tab.wc.isDestroyed()) return false
+    tab.wc.reload()
+    return true
+  }
+
+  closeExtension() {
+    if (this.popupWatch) clearInterval(this.popupWatch)
+    this.popupWatch = null
+    const view = this.popup
+    this.popup = null
+    this.popupId = ''
+    if (!view) return false
+    try {
+      this.win.contentView.removeChildView(view)
+      if (!view.webContents.isDestroyed()) view.webContents.close()
+    } catch {
+      /* already gone */
+    }
+    this.focusView()
+    return true
   }
 
   /* ---------------------------------------------------------- permissions */

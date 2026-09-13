@@ -129,6 +129,13 @@ function TabItem({
 }: ItemProps) {
   const [hover, setHover] = useState(false)
   const height = tabHeight(settings)
+  /**
+   * Two tabs shown as one window took the room of two tabs, and the strip has
+   * no room to give. So the pair is written the way a sentence is: the half
+   * you are in keeps its name, the other one shrinks to its icon — until you
+   * point at it, and it tells you what it is.
+   */
+  const folded = Boolean(joined) && !vertical && !tab.active && !hover
   const audio = tab.audible || tab.muted
   const title = tab.title || tab.origin || t('Новая вкладка')
   const showClose =
@@ -169,7 +176,7 @@ function TabItem({
         // A pinned tab in a row is exactly its icon: no name to leave room for,
         // and so no room left over. The width floor the other tabs stand on
         // would otherwise hold it open and put the icon off to one side.
-        tab.pinned && !vertical ? 'justify-center px-0' : 'px-2.5',
+        (tab.pinned || folded) && !vertical ? 'justify-center px-0' : 'px-2.5',
         vertical ? 'w-full' : tab.pinned ? 'flex-none' : 'min-w-[54px] flex-1'
       )}
       style={{
@@ -203,8 +210,16 @@ function TabItem({
         // A pinned tab is its icon and nothing else: it is there to be found
         // in the same place every time, not to be read.
         width: tab.pinned && !vertical ? 38 : undefined,
-        minWidth: tab.pinned && !vertical ? 38 : undefined,
-        maxWidth: tab.pinned && !vertical ? 38 : vertical ? undefined : settings.tabMaxWidth,
+        minWidth: tab.pinned && !vertical ? 38 : folded ? 34 : undefined,
+        maxWidth: tab.pinned && !vertical
+          ? 38
+          : vertical
+            ? undefined
+            : folded
+              ? 34
+              : Boolean(joined)
+                ? Math.round(settings.tabMaxWidth * 0.78)
+                : settings.tabMaxWidth,
         background: tab.active
           ? 'var(--surface-solid)'
           : hover
@@ -217,7 +232,7 @@ function TabItem({
         outline: dropIndex === index ? '2px solid var(--accent)' : 'none',
         outlineOffset: -2,
         transition:
-          'background var(--t-base) var(--ease-out), box-shadow var(--t-base) var(--ease-out), opacity var(--t-base) linear, max-width var(--t-slow) var(--ease-out)'
+          'background var(--t-base) var(--ease-out), box-shadow var(--t-base) var(--ease-out), opacity var(--t-base) linear, max-width var(--t-slow) var(--ease-out), min-width var(--t-slow) var(--ease-out)'
       }}
     >
       {vertical && tab.active && (
@@ -248,7 +263,7 @@ function TabItem({
 
       {/* Which half of the window this one fills. The pair reads as a pair
           because the same mark is on both, filled on opposite sides. */}
-      {half && !(tab.pinned && !vertical) && (
+      {half && !joined && !(tab.pinned && !vertical) && (
         <span
           className="animate-pop shrink-0"
           style={{ color: 'var(--accent)' }}
@@ -258,7 +273,7 @@ function TabItem({
         </span>
       )}
 
-      {!(tab.pinned && !vertical) && (
+      {!(tab.pinned && !vertical) && !folded && (
         <span
           className={cx('min-w-0 flex-1 truncate text-sm', tab.active ? 'font-medium text-ink' : 'text-dim')}
         >
@@ -286,7 +301,7 @@ function TabItem({
 
       <button
         aria-label={t('Закрыть вкладку')}
-        hidden={tab.pinned}
+        hidden={tab.pinned || folded}
         onClick={(event) => {
           event.stopPropagation()
           window.browser.closeTab(tab.id)

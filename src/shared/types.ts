@@ -740,6 +740,23 @@ export interface UpdateState {
 }
 
 /** A Chrome extension loaded into the active profile. */
+/**
+ * An extension's button, as the toolbar needs it. Chromium draws these itself;
+ * here the browser draws its own toolbar, so it has to be told what to put in
+ * it — the picture, the words for the tooltip, and the page to open when it is
+ * pressed.
+ */
+export interface ExtensionAction {
+  id: string
+  name: string
+  /** what the extension calls the button, if it says */
+  title: string
+  /** the button's picture, already read off disk */
+  icon: string
+  /** the page the button opens, or an empty string when it offers none */
+  popup: string
+}
+
 export interface InstalledExtension {
   id: string
   name: string

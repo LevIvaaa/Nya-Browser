@@ -21,7 +21,6 @@ import { translateBatch } from './translate'
 import { engine, filterStatus, hideCss, loadFilters } from './filters'
 import {
   addExtension,
-  installFromStore,
   listExtensions,
   removeExtension,
   revealExtension
@@ -609,6 +608,28 @@ function registerIpc() {
   ipcMain.handle('tab:split', (event, id: unknown) =>
     current(event).splitWith(id === null || id === undefined ? null : num(id))
   )
+  ipcMain.handle('ext:actions', (event) => current(event).extensionActions())
+  ipcMain.handle('ext:open', (event, id: unknown, x: unknown) =>
+    current(event).openExtension(str(id, 64), num(x))
+  )
+  ipcMain.handle('ext:close', (event) => current(event).closeExtension())
+  /* What an extension's own page is allowed to ask about this window. */
+  ipcMain.handle('ext:tabs', (event) => current(event).extensionTabs())
+  ipcMain.handle('ext:tab-create', (event, url: unknown, active: unknown) =>
+    current(event).extensionTabCreate(str(url, 2000), flag(active))
+  )
+  ipcMain.handle('ext:tab-update', (event, id: unknown, patch: unknown) => {
+    const data = (patch ?? {}) as { url?: unknown; active?: unknown; muted?: unknown }
+    return current(event).extensionTabUpdate(num(id), {
+      url: str(data.url, 2000),
+      active: data.active === true,
+      muted: typeof data.muted === 'boolean' ? data.muted : null
+    })
+  })
+  ipcMain.handle('ext:tab-remove', (event, ids: unknown) =>
+    current(event).extensionTabRemove((Array.isArray(ids) ? ids : []).map((one) => num(one)))
+  )
+  ipcMain.handle('ext:tab-reload', (event, id: unknown) => current(event).extensionTabReload(num(id)))
   ipcMain.handle('tab:split-state', (event) => current(event).splitNow())
   ipcMain.handle('tab:split-ratio', (event, ratio: unknown) =>
     current(event).setSplitRatio(num(ratio))
@@ -1055,9 +1076,18 @@ function registerIpc() {
 
   /* ---- extensions ---- */
   ipcMain.handle('ext:list', (event) => listExtensions())
-  ipcMain.handle('ext:add', (event) => addExtension())
-  ipcMain.handle('ext:store', (event, input: unknown) => installFromStore(str(input, 500)))
-  ipcMain.handle('ext:remove', (event, path: unknown) => removeExtension(str(path, 600)))
+  /** Whatever changed, every window's toolbar hears about it. */
+  const tellExtensions = () => windows.forEach((win) => win.sendExtensions())
+  ipcMain.handle('ext:add', async (event) => {
+    const result = await addExtension()
+    tellExtensions()
+    return result
+  })
+  ipcMain.handle('ext:remove', (event, path: unknown) => {
+    const gone = removeExtension(str(path, 600))
+    tellExtensions()
+    return gone
+  })
   ipcMain.handle('ext:reveal', (event, path: unknown) => revealExtension(str(path, 600)))
 
   /* ---- filter lists ---- */

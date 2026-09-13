@@ -9,24 +9,32 @@
 //                chrome.tabs (mostly), devtools panels, background service
 //                workers
 //   absent       blocking chrome.webRequest and declarativeNetRequest, so ad
-//                blockers cannot block anything (ours is built in instead), and
-//                toolbar popups, since the host app draws the toolbar
+//                blockers cannot block anything (ours is built in instead)
 //
-// So Dark Reader, Stylus and similar are the point of this; uBlock Origin and
-// password managers are not going to work, and the settings page says so.
+// Toolbar buttons and their popups are absent from Electron too, because the
+// host application draws the toolbar — so this browser draws them itself, out
+// of what the manifest asks for (extensionActions below, and the popup in
+// browser.ts).
+//
+// What an extension cannot do here it simply cannot do: an interface that asks
+// its background for everything it shows over a long-lived channel gets no
+// answer, because Electron carries no channels between an extension's pages
+// and its worker. Dark Reader is exactly that kind. So extensions are added
+// from a folder or a .crx somebody chose deliberately, and not from the store
+// — one click there would promise something the browser cannot keep.
 //
 // Extensions have to be re-loaded on every launch — Chromium keeps no registry
 // of them — so the paths live in extensions.json inside the profile.
 // ---------------------------------------------------------------------------
 
-import { app, dialog, net, session, shell, type Session } from 'electron'
+import { app, dialog, session, shell, type Session } from 'electron'
 import { createHash } from 'crypto'
 import { inflateRawSync } from 'zlib'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'fs'
 import { basename, dirname, join, relative, resolve } from 'path'
 import { profiles } from './profiles'
 import { log } from './log'
-import type { AddExtensionResult, InstalledExtension } from '../shared/types'
+import type { AddExtensionResult, ExtensionAction, InstalledExtension } from '../shared/types'
 
 interface ExtensionsFile {
   /** absolute paths of unpacked extension folders */
@@ -215,6 +223,58 @@ export function listExtensions(): InstalledExtension[] {
   })
 }
 
+/** The picture a manifest points at, read off disk as something a page can show. */
+function iconData(root: string, icons: unknown): string {
+  if (typeof icons === 'string') return iconData(root, { '0': icons })
+  if (!icons || typeof icons !== 'object') return ''
+  // The largest one that exists: these are drawn at 16 or 18 points on a
+  // screen that may have two or three pixels to the point.
+  const sizes = Object.entries(icons as Record<string, string>)
+    .map(([size, path]) => ({ size: Number(size) || 0, path }))
+    .sort((a, b) => b.size - a.size)
+  for (const { path } of sizes) {
+    if (typeof path !== 'string' || !path) continue
+    const file = join(root, path.replace(/^\//, ''))
+    if (!existsSync(file)) continue
+    try {
+      const kind = /\.svg$/i.test(file) ? 'image/svg+xml' : /\.jpe?g$/i.test(file) ? 'image/jpeg' : 'image/png'
+      return `data:${kind};base64,${readFileSync(file).toString('base64')}`
+    } catch {
+      /* an icon that cannot be read is an icon we do without */
+    }
+  }
+  return ''
+}
+
+/**
+ * The buttons the loaded extensions ask for.
+ *
+ * Chromium puts these in its own toolbar; this browser draws its toolbar
+ * itself, which is exactly why extensions looked dead here even when they were
+ * running. The manifest says what the button should be, so the browser can put
+ * it there.
+ */
+export function extensionActions(): ExtensionAction[] {
+  const ses = current ?? session.defaultSession
+  const out: ExtensionAction[] = []
+  for (const extension of ses.extensions.getAllExtensions()) {
+    const manifest = (extension.manifest ?? {}) as Record<string, unknown>
+    const action = (manifest.action ?? manifest.browser_action ?? null) as Record<string, unknown> | null
+    // An extension with no button of its own is still worth a button, if only
+    // to reach its own page: but one that asks for nothing gets nothing.
+    if (!action) continue
+    const popup = typeof action.default_popup === 'string' ? action.default_popup : ''
+    out.push({
+      id: extension.id,
+      name: extension.name,
+      title: typeof action.default_title === 'string' ? action.default_title : extension.name,
+      icon: iconData(extension.path, action.default_icon ?? manifest.icons),
+      popup: popup ? `chrome-extension://${extension.id}/${popup.replace(/^\//, '')}` : ''
+    })
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name))
+}
+
 /**
  * Asks for a .crx, .zip or an unpacked folder, unpacks the archive into the
  * profile if needed, and loads it straight away.
@@ -264,80 +324,6 @@ export async function addExtension(): Promise<AddExtensionResult> {
   return added ? { added } : { error: 'Установлено, но не удалось прочитать данные' }
 }
 
-/**
- * The id inside a Chrome Web Store address, or a bare id typed by hand.
- * Extension ids are thirty-two letters from a to p — the alphabet Google
- * encodes them in — which is specific enough to pick out of a url.
- */
-export function storeId(input: string): string | null {
-  const found = /\b([a-p]{32})\b/.exec(input.trim().toLowerCase())
-  return found ? found[1] : null
-}
-
-/**
- * Installs from the store by address or id.
- *
- * The store itself has no install for anyone but Chrome; the update service
- * behind it does, and hands back exactly the .crx the store would have
- * installed. What happens to that file after it lands is the path a file
- * picked by hand already takes.
- */
-export async function installFromStore(input: string): Promise<AddExtensionResult> {
-  const id = storeId(input)
-  if (!id) return { error: 'Это не похоже на ссылку из Chrome Web Store' }
-
-  const chrome = process.versions.chrome.split('.')[0]
-  const url =
-    'https://clients2.google.com/service/update2/crx' +
-    '?response=redirect&acceptformat=crx2,crx3&prodversion=' +
-    chrome +
-    '&x=' +
-    encodeURIComponent(`id=${id}&uc`)
-
-  let body: Buffer
-  try {
-    const answer = await net.fetch(url)
-    if (!answer.ok) return { error: `Магазин ответил ${answer.status}` }
-    body = Buffer.from(await answer.arrayBuffer())
-  } catch (error) {
-    return { error: `Не удалось скачать: ${(error as Error).message}` }
-  }
-  if (body.length < 1000) return { error: 'Расширение не найдено в магазине' }
-
-  const folder = join(unpackedDir(), `${id}-${Date.now().toString(36)}`)
-  const crx = join(app.getPath('temp'), `nya-${id}.crx`)
-  try {
-    writeFileSync(crx, body)
-    unpackArchive(crx, folder)
-  } catch (error) {
-    rmSync(folder, { recursive: true, force: true })
-    return { error: `Не удалось распаковать: ${(error as Error).message}` }
-  } finally {
-    rmSync(crx, { force: true })
-  }
-
-  const root = manifestRoot(folder)
-  if (!root) {
-    rmSync(folder, { recursive: true, force: true })
-    return { error: 'В скачанном пакете нет manifest.json' }
-  }
-
-  const ses = current ?? session.defaultSession
-  try {
-    await ses.extensions.loadExtension(root, { allowFileAccess: false })
-  } catch (error) {
-    rmSync(folder, { recursive: true, force: true })
-    return { error: `Electron отказался загрузить: ${(error as Error).message}` }
-  }
-
-  const file = readStore()
-  if (!file.paths.includes(folder)) writeStore({ paths: [...file.paths, folder] })
-  const added = listExtensions().find((item) => item.path === folder)
-  log('extensions: installed from the store', id)
-  return added ? { added } : { error: 'Установлено, но не удалось прочитать данные' }
-}
-
-/** Unloads an extension and forgets it. Copies we unpacked ourselves are deleted. */
 export function removeExtension(path: string): boolean {
   const file = readStore()
   if (!file.paths.includes(path)) return false

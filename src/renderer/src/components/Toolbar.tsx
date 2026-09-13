@@ -1,10 +1,18 @@
-import type { Profile, Settings, TabState, UpdateState, WebAppCandidate } from '../../../shared/types'
+import type {
+  ExtensionAction,
+  Profile,
+  Settings,
+  TabState,
+  UpdateState,
+  WebAppCandidate
+} from '../../../shared/types'
 import { currentLanguage, t } from '../i18n'
 import { useEffect, useState } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
   Cross,
+  Grid,
   Home,
   Incognito,
   Lock,
@@ -42,6 +50,55 @@ interface Props {
   view: string
   onOpenAddress: () => void
   onToggleView: (view: 'settings' | 'downloads' | 'menu' | 'profiles' | 'update') => void
+}
+
+/**
+ * The extensions' own buttons.
+ *
+ * Chromium draws these; this browser draws its own toolbar, so it draws these
+ * too — the picture from the extension's manifest, and its page underneath
+ * when it is pressed. An extension without a button of its own is not here,
+ * which is the same rule Chrome uses.
+ */
+function ExtensionButtons() {
+  const [actions, setActions] = useState<ExtensionAction[]>([])
+
+  useEffect(() => {
+    void window.browser.extensionActions().then(setActions)
+    return window.browser.onExtensions(setActions)
+  }, [])
+
+  if (actions.length === 0) return null
+
+  return (
+    <>
+      {actions.map((action) => (
+        <Tooltip key={action.id} label={action.title || action.name}>
+          <button
+            className="icon-btn shrink-0"
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              const box = event.currentTarget.getBoundingClientRect()
+              void window.browser.openExtension(action.id, Math.round(box.left + box.width / 2))
+            }}
+          >
+            {action.icon ? (
+              <img
+                src={action.icon}
+                alt=""
+                width={16}
+                height={16}
+                draggable={false}
+                style={{ borderRadius: 3 }}
+              />
+            ) : (
+              <Grid width={15} height={15} />
+            )}
+          </button>
+        </Tooltip>
+      ))}
+    </>
+  )
 }
 
 /**
@@ -379,6 +436,8 @@ export default function Toolbar({
       <div className="no-drag flex items-center gap-0.5 pr-1">
         {/* Only while something is playing, and then it is the answer to the
             question everyone asks a browser with thirty tabs open. */}
+        <ExtensionButtons />
+
         <MediaButton onOpen={(x) => void window.browser.setOverlay(`media:${x}`)} />
 
         {updateBadge && (
