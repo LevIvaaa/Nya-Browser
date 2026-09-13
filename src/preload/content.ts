@@ -969,3 +969,95 @@ if (isTop && httpOrigin) {
     true
   )
 }
+
+/* ==========================================================================
+   Choosing a piece of the page to photograph
+   ========================================================================== */
+
+if (isTop && httpOrigin) {
+  let picking: HTMLElement | null = null
+
+  // Named, and taken off again: a listener added with `once` is spent by the
+  // first key anyone presses, which left Escape working exactly one time.
+  const onKey = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') stop()
+  }
+
+  const stop = () => {
+    picking?.remove()
+    picking = null
+    document.removeEventListener('keydown', onKey, true)
+  }
+
+  ipcRenderer.on('capture:area', (_event, words: { hint?: string }) => {
+    if (picking) return
+    const host = document.createElement('nya-shot')
+    host.setAttribute('style', 'all: initial; position: fixed; inset: 0; z-index: 2147483647; cursor: crosshair')
+    const shadow = host.attachShadow({ mode: 'open' })
+    const style = document.createElement('style')
+    style.textContent = [
+      '.veil { position: absolute; inset: 0; background: rgba(10,10,16,.45) }',
+      '.box { position: absolute; border: 1px solid #fff; box-shadow: 0 0 0 9999px rgba(10,10,16,.45); background: transparent }',
+      '.size { position: absolute; transform: translate(0, -22px); font: 12px system-ui; color: #fff;',
+      '  background: rgba(20,20,28,.9); padding: 2px 6px; border-radius: 6px; white-space: nowrap }',
+      '.hint { position: absolute; left: 50%; top: 24px; transform: translateX(-50%); font: 13px system-ui;',
+      '  color: #fff; background: rgba(20,20,28,.92); padding: 7px 12px; border-radius: 10px; white-space: nowrap }'
+    ].join(' ')
+    const veil = document.createElement('div')
+    veil.className = 'veil'
+    const box = document.createElement('div')
+    box.className = 'box'
+    box.style.display = 'none'
+    const size = document.createElement('div')
+    size.className = 'size'
+    box.appendChild(size)
+    const hint = document.createElement('div')
+    hint.className = 'hint'
+    hint.textContent = words?.hint ?? ''
+    shadow.appendChild(style)
+    shadow.appendChild(veil)
+    if (hint.textContent) shadow.appendChild(hint)
+    shadow.appendChild(box)
+    document.documentElement.appendChild(host)
+    picking = host
+
+    let from: { x: number; y: number } | null = null
+    const rect = (to: { x: number; y: number }) => ({
+      x: Math.min(from!.x, to.x),
+      y: Math.min(from!.y, to.y),
+      width: Math.abs(to.x - from!.x),
+      height: Math.abs(to.y - from!.y)
+    })
+
+    host.addEventListener('pointerdown', (event: PointerEvent) => {
+      from = { x: event.clientX, y: event.clientY }
+      veil.style.display = 'none'
+      hint.remove()
+      box.style.display = 'block'
+      host.setPointerCapture(event.pointerId)
+    })
+    host.addEventListener('pointermove', (event: PointerEvent) => {
+      if (!from) return
+      const r = rect({ x: event.clientX, y: event.clientY })
+      box.style.left = `${r.x}px`
+      box.style.top = `${r.y}px`
+      box.style.width = `${r.width}px`
+      box.style.height = `${r.height}px`
+      size.textContent = `${Math.round(r.width)} × ${Math.round(r.height)}`
+    })
+    host.addEventListener('pointerup', (event: PointerEvent) => {
+      if (!from) return stop()
+      const r = rect({ x: event.clientX, y: event.clientY })
+      stop()
+      // A click and no drag is not a mistake: it is the whole of what you can
+      // see, which is the other thing people mean by a screenshot.
+      ipcRenderer.send('capture:area-done', r.width < 4 || r.height < 4 ? { x: 0, y: 0, width: 0, height: 0 } : r)
+    })
+    document.addEventListener('keydown', onKey, true)
+  })
+
+  // Escape never reaches a page — the browser keeps that key — so it is the
+  // browser that says when the choosing is off.
+  ipcRenderer.on('capture:cancel', stop)
+  window.addEventListener('pagehide', stop)
+}

@@ -167,6 +167,8 @@ const api = {
   uiAction: (action: 'find'): Promise<void> => ipcRenderer.invoke('ui:action', action),
   translatePage: (): Promise<boolean> => ipcRenderer.invoke('nav:translate'),
   toggleReader: () => ipcRenderer.invoke('nav:reader'),
+  capture: (kind: 'view' | 'full' | 'area'): Promise<boolean> =>
+    ipcRenderer.invoke('nav:capture', kind),
   addToHome: (): Promise<boolean> => ipcRenderer.invoke('nav:add-to-home'),
 
   /* ---- find ---- */
