@@ -471,6 +471,8 @@ export interface TabState {
   hasContent: boolean
   /** the page is showing a translation of itself right now */
   translated: boolean
+  /** reading mode is up over this page */
+  reading: boolean
   secure: boolean
   upgraded: boolean
   blocked: number

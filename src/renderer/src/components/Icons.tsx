@@ -41,6 +41,12 @@ export const Plus = (p: P) => (
     <path d="M12 5.5v13M5.5 12h13" />
   </svg>
 )
+export const Reader = (p: P) => (
+  <svg {...svg(p)}>
+    <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+    <path d="M7.5 9h9M7.5 12.5h9M7.5 16h5" />
+  </svg>
+)
 export const CardIcon = (p: P) => (
   <svg {...svg(p)}>
     <rect x="3" y="5.5" width="18" height="13" rx="2.5" />

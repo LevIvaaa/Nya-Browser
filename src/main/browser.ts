@@ -3,6 +3,7 @@ import {
   WebContentsView,
   app,
   dialog,
+  nativeTheme,
   screen,
   session,
   shell,
@@ -173,6 +174,8 @@ class Tab {
 
   /** Whether this page is currently showing a translation of itself. */
   translated = false
+  /** reading mode is up over this page */
+  reading = false
   /** Which big group this tab lives in; they never move on their own. */
   space = 1
   /**
@@ -310,6 +313,7 @@ class Tab {
       // and rounding it away made 105% read back as 106%.
       zoom: wc ? Math.round(wc.getZoomLevel() * 1000) / 1000 : 0,
       translated: this.translated,
+      reading: this.reading,
       error: this.error
     }
   }
@@ -1189,8 +1193,10 @@ export class BrowserWindow {
     wc.on('did-navigate', (_e, raw) => {
       const url = pdfSource(raw) ?? raw
       tab.url = url
-      // A different page is not the translated one.
+      // A different page is not the translated one, and is not the one being
+      // read either.
       tab.translated = false
+      tab.reading = false
       // A site that was left at a different zoom opens at it again.
       const own = sites.get(hostOfUrl(url)).zoom
       wc.setZoomLevel(own ?? settings.get().defaultZoom)
@@ -2170,6 +2176,31 @@ export class BrowserWindow {
 
   /** What is being looked for, so a count belongs to the right search. */
   private findQuery = ''
+
+  /**
+   * Reading mode on or off for the tab in front. The page does the reading
+   * and the drawing; this hands it the look — the theme it should match and
+   * the word for minutes in the language the browser is speaking.
+   */
+  toggleReader() {
+    this.withActive((wc) => {
+      wc.send('reader:words', { minutes: t('мин') })
+      wc.send('reader:toggle', {
+        dark: nativeTheme.shouldUseDarkColors,
+        size: 19,
+        serif: false
+      })
+    })
+  }
+
+  /** What the page says came of it, and the one case worth a word. */
+  handleReaderState(webContentsId: number, state: { on: boolean; nothing?: boolean }) {
+    const tab = this.tabs.find((t) => t.wc?.id === webContentsId)
+    if (!tab) return
+    tab.reading = state.on === true
+    if (state.nothing) this.send('toast', t('Здесь нечего читать'))
+    this.broadcast()
+  }
 
   find(text: string, forward = true) {
     this.findQuery = text

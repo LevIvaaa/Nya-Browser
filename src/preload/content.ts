@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import { Readability, isProbablyReaderable } from '@mozilla/readability'
 
 /**
  * Autofill content script.
@@ -831,4 +832,140 @@ if (isTop && httpOrigin) {
   } else {
     start()
   }
+}
+
+/** The word for minutes, handed over by the browser in the reader's language. */
+let MINUTES = 'мин'
+const NEWLINE = String.fromCharCode(10)
+ipcRenderer.on('reader:words', (_event, words: { minutes?: string }) => {
+  if (typeof words?.minutes === 'string') MINUTES = words.minutes
+})
+/* ==========================================================================
+   Reading mode
+   ========================================================================== */
+
+/**
+ * The article, and nothing else on the page.
+ *
+ * The reading is Mozilla's Readability, which is what Firefox uses, run over a
+ * copy of the document so the page itself is never touched. What it finds is
+ * drawn inside a shadow root: the site's own stylesheet cannot reach in, ours
+ * cannot leak out, and turning it off is removing one element.
+ */
+if (isTop && httpOrigin) {
+  let host: HTMLElement | null = null
+  let hidden = ''
+
+  const off = () => {
+    if (!host) return
+    host.remove()
+    host = null
+    document.documentElement.style.overflow = hidden
+    ipcRenderer.send('reader:state', { on: false })
+  }
+
+  const on = async (look: { dark: boolean; size: number; serif: boolean }) => {
+    // Readability rewrites the document it is given, so it is given a copy.
+    if (!isProbablyReaderable(document)) {
+      ipcRenderer.send('reader:state', { on: false, nothing: true })
+      return
+    }
+    const article = new Readability(document.cloneNode(true) as Document).parse()
+    if (!article || !article.content) {
+      ipcRenderer.send('reader:state', { on: false, nothing: true })
+      return
+    }
+
+    host = document.createElement('nya-reader')
+    host.setAttribute('style', 'all: initial; position: fixed; inset: 0; z-index: 2147483647')
+    // Open, not closed: the isolation that matters here is the stylesheet's,
+    // and a shadow root nobody can look into cannot be checked either.
+    const shadow = host.attachShadow({ mode: 'open' })
+    const ink = look.dark ? '#e7e7ee' : '#1a1a20'
+    const paper = look.dark ? '#15151b' : '#fbfbfd'
+    const dim = look.dark ? '#9a9aa8' : '#6b6b78'
+    const line = look.dark ? '#2a2a34' : '#e3e3ea'
+    const style = document.createElement('style')
+    style.textContent = [
+      `:host { all: initial }`,
+      `.sheet { position: absolute; inset: 0; overflow-y: auto; background: ${paper}; color: ${ink};`,
+      `  font: ${look.size}px/1.65 ${look.serif ? 'Georgia, "Times New Roman", serif' : 'system-ui, -apple-system, "Segoe UI", sans-serif'} }`,
+            `.column { max-width: 44em; margin: 0 auto; padding: 56px 24px 96px }`,
+      // The article brings its own class names with it; none of ours may be
+      // among them, and anything it does bring is neutralised here.
+      `.column * { position: static !important; float: none !important }`,
+      `h1 { font-size: 1.9em; line-height: 1.2; margin: 0 0 .3em; letter-spacing: -.02em }`,
+      `.by { color: ${dim}; font-size: .85em; margin: 0 0 2em; padding-bottom: 1.2em; border-bottom: 1px solid ${line} }`,
+      `p, li { margin: 0 0 1.1em }`,
+      `h2, h3, h4 { line-height: 1.25; margin: 1.8em 0 .6em }`,
+      `img, video, figure, table { max-width: 100%; height: auto; margin: 1.4em 0 }`,
+      `figcaption, small { color: ${dim}; font-size: .85em }`,
+      `a { color: inherit; text-underline-offset: 2px }`,
+      `pre, code { font-family: ui-monospace, Consolas, monospace; font-size: .9em }`,
+      `pre { overflow-x: auto; padding: 1em; border-radius: 10px; background: ${look.dark ? '#1d1d25' : '#f1f1f6'} }`,
+      `blockquote { margin: 1.4em 0; padding-left: 1.2em; border-left: 3px solid ${line}; color: ${dim} }`,
+      `hr { border: 0; border-top: 1px solid ${line}; margin: 2em 0 }`
+    ].join(NEWLINE)
+
+    const page = document.createElement('div')
+    page.className = 'sheet'
+    const wrap = document.createElement('div')
+    wrap.className = 'column'
+    const title = document.createElement('h1')
+    title.textContent = article.title || document.title
+    wrap.appendChild(title)
+    const by = [article.byline, article.siteName, readingTime(article.textContent ?? '')]
+      .filter(Boolean)
+      .join(' · ')
+    if (by) {
+      const line2 = document.createElement('p')
+      line2.className = 'by'
+      line2.textContent = by
+      wrap.appendChild(line2)
+    }
+    // The article's own markup, parsed as markup and not as a page: a
+    // document fragment cannot run a script even if one is in there.
+    const parsed = new DOMParser().parseFromString(article.content, 'text/html')
+    for (const bad of Array.from(parsed.querySelectorAll('script, style, iframe, object, embed'))) {
+      bad.remove()
+    }
+    // Readability keeps the article's own heading, which is the same words as
+    // the title above it.
+    const heading = parsed.querySelector('h1, h2')
+    if (heading && same(heading.textContent ?? '', title.textContent ?? '')) heading.remove()
+    for (const node of Array.from(parsed.body.childNodes)) wrap.appendChild(node)
+    page.appendChild(wrap)
+    shadow.appendChild(style)
+    shadow.appendChild(page)
+    document.documentElement.appendChild(host)
+    hidden = document.documentElement.style.overflow
+    document.documentElement.style.overflow = 'hidden'
+    ipcRenderer.send('reader:state', { on: true })
+  }
+
+  /** Two headings that read the same, whatever the spacing and case. */
+  const same = (a: string, b: string) =>
+    a.replace(/\s+/g, ' ').trim().toLowerCase() === b.replace(/\s+/g, ' ').trim().toLowerCase()
+
+  /** Roughly how long this is to read, which is the one number people want. */
+  const readingTime = (text: string) => {
+    const words = text.trim().split(/\s+/).length
+    const minutes = Math.max(1, Math.round(words / 200))
+    return `${minutes} ` + MINUTES
+  }
+
+  ipcRenderer.on('reader:toggle', (_event, look: { dark: boolean; size: number; serif: boolean }) => {
+    if (host) return off()
+    void on(look ?? { dark: true, size: 19, serif: false })
+  })
+
+  // Leaving the page leaves reading mode with it.
+  window.addEventListener('pagehide', off)
+  document.addEventListener(
+    'keydown',
+    (event) => {
+      if (event.key === 'Escape' && host) off()
+    },
+    true
+  )
 }

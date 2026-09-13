@@ -566,6 +566,14 @@ function registerIpc() {
   )
   ipcMain.handle('nav:save-page', (event) => current(event).savePage())
   ipcMain.handle('ui:action', (event, action: unknown) => current(event).requestUiAction(str(action, 32)))
+  ipcMain.handle('nav:reader', (event) => current(event).toggleReader())
+  ipcMain.on('reader:state', (event, payload: unknown) => {
+    const data = (payload ?? {}) as { on?: unknown; nothing?: unknown }
+    current(event).handleReaderState(event.sender.id, {
+      on: data.on === true,
+      nothing: data.nothing === true
+    })
+  })
   ipcMain.handle('nav:translate', (event) => current(event).translatePage())
 
   /* ---- translation: the page asks, the main process fetches ---- */
