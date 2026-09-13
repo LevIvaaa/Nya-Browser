@@ -2232,8 +2232,16 @@ export class BrowserWindow {
    */
   async capture(kind: 'view' | 'full' | 'area') {
     const tab = this.getActive()
-    const wc = tab?.wc
-    if (!wc || wc.isDestroyed() || !tab?.hasContent) return false
+    if (!tab) return false
+    // A page the browser draws itself — the start page, the settings — has no
+    // view of its own at all, so this is settled before anything is asked of
+    // one: otherwise it is a silent no, which reads as a broken menu item.
+    if (!tab.hasContent || tab.internal || tab.sleeping || !this.layoutRect.visible) {
+      this.send('toast', t('Здесь нечего снимать'))
+      return false
+    }
+    const wc = tab.wc
+    if (!wc || wc.isDestroyed()) return false
     if (kind === 'area') {
       this.choosingArea = true
       // The page draws the selection, because only the page knows where the
@@ -2241,8 +2249,13 @@ export class BrowserWindow {
       wc.send('capture:area', { hint: t('Выделите область · клик — видимая часть · Esc — отмена') })
       return true
     }
-    const image = kind === 'full' ? await this.wholePage(wc) : await wc.capturePage()
-    return this.keepPicture(image)
+    try {
+      const image = kind === 'full' ? await this.wholePage(wc) : await wc.capturePage()
+      return this.keepPicture(image)
+    } catch {
+      this.send('toast', t('Не удалось сохранить снимок'))
+      return false
+    }
   }
 
   /* --------------------------------------------------------------- media */
@@ -2424,14 +2437,19 @@ export class BrowserWindow {
     if (!wc || wc.isDestroyed() || tab.id !== this.activeId) return false
     // Nothing drawn: the visible part, which is what a click without a drag
     // asks for.
-    if (rect.width < 4 || rect.height < 4) return this.keepPicture(await wc.capturePage())
-    const image = await wc.capturePage({
-      x: Math.round(rect.x),
-      y: Math.round(rect.y),
-      width: Math.round(rect.width),
-      height: Math.round(rect.height)
-    })
-    return this.keepPicture(image)
+    try {
+      if (rect.width < 4 || rect.height < 4) return this.keepPicture(await wc.capturePage())
+      const image = await wc.capturePage({
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height)
+      })
+      return this.keepPicture(image)
+    } catch {
+      this.send('toast', t('Не удалось сохранить снимок'))
+      return false
+    }
   }
 
   /**

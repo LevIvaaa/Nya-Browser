@@ -290,7 +290,7 @@ export default function SettingsPage({
           </button>
         </div>
 
-        <div key={tab} className="animate-fade-up mx-auto flex max-w-[720px] flex-col gap-7 px-6 pb-16">
+        <div key={tab} className="stagger mx-auto flex max-w-[720px] flex-col gap-7 px-6 pb-16">
           {/* ---------------------------------------------------------- look */}
           {tab === 'look' && (
             <>

@@ -186,7 +186,7 @@ export default function HistoryPage() {
           groups.map(([day, list]) => (
             <section key={day} className="animate-fade-up mb-6">
               <h2 className="mb-2 px-1 text-2xs font-semibold uppercase tracking-wider text-faint">{day}</h2>
-              <div className="card overflow-hidden">
+              <div className="card stagger overflow-hidden">
                 {list.map((entry) => (
                   <div
                     key={entry.url}

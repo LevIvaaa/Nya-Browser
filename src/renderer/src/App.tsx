@@ -357,7 +357,11 @@ export default function App() {
               .map((tab) => (
                 <div
                   key={tab.id}
-                  className="absolute inset-0"
+                  // Hidden is display:none, and an animation on something that
+                  // was display:none starts over when it is shown — so this is
+                  // an entrance every time the tab is come back to, without
+                  // remounting the page and losing where it was scrolled to.
+                  className="animate-fade-up absolute inset-0"
                   hidden={tab.id !== active?.id}
                 >
                   {/* Each of these arrives as its own chunk the first time it

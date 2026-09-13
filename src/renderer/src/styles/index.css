@@ -271,6 +271,23 @@ button {
   from { opacity: 0; transform: translate3d(0, 6px, 0) scale(0.96); }
   to { opacity: 1; transform: none; }
 }
+/* A tab on its way out: it narrows to nothing and the strip closes over */
+/* it. Keyframes outrank the inline width a tab carries, which is what */
+/* lets a pinned tab — a fixed 38 pixels — collapse as well. */
+@keyframes tab-out {
+  from { opacity: 1; transform: none; }
+  to {
+    opacity: 0;
+    transform: scale(0.92);
+    min-width: 0;
+    max-width: 0;
+    width: 0;
+    padding-left: 0;
+    padding-right: 0;
+    margin-left: 0;
+    margin-right: 0;
+  }
+}
 @keyframes toast-in {
   from { opacity: 0; transform: translate3d(0, 14px, 0) scale(0.96); }
   to { opacity: 1; transform: none; }
@@ -286,6 +303,11 @@ button {
 @keyframes swap-in {
   from { opacity: 0; transform: translate3d(0, 6px, 0); }
   to { opacity: 1; transform: none; }
+}
+/* A message that said its piece and is going back down. */
+@keyframes toast-out {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translate3d(0, 12px, 0) scale(0.96); }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulse-soft {
@@ -323,9 +345,34 @@ button {
 .animate-slide-right { animation: slide-right var(--t-base) var(--ease-snap) both; height: 100%; }
 .animate-slide-left { animation: slide-left var(--t-base) var(--ease-snap) both; height: 100%; }
 .animate-tab { animation: tab-in var(--t-base) var(--ease-out) both; }
+/* Not interactive on the way out: it is already gone as far as the
+   browser is concerned, and a click on it would land on nothing. */
+.animate-tab-out {
+  animation: tab-out var(--t-base) var(--ease-emph-in) both;
+  pointer-events: none;
+}
+/* Stacked downwards instead of across: the same leaving, in the other axis. */
+@keyframes tab-out-tall {
+  from { opacity: 1; transform: none; }
+  to {
+    opacity: 0;
+    transform: scale(0.92);
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+}
+.animate-tab-out-tall {
+  animation: tab-out-tall var(--t-base) var(--ease-emph-in) both;
+  pointer-events: none;
+  overflow: hidden;
+}
 .animate-digits { animation: digits-in var(--t-base) var(--ease-out) both; }
 .animate-swap { animation: swap-in var(--t-base) var(--ease-emph) both; }
 .animate-toast { animation: toast-in var(--t-base) var(--ease-spring) both; }
+.animate-toast-out { animation: toast-out var(--t-base) var(--ease-emph-in) both; }
 .animate-spin-slow { animation: spin calc(0.9s * var(--speed)) linear infinite; }
 .animate-pulse-soft { animation: pulse-soft calc(1.6s * var(--speed)) var(--ease-in-out) infinite; }
 

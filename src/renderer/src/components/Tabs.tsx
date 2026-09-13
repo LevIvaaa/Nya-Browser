@@ -78,6 +78,8 @@ function Favicon({ tab, size = 15 }: { tab: TabState; size?: number }) {
 /* ------------------------------------------------------------------- item */
 interface ItemProps {
   tab: TabState
+  /** gone from the browser, still on screen for a moment */
+  leaving?: boolean
   settings: Settings
   vertical: boolean
   index: number
@@ -93,6 +95,7 @@ interface ItemProps {
 
 function TabItem({
   tab,
+  leaving,
   settings,
   vertical,
   index,
@@ -140,7 +143,8 @@ function TabItem({
       title={vertical ? undefined : `${title}${tab.origin ? ` — ${tab.origin}` : ''}`}
       data-active-tab={tab.active ? '' : undefined}
       className={cx(
-        'animate-tab no-drag group relative flex cursor-default select-none items-center gap-2 px-2.5',
+        leaving ? (vertical ? 'animate-tab-out-tall' : 'animate-tab-out') : 'animate-tab',
+        'no-drag group relative flex cursor-default select-none items-center gap-2 px-2.5',
         vertical ? 'w-full' : 'min-w-[54px] flex-1'
       )}
       style={{
@@ -371,6 +375,38 @@ type Row =
  * left out while it is folded. The index carried along is the tab's index in
  * the real list, because that is what a drop has to be expressed in.
  */
+/**
+ * The tabs to draw, which is the tabs there are plus the ones that have
+ * just gone — put back where they were, for as long as it takes them to
+ * narrow to nothing. Without this the strip jumps sideways and leaves
+ * whoever pressed the × working out what happened.
+ */
+function useFarewell(tabs: TabState[]) {
+  const [going, setGoing] = useState<Array<{ tab: TabState; at: number }>>([])
+  const before = useRef(tabs)
+
+  useEffect(() => {
+    const gone = before.current
+      .map((tab, at) => ({ tab, at }))
+      .filter(({ tab }) => !tabs.some((one) => one.id === tab.id))
+    before.current = tabs
+    if (gone.length === 0) return
+    setGoing((old) => [...old, ...gone])
+    const timer = window.setTimeout(
+      () => setGoing((old) => old.filter((item) => !gone.some((one) => one.tab.id === item.tab.id))),
+      260
+    )
+    return () => window.clearTimeout(timer)
+  }, [tabs])
+
+  if (going.length === 0) return { drawn: tabs, leaving: EMPTY }
+  const drawn = [...tabs]
+  for (const { tab, at } of going) drawn.splice(Math.min(at, drawn.length), 0, tab)
+  return { drawn, leaving: new Set(going.map((item) => item.tab.id)) }
+}
+
+const EMPTY: ReadonlySet<number> = new Set()
+
 function rowsOf(tabs: TabState[], groups: TabGroup[]): Row[] {
   const byId = new Map(groups.map((group) => [group.id, group]))
   const rows: Row[] = []
@@ -465,7 +501,8 @@ export function TabStrip({
   settings: Settings
 }) {
   const reorder = useReorder()
-  const rows = rowsOf(tabs, groups)
+  const { drawn, leaving } = useFarewell(tabs)
+  const rows = rowsOf(drawn, groups)
   // More tabs than the window is wide used to be drawn past its edge and cut
   // off there — tabs you could neither read nor click. The run of them slides
   // instead, and the tab in front of you is brought back into sight whenever
@@ -563,6 +600,7 @@ export function TabStrip({
             <TabItem
               key={row.tab.id}
               tab={row.tab}
+              leaving={leaving.has(row.tab.id)}
               settings={settings}
               index={row.index}
               group={row.group}
@@ -746,7 +784,8 @@ export function TabRail({
   side: 'left' | 'right'
 }) {
   const reorder = useReorder()
-  const rows = rowsOf(tabs, groups)
+  const { drawn, leaving } = useFarewell(tabs)
+  const rows = rowsOf(drawn, groups)
 
   return (
     <aside
@@ -801,6 +840,7 @@ export function TabRail({
             <TabItem
               key={row.tab.id}
               tab={row.tab}
+              leaving={leaving.has(row.tab.id)}
               settings={settings}
               index={row.index}
               group={row.group}
