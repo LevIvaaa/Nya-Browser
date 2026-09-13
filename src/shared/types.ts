@@ -317,9 +317,14 @@ export interface SplitState {
   left: number
   /** the tab on the right */
   right: number
+  /**
+   * Where the two halves are, or nothing when there is nothing to divide
+   * right now — one of the browser's own pages is in front, and it fills the
+   * window. The pair itself still stands, and the strip still shows it.
+   */
   /** how much of the width the left one takes, 0.2 … 0.8 */
   ratio: number
-  rect: { x: number; y: number; width: number; height: number }
+  rect: { x: number; y: number; width: number; height: number } | null
 }
 
 /** How a search on the page is going: how many, and which one you are on. */
@@ -524,6 +529,12 @@ export interface TabState {
   hasContent: boolean
   /** the page is showing a translation of itself right now */
   translated: boolean
+  /**
+   * The language the page is written in, as a bare code — what it declares,
+   * or what its alphabet gives away. Empty when it cannot be told, which is
+   * the answer for most pages written in Latin letters.
+   */
+  language: string
   /** reading mode is up over this page */
   reading: boolean
   secure: boolean

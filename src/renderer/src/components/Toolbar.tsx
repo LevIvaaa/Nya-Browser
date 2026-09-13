@@ -1,5 +1,5 @@
 import type { Profile, Settings, TabState, UpdateState, WebAppCandidate } from '../../../shared/types'
-import { t } from '../i18n'
+import { currentLanguage, t } from '../i18n'
 import {
   ArrowLeft,
   ArrowRight,
@@ -9,9 +9,11 @@ import {
   Lock,
   More,
   Reload,
+  Scroll,
   Search,
   Star,
   StarFilled,
+  Translate,
   Unlock,
   Install,
   UpdateArrow
@@ -62,6 +64,10 @@ export default function Toolbar({
   const hasContent = tab?.hasContent ?? false
   const canBookmark = Boolean(tab?.url && /^https?:/i.test(tab.url))
   const zoomed = (tab?.zoom ?? 0) !== settings.defaultZoom
+  // A page in a language that is not the browser's own. Pages that keep their
+  // language to themselves say nothing here, and are left alone.
+  const mine = currentLanguage().split('-')[0]
+  const foreign = Boolean(tab?.language && tab.language !== mine)
   const height = settings.compact ? 40 : 44
 
   const downloadingUpdate = update?.stage === 'downloading'
@@ -198,6 +204,59 @@ export default function Toolbar({
               }}
             >
               <More width={14} height={14} />
+            </span>
+          )}
+
+          {/* A page written in a language that is not yours offers itself for
+              translation where you are already looking, rather than waiting to
+              be found in a menu. It stays while the translation is up, because
+              that is also how you get the original back. */}
+          {canBookmark && (foreign || tab?.translated) && (
+            <span
+              role="button"
+              tabIndex={0}
+              title={tab?.translated ? t('Показать оригинал') : t('Перевести страницу')}
+              aria-label={tab?.translated ? t('Показать оригинал') : t('Перевести страницу')}
+              className="no-drag animate-pop flex shrink-0 items-center rounded-[7px] p-1 hover:bg-[var(--line)]"
+              style={tab?.translated ? { color: 'var(--accent)' } : undefined}
+              onClick={(event) => {
+                event.stopPropagation()
+                void window.browser.translatePage()
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return
+                event.stopPropagation()
+                event.preventDefault()
+                void window.browser.translatePage()
+              }}
+            >
+              <Translate width={14} height={14} />
+            </span>
+          )}
+
+          {/* And while a page is being read rather than looked at, the way out
+              of that is in the same place — to the right of the translation,
+              when both are there. */}
+          {canBookmark && tab?.reading && (
+            <span
+              role="button"
+              tabIndex={0}
+              title={t('Выйти из режима чтения')}
+              aria-label={t('Выйти из режима чтения')}
+              className="no-drag animate-pop flex shrink-0 items-center rounded-[7px] p-1 hover:bg-[var(--line)]"
+              style={{ color: 'var(--accent)' }}
+              onClick={(event) => {
+                event.stopPropagation()
+                void window.browser.toggleReader()
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return
+                event.stopPropagation()
+                event.preventDefault()
+                void window.browser.toggleReader()
+              }}
+            >
+              <Scroll width={14} height={14} />
             </span>
           )}
 

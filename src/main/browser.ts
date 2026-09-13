@@ -57,6 +57,7 @@ import type {
   Playing,
   SiteInfo,
   SiteRules,
+  SplitState,
   WebAppCandidate,
   Suggestion,
   TabGroup,
@@ -209,6 +210,8 @@ class Tab {
 
   /** Whether this page is currently showing a translation of itself. */
   translated = false
+  /** What language the page says, or looks like, it is written in. */
+  language = ''
   /** reading mode is up over this page */
   reading = false
   /** Which big group this tab lives in; they never move on their own. */
@@ -348,6 +351,7 @@ class Tab {
       // and rounding it away made 105% read back as 106%.
       zoom: wc ? Math.round(wc.getZoomLevel() * 1000) / 1000 : 0,
       translated: this.translated,
+      language: this.language,
       reading: this.reading,
       error: this.error
     }
@@ -1020,7 +1024,10 @@ export class BrowserWindow {
     const other = this.splitId === null ? null : this.tabs.find((tab) => tab.id === this.splitId)
     if (other?.view && other.id !== active.id) {
       const gap = BrowserWindow.SPLIT_GAP
-      const leftWidth = Math.round((rect.width - gap) * this.splitRatio)
+      const leftWidth = Math.max(
+        0,
+        Math.min(rect.width - gap, Math.round((rect.width - gap) * this.splitRatio))
+      )
       active.view.setBounds({ ...rect, width: leftWidth })
       active.view.setBorderRadius(0)
       active.view.setVisible(r.visible && active.hasContent && !active.sleeping)
@@ -1257,6 +1264,9 @@ export class BrowserWindow {
       // read either.
       tab.translated = false
       tab.reading = false
+      // Until the new page says otherwise, nothing is known about its
+      // language, and the offer to translate stays away.
+      tab.language = ''
       // A site that was left at a different zoom opens at it again.
       const own = sites.get(hostOfUrl(url)).zoom
       wc.setZoomLevel(own ?? settings.get().defaultZoom)
@@ -1650,12 +1660,28 @@ export class BrowserWindow {
     }
   }
 
-  private wake(tab: Tab) {
-    if (!tab.sleeping) return
+  /**
+   * Gives a tab a view, puts it in the window, and sends it where it is
+   * supposed to be.
+   *
+   * A tab put to sleep remembers the page it was on and goes back to it by
+   * itself. A tab restored from the last run and never opened since remembers
+   * only an address, and a view made for it is empty until somebody loads it
+   * — which is how a page beside another one came up as a black rectangle.
+   */
+  private summon(tab: Tab) {
+    if (tab.internal) return
     if (tab.ensureView(this.wire) && tab.view) {
       this.win.contentView.addChildView(tab.view)
       this.raiseOverlay()
     }
+    const wc = tab.wc
+    if (wc && !wc.getURL() && tab.url && tab.url !== START_URL) tab.load(tab.url)
+  }
+
+  private wake(tab: Tab) {
+    if (!tab.sleeping) return
+    this.summon(tab)
   }
 
   /** Re-adding moves a view to the top of the stack. */
@@ -2315,22 +2341,76 @@ export class BrowserWindow {
    * both directions, the way a toggle should be.
    */
   splitWith(tabId: number | null) {
-    if (tabId === null || tabId === this.activeId || tabId === this.splitId) {
-      this.splitId = null
-    } else if (this.tabs.some((tab) => tab.id === tabId)) {
-      this.splitId = tabId
-      const other = this.tabs.find((tab) => tab.id === tabId)
-      // A tab that has never been opened has no view to show.
-      if (other) {
-        other.ensureView(this.wire)
-        if (other.view) this.win.contentView.addChildView(other.view)
-        this.raiseOverlay()
-        this.wake(other)
-      }
+    const ending = tabId === null || tabId === this.activeId || tabId === this.splitId
+    if (ending) {
+      // The second page leaves the way it came: the division slides to the
+      // right edge, and only then is the page taken away. Snapping it out of
+      // existence is what made this read as a glitch rather than a gesture.
+      const going = this.splitId
+      if (going === null) return
+      return this.slideSplit(this.splitRatio, 1, () => {
+        this.splitId = null
+        this.splitRatio = 0.5
+        this.showActive()
+        this.sendSplit()
+        this.broadcast()
+      })
     }
+
+    if (this.tabs.some((tab) => tab.id === tabId)) {
+      this.splitId = tabId
+      // Closed before it is opened: the first frame must show the second page
+      // with no width at all, or the join begins with a jump.
+      this.splitRatio = 1
+      const other = this.tabs.find((tab) => tab.id === tabId)
+      // A tab that has never been opened has neither a view nor a page in it.
+      if (other) this.summon(other)
+      this.showActive()
+      this.broadcast()
+      // And it arrives the same way: from the right edge, opening the window
+      // into two as it comes.
+      return this.slideSplit(1, 0.5)
+    }
+
     this.showActive()
     this.sendSplit()
     this.broadcast()
+  }
+
+  /** A running join or parting, so a second one cannot fight the first. */
+  private splitSlide: ReturnType<typeof setInterval> | null = null
+
+  /**
+   * Moves the division from one place to another over a quarter of a second,
+   * laying the pages out on every frame. The pages themselves are native
+   * layers and cannot be animated by any stylesheet — the only way to make
+   * two windows become one is to actually move the boundary between them.
+   */
+  private slideSplit(from: number, to: number, done?: () => void) {
+    if (this.splitSlide) clearInterval(this.splitSlide)
+    const started = Date.now()
+    const ms = 260
+    this.splitRatio = from
+    this.layout()
+    this.sendSplit()
+    this.splitSlide = setInterval(() => {
+      if (this.win.isDestroyed()) {
+        if (this.splitSlide) clearInterval(this.splitSlide)
+        this.splitSlide = null
+        return
+      }
+      const part = Math.min(1, (Date.now() - started) / ms)
+      // Quick to leave, slow to arrive — the same curve the interface uses.
+      const eased = 1 - Math.pow(1 - part, 3)
+      this.splitRatio = from + (to - from) * eased
+      this.layout()
+      this.sendSplit()
+      if (part >= 1) {
+        if (this.splitSlide) clearInterval(this.splitSlide)
+        this.splitSlide = null
+        done?.()
+      }
+    }, 16)
   }
 
   /** Where the divider was dragged to. */
@@ -2347,14 +2427,32 @@ export class BrowserWindow {
   }
 
   private sendSplit() {
+    this.send('state:split', this.splitNow())
+  }
+
+  /**
+   * The pair as it stands. Pushed when it changes, and asked for by a window
+   * that has only just opened — a message sent before there was anybody to
+   * hear it is how a restored pair came back invisible.
+   */
+  splitNow(): SplitState | null {
     const other = this.splitId === null ? null : this.tabs.find((tab) => tab.id === this.splitId)
     if (!other) {
-      this.splitId = null
-      return this.send('state:split', null)
+      // Asking what the pair is must not be what ends it: only a tab that has
+      // really gone clears the pairing, and closing a tab already does that.
+      return null
+    }
+    // One of the browser's own pages is drawn by the interface itself and
+    // fills the window: there are no two halves to divide, and a line down
+    // the middle of the home page is the divider for a split nobody can see.
+    // The pairing is kept — going back to a site brings it up again.
+    const active = this.getActive()
+    if (!active || !active.hasContent || active.internal || active.sleeping) {
+      return { left: this.activeId, right: other.id, ratio: this.splitRatio, rect: null }
     }
     const over = this.edgeOverflow()
     const r = this.layoutRect
-    this.send('state:split', {
+    return {
       left: this.activeId,
       right: other.id,
       ratio: this.splitRatio,
@@ -2364,7 +2462,7 @@ export class BrowserWindow {
         width: Math.round(r.width || this.win.getContentBounds().width - over.left - over.right),
         height: Math.round(r.height)
       }
-    })
+    }
   }
 
   /** The window the media keys are pointed at, if any. */
@@ -2376,6 +2474,14 @@ export class BrowserWindow {
    * else's player, in an iframe of its own.
    */
   private frameMedia = new Map<string, { tabId: number; media: MediaReport; since: number }>()
+
+  /** A page said what language it is written in. */
+  handleLanguage(webContentsId: number, code: string) {
+    const tab = this.tabs.find((t) => t.wc?.id === webContentsId)
+    if (!tab || tab.language === code) return
+    tab.language = code
+    this.broadcast()
+  }
 
   /**
    * A frame said what it is playing, or that it has stopped. The list is the
@@ -3215,6 +3321,10 @@ export class BrowserWindow {
     }
     this.layout()
     this.focusView()
+    // Which page is in front decides whether there is a division to draw —
+    // and a pair that has just ended has to be announced too, or the line
+    // stays on screen for ever, dividing nothing.
+    this.sendSplit()
   }
 
   /* ---------------------------------------------------------- permissions */
@@ -3636,7 +3746,11 @@ export class BrowserWindow {
         // Only the groups that still have a saved tab in them: restoring an
         // empty group would put a name over nothing.
         groups: this.groups.filter((g) => kept.some((t) => t.groupId === g.id)),
-        activeIndex: kept.findIndex((t) => t.id === this.activeId)
+        activeIndex: kept.findIndex((t) => t.id === this.activeId),
+        // Two pages put side by side stay side by side tomorrow: the pair is
+        // as much a part of how the window was left as which tabs were open.
+        splitIndex: this.splitId === null ? -1 : kept.findIndex((t) => t.id === this.splitId),
+        splitRatio: this.splitRatio
       }
       const file = this.sessionFile()
       writeFileSync(file + '.tmp', JSON.stringify(payload), 'utf8')
@@ -3653,6 +3767,8 @@ export class BrowserWindow {
     let payload: {
       tabs: PersistedTab[]
       activeIndex: number
+      splitIndex?: number
+      splitRatio?: number
       groups?: TabGroup[]
       spaces?: Array<{ id: number; name: string; colour: string; pinned?: boolean }>
       spaceId?: number
@@ -3714,6 +3830,16 @@ export class BrowserWindow {
       }
       if (isActive) this.activeId = tab.id
     })
+
+    // The tab that was beside the active one, found again by its place in the
+    // list that was saved.
+    const beside = payload.splitIndex ?? -1
+    if (beside >= 0 && beside < this.tabs.length && this.tabs[beside].id !== this.activeId) {
+      this.splitId = this.tabs[beside].id
+      const ratio = Number(payload.splitRatio)
+      if (ratio >= 0.2 && ratio <= 0.8) this.splitRatio = ratio
+      this.summon(this.tabs[beside])
+    }
 
     if (this.activeId === -1 && this.tabs[0]) this.activeId = this.tabs[0].id
     // A big group whose tabs were all blank saves nothing, and comes back

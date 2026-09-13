@@ -1073,6 +1073,79 @@ if (isTop && httpOrigin) {
 }
 
 /* ==========================================================================
+   What language this is in
+   ========================================================================== */
+
+/**
+ * So that the offer to translate appears by itself, on the page that needs it,
+ * and nowhere else.
+ *
+ * A page usually says so itself, in one attribute. When it does not, the
+ * writing itself answers for it: a page in Cyrillic is not a page in Greek,
+ * whatever it forgot to declare. Latin letters are left unanswered — English
+ * and Polish cannot be told apart by their alphabet, and guessing wrongly
+ * would put the offer on every page in the world.
+ */
+if (isTop && httpOrigin) {
+  const SCRIPTS: Array<[string, RegExp]> = [
+    ['ru', /[Ѐ-ӿ]/g],
+    ['el', /[Ͱ-Ͽ]/g],
+    ['he', /[֐-׿]/g],
+    ['ar', /[؀-ۿ]/g],
+    ['hy', /[԰-֏]/g],
+    ['ka', /[Ⴀ-ჿ]/g],
+    ['hi', /[ऀ-ॿ]/g],
+    ['bn', /[ঀ-৿]/g],
+    ['ta', /[஀-௿]/g],
+    ['te', /[ఀ-౿]/g],
+    ['th', /[฀-๿]/g],
+    ['km', /[ក-៿]/g],
+    ['ko', /[가-힯]/g],
+    ['ja', /[぀-ヿ]/g],
+    ['zh', /[一-鿿]/g]
+  ]
+
+  const guess = () => {
+    const said = (document.documentElement.getAttribute('lang') || '').trim().toLowerCase()
+    // «pl-PL» and «pl» are the same answer to the only question being asked.
+    if (said && said !== 'und') return said.split(/[-_]/)[0]
+    let text = ''
+    try {
+      text = (document.body?.innerText ?? '').slice(0, 4000)
+    } catch {
+      return ''
+    }
+    const letters = text.replace(/\s/g, '').length
+    if (letters < 60) return ''
+    for (const [code, pattern] of SCRIPTS) {
+      const found = text.match(pattern)
+      if (found && found.length > letters * 0.2) return code
+    }
+    return ''
+  }
+
+  // Nothing said yet, which is not the same as «no language».
+  let told = 'unknown'
+  const tell = () => {
+    const now = guess()
+    if (now === told) return
+    told = now
+    ipcRenderer.send('page:language', now)
+  }
+
+  // Once when the page is there to look at, and again when it has settled:
+  // a page that fills itself in afterwards changes its mind about its own
+  // language surprisingly often.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', tell, { once: true })
+  } else {
+    tell()
+  }
+  setTimeout(tell, 1200)
+  setTimeout(tell, 3500)
+}
+
+/* ==========================================================================
    What is playing here
    ========================================================================== */
 

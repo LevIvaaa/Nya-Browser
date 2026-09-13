@@ -524,3 +524,37 @@ export const Note = (p: P) => (
     <circle cx="16.5" cy="15.5" r="2.5" />
   </svg>
 )
+/**
+ * Translate: the letter and the character, which is what translation looks
+ * like in every browser that has the icon — and the one picture that needs no
+ * word underneath it in any language.
+ */
+export const Translate = (p: P) => (
+  <svg {...svg(p, 1.6)}>
+    <path d="M2.8 13.6 6.6 4.2l3.8 9.4" />
+    <path d="M4.3 10.4h4.6" />
+    <path d="M12.6 15.2h8.6M16.9 12.6v2.6" />
+    <path d="M20.6 17.4c-1 2.6-3.1 4.5-5.9 5.4" />
+    <path d="M16 18.6c.8 2 2.4 3.5 4.4 4.2" />
+  </svg>
+)
+/** Reading mode: a long sheet, rolled at the ends, with the text on it. */
+export const Scroll = (p: P) => (
+  <svg {...svg(p, 1.5)}>
+    <path d="M6 5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z" />
+    <path d="M9 7.2h6M9 10.4h6M9 13.6h6M9 16.8h3.4" />
+  </svg>
+)
+/** Two halves of a window, with the one this tab is filled in. */
+export const HalfLeft = (p: P) => (
+  <svg {...svg(p, 1.5)}>
+    <rect x="3" y="5" width="18" height="14" rx="2.5" />
+    <rect x="3.9" y="5.9" width="7.2" height="12.2" rx="1.8" fill="currentColor" stroke="none" />
+  </svg>
+)
+export const HalfRight = (p: P) => (
+  <svg {...svg(p, 1.5)}>
+    <rect x="3" y="5" width="18" height="14" rx="2.5" />
+    <rect x="12.9" y="5.9" width="7.2" height="12.2" rx="1.8" fill="currentColor" stroke="none" />
+  </svg>
+)

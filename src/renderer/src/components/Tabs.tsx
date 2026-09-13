@@ -1,7 +1,14 @@
 import { t } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
-import type { InternalPage, Settings, TabGroup, TabSpace, TabState } from '../../../shared/types'
-import { ChevronDown, ChevronLeft, ChevronRight, Clock, Cross, Download, Gear, Globe, Key, Pin, Plus, Sleep, Star, Volume, VolumeOff } from './Icons'
+import type {
+  InternalPage,
+  Settings,
+  SplitState,
+  TabGroup,
+  TabSpace,
+  TabState
+} from '../../../shared/types'
+import { ChevronDown, ChevronLeft, ChevronRight, Clock, Cross, Download, Gear, Globe, HalfLeft, HalfRight, Key, Pin, Plus, Sleep, Star, Volume, VolumeOff } from './Icons'
 import { cx } from './ui'
 
 /** The same icons these pages carry in the toolbar and in the menu. */
@@ -76,8 +83,17 @@ function Favicon({ tab, size = 15 }: { tab: TabState; size?: number }) {
 }
 
 /* ------------------------------------------------------------------- item */
+/**
+ * Which half of a split a tab is, when two are shown side by side. Both halves
+ * are marked in the strip, because «which tab is that other page?» is
+ * otherwise a question the window cannot answer.
+ */
+type Half = 'left' | 'right' | null
+
 interface ItemProps {
   tab: TabState
+  /** the half of a side-by-side pair this tab is, if it is in one */
+  half?: Half
   /** gone from the browser, still on screen for a moment */
   leaving?: boolean
   settings: Settings
@@ -95,6 +111,7 @@ interface ItemProps {
 
 function TabItem({
   tab,
+  half,
   leaving,
   settings,
   vertical,
@@ -144,8 +161,12 @@ function TabItem({
       data-active-tab={tab.active ? '' : undefined}
       className={cx(
         leaving ? (vertical ? 'animate-tab-out-tall' : 'animate-tab-out') : 'animate-tab',
-        'no-drag group relative flex cursor-default select-none items-center gap-2 px-2.5',
-        vertical ? 'w-full' : 'min-w-[54px] flex-1'
+        'no-drag group relative flex cursor-default select-none items-center gap-2',
+        // A pinned tab in a row is exactly its icon: no name to leave room for,
+        // and so no room left over. The width floor the other tabs stand on
+        // would otherwise hold it open and put the icon off to one side.
+        tab.pinned && !vertical ? 'justify-center px-0' : 'px-2.5',
+        vertical ? 'w-full' : tab.pinned ? 'flex-none' : 'min-w-[54px] flex-1'
       )}
       style={{
         // Inside a group, the run of tabs sits on the group's colour and is
@@ -164,6 +185,7 @@ function TabItem({
         // A pinned tab is its icon and nothing else: it is there to be found
         // in the same place every time, not to be read.
         width: tab.pinned && !vertical ? 38 : undefined,
+        minWidth: tab.pinned && !vertical ? 38 : undefined,
         maxWidth: tab.pinned && !vertical ? 38 : vertical ? undefined : settings.tabMaxWidth,
         background: tab.active
           ? 'var(--surface-solid)'
@@ -187,7 +209,26 @@ function TabItem({
         />
       )}
 
+      {half && (
+        <span
+          className="bond pointer-events-none absolute inset-x-1.5 bottom-[2px] h-[2px] rounded-pill"
+          style={{ background: 'var(--accent)' }}
+        />
+      )}
+
       <Favicon tab={tab} />
+
+      {/* Which half of the window this one fills. The pair reads as a pair
+          because the same mark is on both, filled on opposite sides. */}
+      {half && !(tab.pinned && !vertical) && (
+        <span
+          className="animate-pop shrink-0"
+          style={{ color: 'var(--accent)' }}
+          title={half === 'left' ? t('Показана слева') : t('Показана справа')}
+        >
+          {half === 'left' ? <HalfLeft width={13} height={13} /> : <HalfRight width={13} height={13} />}
+        </span>
+      )}
 
       {!(tab.pinned && !vertical) && (
         <span
@@ -489,6 +530,17 @@ function useReorder() {
 type Reorder = ReturnType<typeof useReorder>
 
 /* -------------------------------------------------------------- horizontal */
+/** The two tabs shown side by side, as the strip needs to know them. */
+function useSplitPair() {
+  const [pair, setPair] = useState<SplitState | null>(null)
+  useEffect(() => {
+    void window.browser.splitState().then(setPair)
+    return window.browser.onSplit(setPair)
+  }, [])
+  return (id: number): Half =>
+    pair ? (pair.left === id ? 'left' : pair.right === id ? 'right' : null) : null
+}
+
 export function TabStrip({
   tabs,
   groups,
@@ -500,6 +552,7 @@ export function TabStrip({
   spaces: TabSpace[]
   settings: Settings
 }) {
+  const halfOf = useSplitPair()
   const reorder = useReorder()
   const { drawn, leaving } = useFarewell(tabs)
   const rows = rowsOf(drawn, groups)
@@ -606,6 +659,7 @@ export function TabStrip({
             <TabItem
               key={row.tab.id}
               tab={row.tab}
+              half={halfOf(row.tab.id)}
               leaving={leaving.has(row.tab.id)}
               settings={settings}
               index={row.index}
@@ -820,6 +874,7 @@ export function TabRail({
   settings: Settings
   side: 'left' | 'right'
 }) {
+  const halfOf = useSplitPair()
   const reorder = useReorder()
   const { drawn, leaving } = useFarewell(tabs)
   const rows = rowsOf(drawn, groups)
@@ -874,6 +929,7 @@ export function TabRail({
             <TabItem
               key={row.tab.id}
               tab={row.tab}
+              half={halfOf(row.tab.id)}
               leaving={leaving.has(row.tab.id)}
               settings={settings}
               index={row.index}

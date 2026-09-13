@@ -171,6 +171,7 @@ const api = {
   toggleReader: () => ipcRenderer.invoke('nav:reader'),
   playing: (): Promise<Playing[]> => ipcRenderer.invoke('media:list'),
   splitWith: (id: number | null) => ipcRenderer.invoke('tab:split', id),
+  splitState: (): Promise<SplitState | null> => ipcRenderer.invoke('tab:split-state'),
   setSplitRatio: (ratio: number) => ipcRenderer.invoke('tab:split-ratio', ratio),
   mediaCommand: (
     tabId: number,

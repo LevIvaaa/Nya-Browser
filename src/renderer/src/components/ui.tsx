@@ -581,7 +581,11 @@ export function Avatar({
         background: `linear-gradient(140deg, ${color}, color-mix(in srgb, ${color} 55%, #000))`,
         fontSize: size * 0.5,
         boxShadow: ring ? `0 0 0 2px color-mix(in srgb, ${color} 45%, transparent)` : 'var(--shadow-sm)',
-        transition: 'box-shadow var(--t-base) var(--ease-out), transform var(--t-fast) var(--ease-spring)'
+        // The same easing and the same length in both directions: a spring is
+        // right for a press, and wrong for a pointer that merely passed by,
+        // because what springs on the way in jerks on the way out.
+        transition:
+          'box-shadow var(--t-base) var(--ease-out), transform calc(240ms * var(--speed)) var(--ease-out)'
       }}
     >
       {url ? <img src={url} alt="" draggable={false} style={avatarImageStyle(crop)} /> : avatar}
