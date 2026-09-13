@@ -223,6 +223,14 @@ export interface Weather {
   fetched: number
 }
 
+/** How a search on the page is going: how many, and which one you are on. */
+export interface FindState {
+  /** what was searched for, so a count from an old search is not shown against a new one */
+  query: string
+  matches: number
+  active: number
+}
+
 export interface WeatherSettings {
   /** what the user typed; empty until they pick somewhere */
   place: string

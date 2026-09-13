@@ -1118,6 +1118,17 @@ export class BrowserWindow {
     attachLog(wc, `tab${tab.id}`)
     wc.setZoomLevel(settings.get().defaultZoom)
 
+    // Chromium counts the matches as it goes; without this the search box
+    // could only move the page about and hope you noticed.
+    wc.on('found-in-page', (_e, result) => {
+      if (tab.id !== this.activeId) return
+      this.send('state:find', {
+        query: this.findQuery,
+        matches: result.matches,
+        active: result.activeMatchOrdinal
+      })
+    })
+
     wc.on('page-title-updated', (_e, title) => {
       tab.title = title
       if (!this.incognito) history.updateTitle(tab.url, title)
@@ -2148,14 +2159,30 @@ export class BrowserWindow {
     this.broadcast()
   }
 
+  /** What is being looked for, so a count belongs to the right search. */
+  private findQuery = ''
+
   find(text: string, forward = true) {
+    this.findQuery = text
     this.withActive((wc) => {
-      if (text) wc.findInPage(text, { forward, findNext: false })
-      else wc.stopFindInPage('clearSelection')
+      if (text) {
+        // Always as a search that continues. Chromium counts out loud only
+        // for those — a request that opens a search reports nothing at all,
+        // which is measured, and is why this box could never say how many
+        // there were. Different words are a new search to it either way, and
+        // the same words again are the step to the next match.
+        wc.findInPage(text, { forward, findNext: true })
+      } else {
+        wc.stopFindInPage('clearSelection')
+        this.send('state:find', { query: '', matches: 0, active: 0 })
+      }
     })
   }
+
   stopFind() {
+    this.findQuery = ''
     this.withActive((wc) => wc.stopFindInPage('clearSelection'))
+    this.send('state:find', { query: '', matches: 0, active: 0 })
   }
 
   openDevTools() {
