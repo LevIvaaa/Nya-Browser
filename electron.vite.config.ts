@@ -33,7 +33,10 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, 'src/preload/index.ts'),
           // injected into every page for autofill; exposes nothing to the page
-          content: resolve(__dirname, 'src/preload/content.ts')
+          content: resolve(__dirname, 'src/preload/content.ts'),
+          // put into an extension's own popup: fills in the part of the
+          // extension API Electron leaves out
+          extension: resolve(__dirname, 'src/preload/extension.ts')
         },
         output: { format: 'cjs', entryFileNames: '[name].js' }
       }

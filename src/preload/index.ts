@@ -11,6 +11,7 @@ import type {
   FilterStatus,
   FindState,
   Playing,
+  ExtensionAction,
   SplitState,
   InstalledExtension,
   UpdateState,
@@ -172,6 +173,10 @@ const api = {
   playing: (): Promise<Playing[]> => ipcRenderer.invoke('media:list'),
   splitWith: (id: number | null) => ipcRenderer.invoke('tab:split', id),
   splitState: (): Promise<SplitState | null> => ipcRenderer.invoke('tab:split-state'),
+  extensionActions: (): Promise<ExtensionAction[]> => ipcRenderer.invoke('ext:actions'),
+  openExtension: (id: string, x: number): Promise<boolean> =>
+    ipcRenderer.invoke('ext:open', id, x),
+  closeExtension: (): Promise<boolean> => ipcRenderer.invoke('ext:close'),
   setSplitRatio: (ratio: number) => ipcRenderer.invoke('tab:split-ratio', ratio),
   mediaCommand: (
     tabId: number,
@@ -355,8 +360,6 @@ const api = {
   installUpdate: (): Promise<boolean> => ipcRenderer.invoke('updates:install'),
   extensions: (): Promise<InstalledExtension[]> => ipcRenderer.invoke('ext:list'),
   addExtension: (): Promise<AddExtensionResult> => ipcRenderer.invoke('ext:add'),
-  installFromStore: (input: string): Promise<AddExtensionResult> =>
-    ipcRenderer.invoke('ext:store', input),
   removeExtension: (path: string): Promise<boolean> => ipcRenderer.invoke('ext:remove', path),
   revealExtension: (path: string) => ipcRenderer.invoke('ext:reveal', path),
   filterStatus: (): Promise<FilterStatus> => ipcRenderer.invoke('filters:status'),
@@ -395,6 +398,8 @@ const api = {
   onFind: (cb: (state: FindState) => void) => on<FindState>('state:find', cb),
   onMedia: (cb: (list: Playing[]) => void) => on<Playing[]>('state:media', cb),
   onSplit: (cb: (state: SplitState | null) => void) => on<SplitState | null>('state:split', cb),
+  onExtensions: (cb: (list: ExtensionAction[]) => void) =>
+    on<ExtensionAction[]>('state:extensions', cb),
   onToast: (cb: (message: string) => void) => on<string>('toast', cb),
   onShortcut: (cb: (action: string) => void) => on<string>('shortcut', cb)
 }
