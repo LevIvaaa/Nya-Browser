@@ -18,6 +18,7 @@ import {
 } from './Icons'
 import WindowControls from './WindowControls'
 import { Avatar, Tooltip, cx } from './ui'
+import { MediaButton } from './MediaPanel'
 
 interface Props {
   tab: TabState | undefined
@@ -280,6 +281,10 @@ export default function Toolbar({
           tab and the settings all sit in that menu already, and the row of
           duplicates was just noise beside the address. */}
       <div className="no-drag flex items-center gap-0.5 pr-1">
+        {/* Only while something is playing, and then it is the answer to the
+            question everyone asks a browser with thirty tabs open. */}
+        <MediaButton onOpen={(x) => void window.browser.setOverlay(`media:${x}`)} />
+
         {updateBadge && (
           <Tooltip label={updateLabel}>
             <button

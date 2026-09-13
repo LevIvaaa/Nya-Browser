@@ -1061,3 +1061,77 @@ if (isTop && httpOrigin) {
   ipcRenderer.on('capture:cancel', stop)
   window.addEventListener('pagehide', stop)
 }
+
+/* ==========================================================================
+   What is playing here
+   ========================================================================== */
+
+if (isTop && httpOrigin) {
+  /** The element making the noise: the first one playing, video before audio. */
+  const playing = (): HTMLMediaElement | null => {
+    const all = Array.from(document.querySelectorAll<HTMLMediaElement>('video, audio'))
+    return all.find((el) => !el.paused && !el.ended && el.currentTime > 0) ?? null
+  }
+
+  /** Anything that has been played, whether it is playing right now or not. */
+  const current = (): HTMLMediaElement | null =>
+    playing() ??
+    Array.from(document.querySelectorAll<HTMLMediaElement>('video, audio')).find(
+      (el) => el.currentTime > 0 && !el.ended
+    ) ??
+    null
+
+  let last = ''
+
+  const tell = () => {
+    const el = current()
+    if (!el) {
+      if (last === '') return
+      last = ''
+      ipcRenderer.send('media:state', null)
+      return
+    }
+    // What the page says about itself, which is what the system's own media
+    // popup shows. It is set on the frame, so this side can read it.
+    const meta = navigator.mediaSession?.metadata ?? null
+    const state = {
+      title: meta?.title || document.title || location.host,
+      artist: meta?.artist || meta?.album || location.host,
+      art: meta?.artwork?.[meta.artwork.length - 1]?.src ?? '',
+      playing: !el.paused && !el.ended,
+      muted: el.muted,
+      position: Math.round(el.currentTime),
+      duration: Number.isFinite(el.duration) ? Math.round(el.duration) : 0,
+      video: el.tagName === 'VIDEO'
+    }
+    // Only when something a person would notice has changed: a timeupdate
+    // fires four times a second and none of them are news.
+    const key = `${state.title}|${state.playing}|${state.muted}|${state.position}|${state.duration}`
+    if (key === last) return
+    last = key
+    ipcRenderer.send('media:state', state)
+  }
+
+  for (const event of ['play', 'pause', 'ended', 'volumechange', 'loadedmetadata', 'emptied']) {
+    document.addEventListener(event, tell, true)
+  }
+  // The position only has to be right to the second, and only while playing.
+  setInterval(() => playing() && tell(), 1000)
+  window.addEventListener('pagehide', () => ipcRenderer.send('media:state', null))
+
+  ipcRenderer.on('media:command', (_event, command: { do: string; to?: number }) => {
+    const el = current()
+    if (!el) return
+    if (command.do === 'play') void el.play()
+    if (command.do === 'pause') el.pause()
+    if (command.do === 'toggle') el.paused ? void el.play() : el.pause()
+    if (command.do === 'mute') el.muted = !el.muted
+    if (command.do === 'seek' && typeof command.to === 'number') {
+      el.currentTime = Math.max(0, Math.min(el.duration || 0, command.to))
+    }
+    if (command.do === 'skip' && typeof command.to === 'number') {
+      el.currentTime = Math.max(0, el.currentTime + command.to)
+    }
+    setTimeout(tell, 50)
+  })
+}

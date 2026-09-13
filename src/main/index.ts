@@ -567,6 +567,31 @@ function registerIpc() {
   ipcMain.handle('nav:save-page', (event) => current(event).savePage())
   ipcMain.handle('ui:action', (event, action: unknown) => current(event).requestUiAction(str(action, 32)))
   ipcMain.handle('nav:reader', (event) => current(event).toggleReader())
+  ipcMain.on('media:state', (event, payload: unknown) => {
+    const data = payload as Record<string, unknown> | null
+    current(event).handleMediaState(
+      event.sender.id,
+      data
+        ? {
+            title: str(data.title, 200),
+            artist: str(data.artist, 200),
+            art: /^https?:|^data:image\//.test(String(data.art ?? '')) ? String(data.art).slice(0, 2000) : '',
+            playing: data.playing === true,
+            muted: data.muted === true,
+            position: num(data.position),
+            duration: num(data.duration),
+            video: data.video === true
+          }
+        : null
+    )
+  })
+  ipcMain.handle('media:list', (event) => current(event).playingNow())
+  ipcMain.handle('media:command', (event, tabId: unknown, what: unknown, to: unknown) => {
+    const allowed = ['toggle', 'play', 'pause', 'mute', 'seek', 'skip'] as const
+    const command = allowed.find((name) => name === what)
+    if (!command) return false
+    return current(event).mediaCommand(num(tabId), command, to === undefined ? undefined : num(to))
+  })
   ipcMain.handle('nav:capture', (event, kind: unknown) =>
     current(event).capture(kind === 'full' ? 'full' : kind === 'area' ? 'area' : 'view')
   )
