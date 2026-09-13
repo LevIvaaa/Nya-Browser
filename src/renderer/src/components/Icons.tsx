@@ -41,6 +41,12 @@ export const Plus = (p: P) => (
     <path d="M12 5.5v13M5.5 12h13" />
   </svg>
 )
+export const Camera = (p: P) => (
+  <svg {...svg(p)}>
+    <path d="M4 8.5h3l1.5-2.5h7L17 8.5h3a1 1 0 0 1 1 1V18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5a1 1 0 0 1 1-1z" />
+    <circle cx="12" cy="13" r="3.2" />
+  </svg>
+)
 export const Reader = (p: P) => (
   <svg {...svg(p)}>
     <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />

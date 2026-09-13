@@ -567,6 +567,18 @@ function registerIpc() {
   ipcMain.handle('nav:save-page', (event) => current(event).savePage())
   ipcMain.handle('ui:action', (event, action: unknown) => current(event).requestUiAction(str(action, 32)))
   ipcMain.handle('nav:reader', (event) => current(event).toggleReader())
+  ipcMain.handle('nav:capture', (event, kind: unknown) =>
+    current(event).capture(kind === 'full' ? 'full' : kind === 'area' ? 'area' : 'view')
+  )
+  ipcMain.on('capture:area-done', (event, payload: unknown) => {
+    const r = (payload ?? {}) as { x?: unknown; y?: unknown; width?: unknown; height?: unknown }
+    void current(event).captureArea(event.sender.id, {
+      x: num(r.x),
+      y: num(r.y),
+      width: num(r.width),
+      height: num(r.height)
+    })
+  })
   ipcMain.on('reader:state', (event, payload: unknown) => {
     const data = (payload ?? {}) as { on?: unknown; nothing?: unknown }
     current(event).handleReaderState(event.sender.id, {

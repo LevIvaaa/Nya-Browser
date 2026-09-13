@@ -2,7 +2,9 @@ import {
   BaseWindow,
   WebContentsView,
   app,
+  clipboard,
   dialog,
+  nativeImage,
   nativeTheme,
   screen,
   session,
@@ -1396,7 +1398,18 @@ export class BrowserWindow {
     if (key === 'F11') return this.run(() => this.win.setFullScreen(!this.win.isFullScreen()))
     if (key === 'F12') return this.run(() => this.openDevTools())
     if (key === 'F6') return this.run(() => this.focusAddress())
-    if (key === 'Escape' && !fromChrome) return this.run(() => this.stop())
+    if (key === 'Escape' && !fromChrome) {
+      // Escape is the browser's own key — it stops a page loading — so a page
+      // never sees it. Whatever the browser has put over the page gets it
+      // first, and the choosing of a screenshot area is exactly that.
+      if (this.choosingArea) {
+        return this.run(() => {
+          this.choosingArea = false
+          this.withActive((wc) => wc.send('capture:cancel'))
+        })
+      }
+      return this.run(() => this.stop())
+    }
 
     if (input.alt && !mod) {
       if (key === 'ArrowLeft') return this.run(() => this.goBack())
@@ -2176,6 +2189,121 @@ export class BrowserWindow {
 
   /** What is being looked for, so a count belongs to the right search. */
   private findQuery = ''
+
+  /**
+   * A picture of the page: 'view' is what is on screen, 'full' is the whole
+   * scroll of it, 'area' is a piece the reader draws with the mouse.
+   *
+   * It goes to the downloads folder and to the clipboard at once — a
+   * screenshot is taken either to keep or to paste, and which one it is is
+   * not knowable from here.
+   */
+  async capture(kind: 'view' | 'full' | 'area') {
+    const tab = this.getActive()
+    const wc = tab?.wc
+    if (!wc || wc.isDestroyed() || !tab?.hasContent) return false
+    if (kind === 'area') {
+      this.choosingArea = true
+      // The page draws the selection, because only the page knows where the
+      // mouse is over it. It answers on capture:area.
+      wc.send('capture:area', { hint: t('Выделите область · клик — видимая часть · Esc — отмена') })
+      return true
+    }
+    const image = kind === 'full' ? await this.wholePage(wc) : await wc.capturePage()
+    return this.keepPicture(image)
+  }
+
+  /** Whether a picture's area is being drawn over the page right now. */
+  private choosingArea = false
+
+  /** The piece the reader drew, in the page's own coordinates. */
+  async captureArea(webContentsId: number, rect: { x: number; y: number; width: number; height: number }) {
+    this.choosingArea = false
+    const tab = this.tabs.find((t) => t.wc?.id === webContentsId)
+    const wc = tab?.wc
+    if (!wc || wc.isDestroyed() || tab.id !== this.activeId) return false
+    // Nothing drawn: the visible part, which is what a click without a drag
+    // asks for.
+    if (rect.width < 4 || rect.height < 4) return this.keepPicture(await wc.capturePage())
+    const image = await wc.capturePage({
+      x: Math.round(rect.x),
+      y: Math.round(rect.y),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height)
+    })
+    return this.keepPicture(image)
+  }
+
+  /**
+   * The whole scroll of the page. capturePage stops at the viewport, so this
+   * goes through the debugger protocol, which is the only way to ask
+   * Chromium for more than is on screen. Devtools hold that connection, so
+   * when they are open this quietly settles for what is visible.
+   */
+  private async wholePage(wc: Electron.WebContents) {
+    try {
+      if (!wc.debugger.isAttached()) wc.debugger.attach('1.3')
+    } catch {
+      return wc.capturePage()
+    }
+    try {
+      const metrics = (await wc.debugger.sendCommand('Page.getLayoutMetrics')) as {
+        cssContentSize?: { width: number; height: number }
+      }
+      const size = metrics.cssContentSize
+      const shot = (await wc.debugger.sendCommand('Page.captureScreenshot', {
+        format: 'png',
+        captureBeyondViewport: true,
+        // A page can be tens of thousands of pixels tall; past this it is a
+        // picture nobody can look at and a file nobody can open.
+        clip: size
+          ? {
+              x: 0,
+              y: 0,
+              width: Math.min(size.width, 8000),
+              height: Math.min(size.height, 20000),
+              scale: 1
+            }
+          : undefined
+      })) as { data: string }
+      return nativeImage.createFromBuffer(Buffer.from(shot.data, 'base64'))
+    } catch {
+      return wc.capturePage()
+    } finally {
+      try {
+        wc.debugger.detach()
+      } catch {
+        /* it was not ours to detach */
+      }
+    }
+  }
+
+  /** Writes the picture where downloads go, and puts it on the clipboard. */
+  private keepPicture(image: Electron.NativeImage) {
+    if (image.isEmpty()) return false
+    const png = image.toPNG()
+    clipboard.writeImage(image)
+    const stamp = new Date()
+      .toISOString()
+      .replace(/[:T]/g, '-')
+      .slice(0, 19)
+    let host = 'page'
+    try {
+      host = new URL(this.getActive()?.url ?? '').hostname.replace(/^www\./, '') || 'page'
+    } catch {
+      /* a page with no address of its own */
+    }
+    const dir = settings.get().downloadDir || app.getPath('downloads')
+    const file = join(dir, `${host}-${stamp}.png`)
+    try {
+      writeFileSync(file, png)
+    } catch {
+      this.send('toast', t('Не удалось сохранить снимок'))
+      return false
+    }
+    this.send('toast', t('Снимок сохранён и скопирован'))
+    return true
+  }
 
   /**
    * Reading mode on or off for the tab in front. The page does the reading
