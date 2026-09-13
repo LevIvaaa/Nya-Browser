@@ -1436,8 +1436,9 @@ export class BrowserWindow {
         return this.run(() => this.setZoom('reset'))
       default:
         if (/^[1-9]$/.test(key)) {
-          const index = key === '9' ? this.tabs.length - 1 : Number(key) - 1
-          const tab = this.tabs[index]
+          const here = this.here()
+          const index = key === '9' ? here.length - 1 : Number(key) - 1
+          const tab = here[index]
           return this.run(() => tab && this.switchTab(tab.id))
         }
         return false
@@ -1469,9 +1470,10 @@ export class BrowserWindow {
   }
 
   private cycleTab(delta: number) {
-    if (this.tabs.length < 2) return
-    const index = this.tabs.findIndex((t) => t.id === this.activeId)
-    const next = this.tabs[(index + delta + this.tabs.length) % this.tabs.length]
+    const here = this.here()
+    if (here.length < 2) return
+    const index = here.findIndex((t) => t.id === this.activeId)
+    const next = here[(index + delta + here.length) % here.length]
     this.switchTab(next.id)
   }
 
@@ -1592,13 +1594,14 @@ export class BrowserWindow {
   // Pinning a tab is a way of saying it should still be there later, so
   // neither of these takes it away.
   closeOthers(id: number) {
-    for (const tab of [...this.tabs]) if (tab.id !== id && !tab.pinned) this.closeTab(tab.id)
+    for (const tab of this.here()) if (tab.id !== id && !tab.pinned) this.closeTab(tab.id)
   }
 
   closeToRight(id: number) {
-    const index = this.tabs.findIndex((t) => t.id === id)
+    const here = this.here()
+    const index = here.findIndex((t) => t.id === id)
     if (index === -1) return
-    for (const tab of this.tabs.slice(index + 1)) if (!tab.pinned) this.closeTab(tab.id)
+    for (const tab of here.slice(index + 1)) if (!tab.pinned) this.closeTab(tab.id)
   }
 
   reopenClosed() {
@@ -1624,22 +1627,30 @@ export class BrowserWindow {
   private reorderStrip() {
     const ordered: Tab[] = []
     const taken = new Set<number>()
-    for (const pinnedPass of [true, false]) {
-      for (const tab of this.tabs) {
-        if (tab.pinned !== pinnedPass || taken.has(tab.id)) continue
-        if (tab.groupId === null) {
-          taken.add(tab.id)
-          ordered.push(tab)
-          continue
-        }
-        for (const member of this.tabs) {
-          if (member.groupId !== tab.groupId || member.pinned !== pinnedPass) continue
-          if (taken.has(member.id)) continue
-          taken.add(member.id)
-          ordered.push(member)
+    // One big group at a time, so its tabs are a run in the list as well as
+    // in the strip — which is what lets a position in one mean the same in
+    // the other.
+    for (const space of this.spaces) {
+      const inSpace = this.tabs.filter((tab) => tab.space === space.id)
+      for (const pinnedPass of [true, false]) {
+        for (const tab of inSpace) {
+          if (tab.pinned !== pinnedPass || taken.has(tab.id)) continue
+          if (tab.groupId === null) {
+            taken.add(tab.id)
+            ordered.push(tab)
+            continue
+          }
+          for (const member of inSpace) {
+            if (member.groupId !== tab.groupId || member.pinned !== pinnedPass) continue
+            if (taken.has(member.id)) continue
+            taken.add(member.id)
+            ordered.push(member)
+          }
         }
       }
     }
+    // A tab whose big group went away still belongs somewhere.
+    for (const tab of this.tabs) if (!taken.has(tab.id)) ordered.push(tab)
     this.tabs = ordered
     // A group nobody is in is not a group.
     this.groups = this.groups.filter((group) => this.tabs.some((t) => t.groupId === group.id))
@@ -1757,11 +1768,12 @@ export class BrowserWindow {
    * should do.
    */
   moveGroup(groupId: number, toIndex: number) {
-    const members = this.tabs.filter((tab) => tab.groupId === groupId)
+    const here = this.here()
+    const members = here.filter((tab) => tab.groupId === groupId)
     if (members.length === 0) return
-    const rest = this.tabs.filter((tab) => tab.groupId !== groupId)
+    const rest = here.filter((tab) => tab.groupId !== groupId)
     const at = Math.max(0, Math.min(rest.length, toIndex))
-    this.tabs = [...rest.slice(0, at), ...members, ...rest.slice(at)]
+    this.replaceHere([...rest.slice(0, at), ...members, ...rest.slice(at)])
     this.reorderStrip()
     this.persistSession()
     this.sendGroups()
@@ -1802,10 +1814,14 @@ export class BrowserWindow {
     if (!group) return
     const next = collapsed ?? !group.collapsed
     if (next && this.getActive()?.groupId === groupId) {
-      const outside = this.tabs.filter((t) => t.groupId !== groupId)
+      // Somewhere to go while this group folds up — in this big group, not
+      // in another one, which would have moved the whole strip out from
+      // under the click.
+      const here = this.here()
+      const outside = here.filter((t) => t.groupId !== groupId)
       if (outside.length === 0) return
-      const index = this.tabs.findIndex((t) => t.id === this.activeId)
-      const after = this.tabs.slice(index).find((t) => t.groupId !== groupId)
+      const index = here.findIndex((t) => t.id === this.activeId)
+      const after = here.slice(index).find((t) => t.groupId !== groupId)
       this.switchTab((after ?? outside[outside.length - 1]).id)
     }
     group.collapsed = next
@@ -1828,22 +1844,24 @@ export class BrowserWindow {
   }
 
   moveTab(id: number, toIndex: number) {
-    const from = this.tabs.findIndex((t) => t.id === id)
-    if (from === -1) return
-    const clamped = Math.max(0, Math.min(this.tabs.length - 1, toIndex))
-    const [tab] = this.tabs.splice(from, 1)
-    this.tabs.splice(clamped, 0, tab)
+    const tab = this.tabs.find((t) => t.id === id)
+    if (!tab) return
+    // The index came from the strip, which shows one big group, so it is
+    // measured against that group's tabs and nothing else.
+    const rest = this.here().filter((t) => t.id !== id)
+    const clamped = Math.max(0, Math.min(rest.length, toIndex))
     // What the drop looked like it meant. Landing between two tabs of one
     // group joins it. Landing anywhere else takes the tab out of whatever
     // group it was in and leaves it standing on its own — unless it did not
     // really leave, which is a drop still touching its own group.
     if (!tab.pinned) {
-      const before = this.tabs[clamped - 1]?.groupId ?? null
-      const after = this.tabs[clamped + 1]?.groupId ?? null
+      const before = rest[clamped - 1]?.groupId ?? null
+      const after = rest[clamped]?.groupId ?? null
       const inside = before !== null && before === after
       const stayed = tab.groupId !== null && (tab.groupId === before || tab.groupId === after)
       tab.groupId = inside ? before : stayed ? tab.groupId : null
     }
+    this.replaceHere([...rest.slice(0, clamped), tab, ...rest.slice(clamped)])
     this.reorderStrip()
     this.persistSession()
     this.sendGroups()
@@ -2381,6 +2399,20 @@ export class BrowserWindow {
   /** The tabs of the group in force — the ones the strip is made of. */
   private here(): Tab[] {
     return this.tabs.filter((tab) => tab.space === this.spaceId)
+  }
+
+  /**
+   * Puts a new order for this group's tabs back into the whole list, leaving
+   * every other group's tabs where they were.
+   */
+  private replaceHere(order: Tab[]) {
+    const start = this.tabs.findIndex((tab) => tab.space === this.spaceId)
+    const others = this.tabs.filter((tab) => tab.space !== this.spaceId)
+    const at =
+      start === -1
+        ? others.length
+        : this.tabs.slice(0, start).filter((tab) => tab.space !== this.spaceId).length
+    this.tabs = [...others.slice(0, at), ...order, ...others.slice(at)]
   }
 
   private sendSpaces() {
