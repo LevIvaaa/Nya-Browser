@@ -87,6 +87,13 @@ export function useBrowser() {
       api.onToast(pushToast)
     ]
 
+    // Asked for, not waited for: a window that has just come up would
+    // otherwise show no tabs and no groups until the next thing to happen.
+    void api.snapshot().then((state) => {
+      setTabs(state.tabs)
+      setGroups(state.groups)
+      setSpaces(state.spaces)
+    })
     void api.getSettings().then(setSettings)
     void api.getEngines().then(setEngines)
     void api.profiles().then(setProfiles)

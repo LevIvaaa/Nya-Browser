@@ -60,6 +60,7 @@ import type {
   WebAppCandidate,
   Suggestion,
   TabGroup,
+  TabSpace,
   TabState,
   UpdateState,
   WindowState
@@ -2843,18 +2844,34 @@ export class BrowserWindow {
     this.tabs = [...others.slice(0, at), ...order, ...others.slice(at)]
   }
 
+  /** The big groups as the strip draws them. */
+  private spacesForUi(): TabSpace[] {
+    return this.spaces.map((space) => ({
+      id: space.id,
+      name: space.name,
+      colour: space.colour,
+      count: this.tabs.filter((tab) => tab.space === space.id).length,
+      active: space.id === this.spaceId,
+      pinned: space.pinned === true
+    }))
+  }
+
   private sendSpaces() {
-    this.send(
-      'state:spaces',
-      this.spaces.map((space) => ({
-        id: space.id,
-        name: space.name,
-        colour: space.colour,
-        count: this.tabs.filter((tab) => tab.space === space.id).length,
-        active: space.id === this.spaceId,
-        pinned: space.pinned === true
-      }))
-    )
+    this.send('state:spaces', this.spacesForUi())
+  }
+
+  /**
+   * Everything the interface cannot work without, for a window that has
+   * just loaded. These three only ever arrived as a push, so a renderer
+   * that came up between two of them had no tabs and no groups until
+   * something happened to cause the next one.
+   */
+  snapshot() {
+    return {
+      tabs: this.here().map((tab) => tab.serialize(this.activeId)),
+      groups: this.groups,
+      spaces: this.spacesForUi()
+    }
   }
 
   /** A new one, empty, and you are in it. */

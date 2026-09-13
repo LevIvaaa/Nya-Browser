@@ -361,6 +361,9 @@ const api = {
   appInfo: (): Promise<AppInfo> => ipcRenderer.invoke('app:info'),
 
   /* ---- subscriptions ---- */
+  /** What a window that has just loaded needs before the first push. */
+  snapshot: (): Promise<{ tabs: TabState[]; groups: TabGroup[]; spaces: TabSpace[] }> =>
+    ipcRenderer.invoke('state:snapshot'),
   onTabs: (cb: (tabs: TabState[]) => void) => on<TabState[]>('state:tabs', cb),
   onGroups: (cb: (groups: TabGroup[]) => void) => on<TabGroup[]>('state:groups', cb),
   onWindow: (cb: (state: WindowState) => void) => on<WindowState>('state:window', cb),
