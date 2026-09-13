@@ -15,17 +15,23 @@ export default function SplitDivider() {
   const [dragging, setDragging] = useState(false)
   const box = useRef<HTMLDivElement>(null)
 
-  useEffect(() => window.browser.onSplit(setSplit), [])
+  useEffect(() => {
+    // Asked for, not only waited for: a window that has just come up was told
+    // about its restored pair before it existed to hear it.
+    void window.browser.splitState().then(setSplit)
+    return window.browser.onSplit(setSplit)
+  }, [])
 
   // While the handle is held, the pointer is captured here — a mouse moving
   // over a page view is gone as far as this renderer is concerned, so the
   // capture is what keeps the drag alive across it.
   useEffect(() => {
-    if (!dragging || !split) return
+    const rect = split?.rect
+    if (!dragging || !rect) return
     const move = (event: PointerEvent) => {
-      const width = split.rect.width
+      const width = rect.width
       if (width <= 0) return
-      void window.browser.setSplitRatio((event.clientX - split.rect.x) / width)
+      void window.browser.setSplitRatio((event.clientX - rect.x) / width)
     }
     const up = () => setDragging(false)
     window.addEventListener('pointermove', move)
@@ -36,10 +42,14 @@ export default function SplitDivider() {
     }
   }, [dragging, split])
 
-  if (!split) return null
+  // The pair can stand while there is nothing to divide — one of the browser's
+  // own pages fills the window, and a line down the middle of it would divide
+  // nothing.
+  const rect = split?.rect
+  if (!split || !rect) return null
 
   const gap = 8
-  const left = split.rect.x + Math.round((split.rect.width - gap) * split.ratio)
+  const left = rect.x + Math.round((rect.width - gap) * split.ratio)
 
   return (
     <div
@@ -48,13 +58,14 @@ export default function SplitDivider() {
       title={t('Потяните, чтобы поделить')}
       style={{
         left,
-        top: split.rect.y,
+        top: rect.y,
         width: gap,
-        height: split.rect.height,
+        height: rect.height,
         cursor: 'col-resize',
         background: dragging ? 'var(--accent)' : 'var(--line)',
         transition: dragging ? 'none' : 'background var(--t-fast) linear',
-        zIndex: 5
+        // Above the page area of the interface, which is where it lies.
+        zIndex: 25
       }}
       onPointerDown={(event) => {
         event.preventDefault()

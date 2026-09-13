@@ -606,6 +606,27 @@ input[type='color']::-webkit-color-swatch {
 }
 
 /* ==========================================================================
+   Two tabs shown as one window
+   ========================================================================== */
+
+/* The line under a pair is drawn outwards from the middle of each tab, so the
+   two of them are seen to be tied together rather than found already tied. */
+@keyframes bond-in {
+  from {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+.bond {
+  transform-origin: center;
+  animation: bond-in calc(340ms * var(--speed)) var(--ease-emph) both;
+}
+
+/* ==========================================================================
    The light an avatar gives off
    ========================================================================== */
 
@@ -614,15 +635,18 @@ input[type='color']::-webkit-color-swatch {
   inset: -7px;
   border-radius: 999px;
   opacity: 0;
-  transform: scale(0.8);
+  transform: scale(0.86);
   pointer-events: none;
-  filter: blur(7px) saturate(220%);
+  /* Set once and never animated: a blur that changes on every frame is the
+     one thing here the machine cannot draw smoothly. */
+  filter: blur(8px) saturate(225%);
+  will-change: opacity, transform;
   /* Brightest at the picture's edge and gone by the outside, so it reads as
      light coming off it rather than a second, larger copy of it. */
   -webkit-mask-image: radial-gradient(closest-side, #000 52%, rgba(0, 0, 0, 0) 100%);
   mask-image: radial-gradient(closest-side, #000 52%, rgba(0, 0, 0, 0) 100%);
-  transition: opacity var(--t-base) var(--ease-out), transform var(--t-slow) var(--ease-emph),
-    filter var(--t-base) var(--ease-out);
+  transition: opacity calc(260ms * var(--speed)) var(--ease-out),
+    transform calc(380ms * var(--speed)) var(--ease-out);
 }
 
 /* The pane the other buttons draw under themselves would only cover it. */
@@ -632,15 +656,15 @@ input[type='color']::-webkit-color-swatch {
 }
 .halo-host:hover .halo,
 .halo-host[data-open='true'] .halo {
-  opacity: 0.85;
+  opacity: 0.88;
   transform: scale(1.3);
-  filter: blur(9px) saturate(240%);
 }
 .halo-host:hover .avatar-face {
-  transform: scale(1.06);
+  transform: scale(1.05);
 }
 .halo-host:active .avatar-face {
-  transform: scale(0.94);
+  transform: scale(0.96);
+  transition-duration: 90ms;
 }
 
 /* ==========================================================================

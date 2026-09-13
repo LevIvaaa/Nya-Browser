@@ -33,6 +33,7 @@ export default function MediaPanel({ x, onClose }: { x: number; onClose: () => v
   const width = 384
   const left = Math.max(8, Math.min(x, window.innerWidth - width - 8))
   const [first, ...rest] = list
+  const cover = first?.art || first?.favicon || ''
 
   return (
     <>
@@ -48,16 +49,40 @@ export default function MediaPanel({ x, onClose }: { x: number; onClose: () => v
           left,
           width,
           background: 'var(--elevated)',
-          border: '1px solid var(--line)',
           boxShadow: 'var(--shadow-xl)',
           backdropFilter: 'blur(30px) saturate(180%)'
         }}
       >
-        <div className="shrink-0 px-3 pb-1.5 pt-2.5 text-2xs font-semibold uppercase tracking-wider text-faint">
+        {/* The cover, out of focus and filling the whole panel: the colour of
+            the music is the colour of the thing you are looking at, edge to
+            edge, with no dark frame drawn around it. */}
+        {cover && (
+          <div
+            key={cover}
+            className="animate-fade pointer-events-none absolute inset-0"
+            style={{
+              backgroundImage: `url("${cover}")`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              filter: 'blur(34px) saturate(220%)',
+              transform: 'scale(1.7)',
+              opacity: 0.42
+            }}
+          />
+        )}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              'linear-gradient(180deg, color-mix(in srgb, var(--elevated) 42%, transparent), color-mix(in srgb, var(--elevated) 86%, transparent))'
+          }}
+        />
+
+        <div className="relative shrink-0 px-3 pb-1.5 pt-2.5 text-2xs font-semibold uppercase tracking-wider text-faint">
           {t('Сейчас играет')}
         </div>
 
-        <div className="min-h-0 overflow-y-auto px-2 pb-2">
+        <div className="relative min-h-0 overflow-y-auto px-2 pb-2">
           {!first && (
             <div className="flex flex-col items-center gap-2 px-2 py-7 text-faint">
               <Note width={22} height={22} />
@@ -281,34 +306,8 @@ function Hero({ item, onClose }: { item: Playing; onClose: () => void }) {
   }
 
   return (
-    <div
-      className="relative overflow-hidden"
-      style={{ borderRadius: 'var(--radius)', background: 'var(--surface-hover)' }}
-    >
-      {/* The cover again, out of focus and behind everything: the colour of
-          the music, without a picture competing with the words. */}
-      {(item.art || item.favicon) && (
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            backgroundImage: `url("${item.art || item.favicon}")`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            filter: 'blur(28px) saturate(200%)',
-            transform: 'scale(1.6)',
-            opacity: 0.34
-          }}
-        />
-      )}
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            'linear-gradient(180deg, color-mix(in srgb, var(--elevated) 55%, transparent), color-mix(in srgb, var(--elevated) 88%, transparent))'
-        }}
-      />
-
-      <div className="relative p-3">
+    <div className="relative" style={{ borderRadius: 'var(--radius)' }}>
+      <div className="relative px-1 pb-1 pt-0.5">
         <div className="flex items-start gap-3">
           <button className="lift shrink-0" title={t('Перейти к вкладке')} onClick={go}>
             <Art item={item} size={72} />

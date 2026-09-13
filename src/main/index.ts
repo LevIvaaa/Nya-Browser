@@ -574,6 +574,9 @@ function registerIpc() {
   ipcMain.handle('nav:save-page', (event) => current(event).savePage())
   ipcMain.handle('ui:action', (event, action: unknown) => current(event).requestUiAction(str(action, 32)))
   ipcMain.handle('nav:reader', (event) => current(event).toggleReader())
+  ipcMain.on('page:language', (event, code: unknown) => {
+    current(event).handleLanguage(event.sender.id, str(code, 12).toLowerCase())
+  })
   ipcMain.on('media:state', (event, payload: unknown) => {
     const data = payload as Record<string, unknown> | null
     // Every frame of a page may have something to say; they are kept apart,
@@ -606,6 +609,7 @@ function registerIpc() {
   ipcMain.handle('tab:split', (event, id: unknown) =>
     current(event).splitWith(id === null || id === undefined ? null : num(id))
   )
+  ipcMain.handle('tab:split-state', (event) => current(event).splitNow())
   ipcMain.handle('tab:split-ratio', (event, ratio: unknown) =>
     current(event).setSplitRatio(num(ratio))
   )

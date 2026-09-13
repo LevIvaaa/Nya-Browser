@@ -590,6 +590,8 @@
   "Пока ничего не установлено": "Mitään ei ole vielä asennettu",
   "Пока ничего нет": "Täällä ei ole vielä mitään",
   "Показан оригинал": "Alkuperäinen näkyvissä",
+  "Показана слева": "Näkyy vasemmalla",
+  "Показана справа": "Näkyy oikealla",
   "Показано {n} из {total}": "Näytetään {n}/{total}",
   "Показать": "Näytä",
   "Показать в папке": "Näytä kansiossa",
