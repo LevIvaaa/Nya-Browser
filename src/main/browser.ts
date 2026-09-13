@@ -489,7 +489,16 @@ export class BrowserWindow {
    */
   private overlayBounds: { x: number; y: number; width: number; height: number } | null = null
   /** The login field an offer is currently anchored to. */
-  private field: { webContentsId: number; host: string; x: number; y: number; width: number; height: number } | null = null
+  private field: {
+    webContentsId: number
+    host: string
+    /** what that field was asking for: a password, a card, an address */
+    kind: 'login' | 'card' | 'address'
+    x: number
+    y: number
+    width: number
+    height: number
+  } | null = null
   private hideOffer: ReturnType<typeof setTimeout> | null = null
   /** Whether the locked-vault card is on screen and holding the keyboard. */
   private noticeUp = false
@@ -2698,6 +2707,7 @@ export class BrowserWindow {
   handleAutofillField(
     webContentsId: number,
     host: string,
+    kind: 'login' | 'card' | 'address',
     rect: { x: number; y: number; width: number; height: number }
   ) {
     const tab = this.tabs.find((t) => t.wc?.id === webContentsId)
@@ -2706,9 +2716,18 @@ export class BrowserWindow {
       clearTimeout(this.hideOffer)
       this.hideOffer = null
     }
-    const matches = vault.forOrigin(host)
-    if (matches.length === 0) return this.closeOffer()
-    this.field = { webContentsId, host, ...rect }
+    // A password belongs to a host; a card and an address belong to the
+    // person, and are the same wherever they are buying.
+    const matches = kind === 'login' ? vault.forOrigin(host) : []
+    const cards = kind === 'card' && !vault.locked ? vault.cards() : []
+    const addresses = kind === 'address' && !vault.locked ? vault.addresses() : []
+    const count = kind === 'login' ? matches.length : kind === 'card' ? cards.length : addresses.length
+    // Nothing to offer, and — with the vault shut — nothing worth asking
+    // to open it for unless this site has a password saved.
+    if (count === 0 && !(vault.locked && kind === 'login' && vault.count > 0)) {
+      return this.closeOffer()
+    }
+    this.field = { webContentsId, host, kind, ...rect }
     const margin = BrowserWindow.OFFER_MARGIN
 
     if (vault.locked) {
@@ -2718,7 +2737,7 @@ export class BrowserWindow {
       // lost focus, the card closes, the keyboard goes back, and round.
       if (this.overlayMode === 'autofill' && this.noticeUp) return
       this.noticeUp = true
-      this.send('state:autofill', { host, locked: true, entries: [] })
+      this.send('state:autofill', { host, kind, locked: true, entries: [], cards: [], addresses: [] })
       return this.setOverlayMode('autofill', {
         bounds: this.noticeBounds(380, 210),
         // The master password is typed into this card, so it takes the keyboard.
@@ -2728,13 +2747,16 @@ export class BrowserWindow {
 
     this.send('state:autofill', {
       host,
+      kind,
       locked: false,
       // `origin` travels so the offer can say where a credential came from when
       // it was not saved on this exact address.
-      entries: matches.map(({ id, username, origin }) => ({ id, username, origin }))
+      entries: matches.map(({ id, username, origin }) => ({ id, username, origin })),
+      cards,
+      addresses
     })
     this.setOverlayMode('autofill', {
-      bounds: this.offerBounds(rect, matches.length),
+      bounds: this.offerBounds(rect, count),
       focus: false
     })
   }
@@ -2762,7 +2784,9 @@ export class BrowserWindow {
     const margin = BrowserWindow.OFFER_MARGIN
     const inner = this.contentBox()
     const width = Math.round(Math.max(260, Math.min(420, rect.width)))
-    const height = 12 + Math.min(count, 4) * 44 + 30
+    // Six rows before it starts scrolling: four was a keyhole for anyone with
+    // a handful of cards or accounts on one site.
+    const height = 12 + Math.min(count, 6) * 44 + 30
     const bounds = this.win.getBounds()
     let x = Math.round(inner.x + rect.x)
     let y = Math.round(inner.y + rect.y + rect.height + 4)
@@ -2820,7 +2844,7 @@ export class BrowserWindow {
   reofferAutofill() {
     const field = this.field
     if (!field || vault.locked) return
-    this.handleAutofillField(field.webContentsId, field.host, field)
+    this.handleAutofillField(field.webContentsId, field.host, field.kind, field)
   }
 
   /**
@@ -2867,6 +2891,54 @@ export class BrowserWindow {
   }
 
   /** Pushes a saved credential into the active page after a user action. */
+  /**
+   * Puts a card into the page. A card is not tied to a site the way a
+   * password is — it is the same card wherever you are buying — so there is
+   * nothing to match against; what stands in for that is that it goes
+   * nowhere until somebody picks it. The security code is not sent, because
+   * it is not kept: those three digits are the part a person types.
+   */
+  fillCard(id: string): boolean {
+    const wc = this.getActive()?.wc
+    if (!wc || wc.isDestroyed() || vault.locked) return false
+    const card = vault.cards().find((c) => c.id === id)
+    if (!card) return false
+    const number = vault.revealCard(id)
+    if (!number) return false
+    let host = ''
+    try {
+      host = new URL(wc.getURL()).host
+    } catch {
+      return false
+    }
+    wc.send('autofill:fill-card', {
+      host,
+      number,
+      holder: card.holder,
+      month: card.month,
+      year: card.year
+    })
+    vault.touchCard(id)
+    return true
+  }
+
+  /** The same for an address: chosen by a person, then filled in one go. */
+  fillAddress(id: string): boolean {
+    const wc = this.getActive()?.wc
+    if (!wc || wc.isDestroyed() || vault.locked) return false
+    const fields = vault.revealAddress(id)
+    if (!fields) return false
+    let host = ''
+    try {
+      host = new URL(wc.getURL()).host
+    } catch {
+      return false
+    }
+    wc.send('autofill:fill-address', { host, fields })
+    vault.touchAddress(id)
+    return true
+  }
+
   fillCredential(id: string): boolean {
     const tab = this.getActive()
     const wc = tab?.wc

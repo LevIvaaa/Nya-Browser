@@ -25,7 +25,7 @@ await build({
   logLevel: 'error'
 })
 
-const { siteOf, vault } = await import(pathToFileURL(out).href)
+const { siteOf, vault, brandOf, looksLikeCard } = await import(pathToFileURL(out).href)
 
 let passed = 0
 const failures = []
@@ -87,6 +87,79 @@ check('two addresses are not', sameSite('192.168.0.1', '192.168.0.1'), false)
   check('a locked vault does not give the password up', vault.reveal(entry.id), null)
   check('a locked vault does not delete it either', vault.remove(entry.id), false)
   check('so the entry is still there', vault.list().length, 1)
+}
+
+/* ------------------------------------------------- cards and addresses */
+
+check('a visa is a visa', brandOf('4111111111111111'), 'visa')
+check('a mastercard is a mastercard', brandOf('5555555555554444'), 'mastercard')
+check('a mir card is a mir card', brandOf('2200000000000000'), 'mir')
+check('a mir prefix is not mistaken for a mastercard', brandOf('2201382000000013'), 'mir')
+check('an unknown prefix claims nothing', brandOf('9999999999999999'), '')
+
+check('a real number passes the check digit', looksLikeCard('4111111111111111'), true)
+check('one digit wrong does not', looksLikeCard('4111111111111112'), false)
+check('too short is not a card', looksLikeCard('411111'), false)
+
+{
+  const dir = mkdtempSync(join(tmpdir(), 'nya-vault-cards-'))
+  vault.load(dir, false)
+
+  const saved = vault.saveCard({
+    label: 'Основная',
+    number: '4111 1111 1111 1111',
+    holder: 'LEV IVANISHCHYN',
+    month: 4,
+    year: 2030
+  })
+  check('a card can be saved', saved, true)
+  const [card] = vault.cards()
+  check('the list knows the brand without opening anything', card.brand, 'visa')
+  check('and the last four digits', card.last4, '1111')
+  check('but keeps the number to itself', JSON.stringify(card).includes('4111111111111111'), false)
+  check('the number comes back when asked', vault.revealCard(card.id), '4111111111111111')
+
+  // The number is sealed under the card's own id, so it cannot be moved onto
+  // another card's record and read there.
+  const second = vault.saveCard({ label: 'Вторая', number: '5555555555554444', holder: '', month: 1, year: 2029 })
+  check('a second card can be saved', second, true)
+  const cards = vault.cards()
+  check('both are there', cards.length, 2)
+
+  const address = vault.saveAddress({
+    label: 'Дом',
+    fields: {
+      name: 'Лев Иванищин',
+      phone: '+7 900 000-00-00',
+      email: 'lev@example.com',
+      country: 'Россия',
+      region: 'Московская область',
+      city: 'Ногинск',
+      street: 'Советская',
+      house: '12',
+      flat: '5',
+      postcode: '142400'
+    }
+  })
+  check('an address can be saved', address, true)
+  const [where] = vault.addresses()
+  check('the list shows the city', where.city, 'Ногинск')
+  check('and nothing else about the person', JSON.stringify(where).includes('Советская'), false)
+  check('the street comes back when asked', vault.revealAddress(where.id).street, 'Советская')
+
+  // A master password rewrites the whole file; anything not carried over
+  // would be sealed under a key that no longer exists.
+  check('a master password can be set', vault.setMasterPassword(null, 'a long enough one'), true)
+  check('the card survives it', vault.revealCard(card.id), '4111111111111111')
+  check('so does the address', vault.revealAddress(where.id).city, 'Ногинск')
+  vault.lock()
+  check('a locked vault does not give a card number up', vault.revealCard(card.id), null)
+  check('nor an address', vault.revealAddress(where.id), null)
+  check('and will not delete a card either', vault.removeCard(card.id), false)
+  check('the vault opens again with the password', vault.unlock('a long enough one'), true)
+  check('and the card is still there', vault.cards().length, 2)
+  check('a card can be thrown away', vault.removeCard(card.id), true)
+  check('which leaves the other one', vault.cards().length, 1)
 }
 
 for (const { name, actual, expected } of failures) {

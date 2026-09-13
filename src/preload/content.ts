@@ -457,6 +457,163 @@ if (isTop && httpOrigin) {
     input.dispatchEvent(new Event('change', { bubbles: true }))
   }
 
+  /* ------------------------------------------------ paying and posting */
+
+  /**
+   * What a field is for. `autocomplete` is the honest answer whenever a form
+   * bothers to give one, and most shops do for payment because the browsers
+   * they were tested against need it. The rest is the names forms actually
+   * use, in the two languages this browser is most often read in.
+   */
+  /**
+   * What a form says outright. autocomplete is not a hint to be weighed
+   * against other hints — it is the form telling you what the box is for, so
+   * it is answered exactly and nothing else is consulted.
+   */
+  const DECLARED: Record<string, string> = {
+    'cc-number': 'cc-number',
+    'cc-name': 'cc-name',
+    'cc-given-name': 'cc-name',
+    'cc-family-name': 'cc-name',
+    'cc-exp': 'cc-exp',
+    'cc-exp-month': 'cc-exp-month',
+    'cc-exp-year': 'cc-exp-year',
+    'cc-csc': 'cc-csc',
+    'postal-code': 'postcode',
+    country: 'country',
+    'country-name': 'country',
+    'address-level1': 'region',
+    'address-level2': 'city',
+    'street-address': 'street',
+    'address-line1': 'street',
+    'address-line2': 'street',
+    'address-line3': 'flat',
+    tel: 'tel',
+    'tel-national': 'tel',
+    'tel-local': 'tel',
+    email: 'email',
+    name: 'name',
+    'given-name': 'name',
+    'family-name': 'name',
+    'additional-name': 'name'
+  }
+
+  /**
+   * And what a form only implies: the words it puts on and around the box.
+   * Looser, and in the order that settles the overlaps — a box labelled «Дом»
+   * is a house number before it is an address.
+   */
+  const PURPOSES: Array<[string, RegExp]> = [
+    ['cc-number', /cardnumber|card.?number|numero.?card|номер.?карт/i],
+    ['cc-name', /card.?holder|holder.?name|name.?on.?card|ccname|владел|держател|имя.?(на|с)?.?карт/i],
+    ['cc-csc', /cvv|cvc|csc|security.?code|код.?(безопас|прове)/i],
+    ['cc-exp-month', /ccmonth|exp.?month|month.*(exp|card)|месяц/i],
+    ['cc-exp-year', /ccyear|exp.?year|year.*(exp|card)|год/i],
+    ['cc-exp', /expir|valid.?thru|mm.?\/?.?yy|срок|действ/i],
+    ['postcode', /postcode|postal|\bzip\b|индекс|почтовый.?инд/i],
+    ['country', /country|страна/i],
+    ['region', /region|province|oblast|область|регион|\bкрай\b/i],
+    ['city', /\bcity\b|town|locality|город|насел.?пункт/i],
+    ['flat', /apartment|\bflat\b|suite|кварт|офис/i],
+    ['house', /house|building|\bдом\b|корпус|\bстро\b/i],
+    ['street', /street|address|адрес|улиц/i],
+    ['tel', /phone|mobile|\btel\b|телефон/i],
+    ['email', /e-?mail|почт/i],
+    ['name', /full.?name|recipient|\bfio\b|получател|фамил|\bимя\b|\bфио\b/i]
+  ]
+
+  const CARD_PURPOSES = new Set([
+    'cc-number',
+    'cc-name',
+    'cc-exp',
+    'cc-exp-month',
+    'cc-exp-year',
+    'cc-csc'
+  ])
+
+  type Purpose = string | null
+
+  function purposeOf(node: Element): Purpose {
+    if (!(node instanceof HTMLInputElement) && !(node instanceof HTMLSelectElement)) return null
+    if (node instanceof HTMLInputElement) {
+      const type = (node.type || 'text').toLowerCase()
+      if (!['text', 'tel', 'email', 'number', 'search', ''].includes(type)) return null
+    }
+    if (node.disabled) return null
+    // 'shipping cc-number' and 'section-one billing email' are both legal:
+    // the part that says what the box is for is the last word.
+    const auto = (node.autocomplete || '').toLowerCase().trim().split(/\s+/).pop() ?? ''
+    if (DECLARED[auto]) return DECLARED[auto]
+    // The label is often the only word a form gives a box — «Страна» over an
+    // input called `cty` is a country field to everyone but a program that
+    // refuses to look.
+    const labels = Array.from(node.labels ?? [])
+      .map((label) => label.textContent ?? '')
+      .join(' ')
+      .slice(0, 80)
+    const hay = `${node.name} ${node.id} ${node.getAttribute('placeholder') ?? ''} ${node.getAttribute('aria-label') ?? ''} ${labels}`
+    for (const [purpose, pattern] of PURPOSES) if (pattern.test(hay)) return purpose
+    return null
+  }
+
+  /** Which kind of thing this field belongs to, if any. */
+  function fieldKind(node: EventTarget | null): 'card' | 'address' | null {
+    if (!(node instanceof HTMLElement)) return null
+    if (!visible(node)) return null
+    const purpose = purposeOf(node)
+    if (!purpose) return null
+    if (CARD_PURPOSES.has(purpose)) return 'card'
+    // A lone name or phone box is a sign-in as often as it is a delivery
+    // form; an address is only worth offering where the form asks for one.
+    const around = (node as HTMLInputElement).form ?? document
+    const purposes = new Set(
+      Array.from(around.querySelectorAll('input, select'))
+        .map((el) => purposeOf(el))
+        .filter(Boolean) as string[]
+    )
+    const posting = ['street', 'city', 'postcode', 'house', 'region'].filter((p) =>
+      purposes.has(p)
+    )
+    return posting.length >= 2 ? 'address' : null
+  }
+
+  /** Sets a text box or picks an option in a list, whichever this is. */
+  function fillField(el: Element, value: string) {
+    if (!value) return
+    if (el instanceof HTMLInputElement) return setValue(el, value)
+    if (!(el instanceof HTMLSelectElement)) return
+    const want = value.trim().toLowerCase()
+    const number = Number(want)
+    const option = Array.from(el.options).find((o) => {
+      const text = o.text.trim().toLowerCase()
+      const own = o.value.trim().toLowerCase()
+      if (text === want || own === want) return true
+      // Months and years come as numbers in lists written either way: 4,
+      // 04, 2030, 30.
+      if (!Number.isNaN(number) && number > 0) {
+        if (Number(own) === number || Number(text) === number) return true
+        if (number > 2000 && (Number(own) === number % 100 || Number(text) === number % 100)) return true
+      }
+      return false
+    })
+    if (!option) return
+    el.value = option.value
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+    el.dispatchEvent(new Event('change', { bubbles: true }))
+  }
+
+  /** Every field of a given purpose near the one that was clicked. */
+  function fieldsFor(anchor: Element | null): Map<string, Element[]> {
+    const scope: ParentNode = (anchor as HTMLInputElement | null)?.form ?? document
+    const found = new Map<string, Element[]>()
+    for (const el of Array.from(scope.querySelectorAll('input, select'))) {
+      const purpose = purposeOf(el)
+      if (!purpose || !visible(el as HTMLElement)) continue
+      found.set(purpose, [...(found.get(purpose) ?? []), el])
+    }
+    return found
+  }
+
   let announced = ''
 
   /**
@@ -486,10 +643,11 @@ if (isTop && httpOrigin) {
    * position of the page inside the window; it cannot know the scroll or the
    * layout, and this side cannot know where the page is drawn.
    */
-  function report(field: HTMLInputElement) {
+  function report(field: HTMLElement, kind: 'login' | 'card' | 'address' = 'login') {
     const rect = field.getBoundingClientRect()
     ipcRenderer.send('autofill:field', {
       host: location.host,
+      kind,
       x: Math.round(rect.left),
       y: Math.round(rect.top),
       width: Math.round(rect.width),
@@ -500,7 +658,9 @@ if (isTop && httpOrigin) {
   const hide = () => ipcRenderer.send('autofill:leave')
 
   /** The field the offer is currently anchored to, if any. */
-  let anchored: HTMLInputElement | null = null
+  let anchored: HTMLElement | null = null
+  /** and what it was asking for */
+  let anchoredKind: 'login' | 'card' | 'address' = 'login'
 
   const follow = () => {
     if (!anchored) return
@@ -510,7 +670,7 @@ if (isTop && httpOrigin) {
       hide()
       return
     }
-    report(anchored)
+    report(anchored, anchoredKind)
   }
 
   const announce = () => {
@@ -543,6 +703,62 @@ if (isTop && httpOrigin) {
     password.focus()
   })
 
+  // A card, put in by somebody who picked it. The security code is not here
+  // because it is not kept anywhere — it is the part a person types.
+  ipcRenderer.on(
+    'autofill:fill-card',
+    (
+      _event,
+      data: { host: string; number: string; holder: string; month: number; year: number }
+    ) => {
+      if (!data || data.host !== location.host) return
+      const fields = fieldsFor(anchored)
+      const put = (purpose: string, value: string) => {
+        for (const el of fields.get(purpose) ?? []) fillField(el, value)
+      }
+      put('cc-number', data.number)
+      put('cc-name', data.holder)
+      const mm = String(data.month).padStart(2, '0')
+      const yyyy = String(data.year)
+      put('cc-exp-month', mm)
+      put('cc-exp-year', yyyy)
+      // One box for both is written a dozen ways; the form's own maxlength
+      // says which of them it wants.
+      for (const el of fields.get('cc-exp') ?? []) {
+        const max = el instanceof HTMLInputElement ? el.maxLength : -1
+        fillField(el, max > 0 && max <= 5 ? `${mm}/${yyyy.slice(2)}` : `${mm}/${yyyy}`)
+      }
+      const first = (fields.get('cc-csc') ?? [])[0]
+      // Straight to the one box that was deliberately left empty.
+      if (first instanceof HTMLElement) first.focus()
+    }
+  )
+
+  ipcRenderer.on(
+    'autofill:fill-address',
+    (_event, data: { host: string; fields: Record<string, string> }) => {
+      if (!data || data.host !== location.host) return
+      const boxes = fieldsFor(anchored)
+      const put = (purpose: string, value: string) => {
+        for (const el of boxes.get(purpose) ?? []) fillField(el, value)
+      }
+      const f = data.fields ?? {}
+      put('name', f.name)
+      put('tel', f.phone)
+      put('email', f.email)
+      put('country', f.country)
+      put('region', f.region)
+      put('city', f.city)
+      put('postcode', f.postcode)
+      put('house', f.house)
+      put('flat', f.flat)
+      // A form with no separate box for the house number expects it in the
+      // street line, which is how most of them are written.
+      const hasHouse = (boxes.get('house') ?? []).length > 0
+      put('street', hasHouse ? f.street : [f.street, f.house].filter(Boolean).join(', '))
+    }
+  )
+
   const start = () => {
     announce()
 
@@ -551,16 +767,24 @@ if (isTop && httpOrigin) {
     // "every other time".
     const open = (event: Event) => {
       const field = loginField(event.target)
-      if (!field) return
-      anchored = field
-      report(field)
+      if (field) {
+        anchored = field
+        anchoredKind = 'login'
+        return report(field, 'login')
+      }
+      // A card or a delivery form: the same offer, from the same vault.
+      const kind = fieldKind(event.target)
+      if (!kind) return
+      anchored = event.target as HTMLElement
+      anchoredKind = kind
+      report(anchored, kind)
     }
     document.addEventListener('focusin', open, true)
     document.addEventListener('click', open, true)
     document.addEventListener(
       'focusout',
       (event) => {
-        if (!loginField(event.target)) return
+        if (!loginField(event.target) && !fieldKind(event.target)) return
         anchored = null
         hide()
       },

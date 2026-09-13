@@ -223,6 +223,52 @@ export interface Weather {
   fetched: number
 }
 
+/**
+ * A payment card as everything outside the vault sees it: the brand, the
+ * last four digits and when it runs out. The number itself is sealed, and
+ * the security code is never anywhere — not on disk, not in memory, not in
+ * this file. It is three digits a person can always type, and storing it is
+ * the difference between a stolen file and a usable card.
+ */
+export interface CardMeta {
+  id: string
+  /** what the person calls it: «Основная», «Рабочая» */
+  label: string
+  /** visa, mastercard, mir, amex, unionpay, jcb, discover — or '' */
+  brand: string
+  last4: string
+  holder: string
+  /** 1-12 */
+  month: number
+  /** four digits */
+  year: number
+  created: number
+  used: number
+}
+
+/** Everything a delivery form asks for. All of it sealed. */
+export interface AddressFields {
+  name: string
+  phone: string
+  email: string
+  country: string
+  region: string
+  city: string
+  street: string
+  house: string
+  flat: string
+  postcode: string
+}
+
+/** An address as the list shows it: what it is called, and where it is. */
+export interface AddressMeta {
+  id: string
+  label: string
+  city: string
+  created: number
+  used: number
+}
+
 /** How a search on the page is going: how many, and which one you are on. */
 export interface FindState {
   /** what was searched for, so a count from an old search is not shown against a new one */

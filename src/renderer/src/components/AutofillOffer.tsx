@@ -1,6 +1,6 @@
 import { t } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
-import { Key, Lock, User } from './Icons'
+import { CardIcon, Key, Lock, MapPin, User } from './Icons'
 import type { AutofillOffer } from '../../../preload/index'
 
 /**
@@ -34,7 +34,128 @@ export default function AutofillCard({
 
 /* ------------------------------------------------------- the saved accounts */
 
+/** How a card is written where it has to be recognised, not read. */
+export const cardLine = (card: { brand: string; last4: string }) =>
+  `${BRANDS[card.brand] ?? t('Карта')} •••• ${card.last4}`
+
+/**
+ * The names cards are known by. Not translated: they are the words printed
+ * on the card itself, in Latin letters, everywhere in the world.
+ */
+export const BRANDS: Record<string, string> = {
+  visa: 'Visa',
+  mastercard: 'Mastercard',
+  mir: 'Мир',
+  amex: 'Amex',
+  jcb: 'JCB',
+  unionpay: 'UnionPay',
+  discover: 'Discover'
+}
+
+/**
+ * The colours the payment systems are known by. A dot in that colour with
+ * the name beside it, because their marks are theirs and drawing them badly
+ * is worse than not drawing them at all.
+ */
+export const BRAND_COLOURS: Record<string, string> = {
+  visa: '#1a4fd6',
+  mastercard: '#eb001b',
+  mir: '#0f9d58',
+  amex: '#2e77bc',
+  jcb: '#0e4c96',
+  unionpay: '#e21836',
+  discover: '#ff6000'
+}
+
+/** The date on the front of a card: 04/30. */
+export const expiry = (card: { month: number; year: number }) =>
+  `${String(card.month).padStart(2, '0')}/${String(card.year).slice(2)}`
+
 function Entries({ offer, onClose }: { offer: AutofillOffer; onClose: () => void }) {
+  const heading =
+    offer.kind === 'card'
+      ? t('Сохранённые карты')
+      : offer.kind === 'address'
+        ? t('Сохранённые адреса')
+        : t('Сохранённые пароли')
+  const Mark = offer.kind === 'card' ? CardIcon : offer.kind === 'address' ? MapPin : Key
+
+  if (offer.kind === 'card' || offer.kind === 'address') {
+    const rows =
+      offer.kind === 'card'
+        ? offer.cards.map((card) => ({
+            id: card.id,
+            title: `•••• ${card.last4}`,
+            under: [card.label, expiry(card)].filter(Boolean).join(' · '),
+            brand: card.brand,
+            fill: () => window.browser.vaultFillCard(card.id)
+          }))
+        : offer.addresses.map((address) => ({
+            id: address.id,
+            title: address.label || address.city || t('Адрес'),
+            under: address.label ? address.city : '',
+            brand: null,
+            fill: () => window.browser.vaultFillAddress(address.id)
+          }))
+    return (
+      <div
+        className="animate-pop absolute inset-[20px] flex flex-col overflow-hidden rounded-card"
+        style={{
+          background: 'var(--elevated)',
+          border: '1px solid var(--line)',
+          boxShadow: 'var(--shadow-xl)',
+          backdropFilter: 'blur(30px) saturate(180%)'
+        }}
+      >
+        <div className="flex h-[30px] shrink-0 items-center gap-1.5 px-3 text-2xs text-faint">
+          <Mark width={11} height={11} />
+          <span className="truncate">{heading}</span>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto pb-1.5">
+          {rows.map((row) => (
+            <button
+              key={row.id}
+              className="flex h-11 w-full items-center gap-2.5 px-3 text-left transition-colors duration-100 hover:bg-[var(--surface-hover)]"
+              onClick={async () => {
+                await row.fill()
+                onClose()
+              }}
+            >
+              {row.brand === null ? (
+                <span
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-pill"
+                  style={{ background: 'var(--field-idle)', color: 'var(--text-dim)' }}
+                >
+                  <Mark width={13} height={13} />
+                </span>
+              ) : (
+                <span
+                  className="flex h-7 shrink-0 items-center gap-1.5 rounded-[9px] px-2 text-2xs font-medium"
+                  style={{
+                    background: `color-mix(in srgb, ${BRAND_COLOURS[row.brand] ?? 'var(--text-faint)'} 16%, transparent)`,
+                    color: 'var(--ink)'
+                  }}
+                >
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-pill"
+                    style={{ background: BRAND_COLOURS[row.brand] ?? 'var(--text-faint)' }}
+                  />
+                  {BRANDS[row.brand] ?? t('Другая карта')}
+                </span>
+              )}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm text-ink">{row.title}</span>
+                {row.under && (
+                  <span className="block truncate text-2xs text-faint">{row.under}</span>
+                )}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
       className="animate-pop absolute inset-[20px] flex flex-col overflow-hidden rounded-card"

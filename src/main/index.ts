@@ -857,6 +857,65 @@ function registerIpc() {
     return true
   })
   ipcMain.handle('vault:remove', (event, id: unknown) => vault.remove(str(id, 64)))
+
+  /* ---- cards and addresses, kept by the same key as the passwords ---- */
+  ipcMain.handle('vault:cards', () => vault.cards())
+  ipcMain.handle('vault:save-card', (event, input: unknown) => {
+    const data = (input ?? {}) as {
+      id?: string
+      label?: string
+      number?: string
+      holder?: string
+      month?: number
+      year?: number
+    }
+    return vault.saveCard({
+      id: data.id ? str(data.id, 64) : undefined,
+      label: str(data.label, 60),
+      number: str(data.number, 40),
+      holder: str(data.holder, 100),
+      month: num(data.month),
+      year: num(data.year)
+    })
+  })
+  // The number goes to the clipboard from here for the same reason a
+  // password does: after a round trip the window no longer holds the click.
+  ipcMain.handle('vault:copy-card', (event, id: unknown) => {
+    const value = vault.revealCard(str(id, 64))
+    if (!value) return false
+    clipboard.writeText(value)
+    return true
+  })
+  ipcMain.handle('vault:reveal-card', (event, id: unknown) => vault.revealCard(str(id, 64)))
+  ipcMain.handle('vault:remove-card', (event, id: unknown) => vault.removeCard(str(id, 64)))
+
+  ipcMain.handle('vault:addresses', () => vault.addresses())
+  ipcMain.handle('vault:save-address', (event, input: unknown) => {
+    const data = (input ?? {}) as { id?: string; label?: string; fields?: Record<string, unknown> }
+    const f = data.fields ?? {}
+    return vault.saveAddress({
+      id: data.id ? str(data.id, 64) : undefined,
+      label: str(data.label, 60),
+      fields: {
+        name: str(f.name, 120),
+        phone: str(f.phone, 40),
+        email: str(f.email, 120),
+        country: str(f.country, 80),
+        region: str(f.region, 80),
+        city: str(f.city, 80),
+        street: str(f.street, 200),
+        house: str(f.house, 40),
+        flat: str(f.flat, 40),
+        postcode: str(f.postcode, 20)
+      }
+    })
+  })
+  ipcMain.handle('vault:reveal-address', (event, id: unknown) => vault.revealAddress(str(id, 64)))
+  ipcMain.handle('vault:remove-address', (event, id: unknown) => vault.removeAddress(str(id, 64)))
+  ipcMain.handle('vault:fill-card', (event, id: unknown) => current(event).fillCard(str(id, 64)))
+  ipcMain.handle('vault:fill-address', (event, id: unknown) =>
+    current(event).fillAddress(str(id, 64))
+  )
   ipcMain.handle('vault:generate', (event, length?: unknown) => vault.generate(num(length) || 20))
   ipcMain.handle('vault:set-master', (event, currentPass: unknown, next: unknown) =>
     vault.setMasterPassword(currentPass === null ? null : str(currentPass, 400), str(next, 400))
@@ -1006,13 +1065,16 @@ function registerIpc() {
   ipcMain.on('autofill:field', (event, payload: unknown) => {
     const data = (payload ?? {}) as {
       host?: string
+      kind?: unknown
       x?: unknown
       y?: unknown
       width?: unknown
       height?: unknown
     }
     const px = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
-    current(event).handleAutofillField(event.sender.id, str(data.host, 200), {
+    const kind =
+      data.kind === 'card' || data.kind === 'address' ? data.kind : ('login' as const)
+    current(event).handleAutofillField(event.sender.id, str(data.host, 200), kind, {
       x: px(data.x),
       y: px(data.y),
       width: px(data.width),

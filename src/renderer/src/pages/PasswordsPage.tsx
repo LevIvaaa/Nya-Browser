@@ -1,14 +1,23 @@
 import { t } from '../i18n'
 import { useEffect, useMemo, useState } from 'react'
 import type { Credential, VaultState } from '../../../preload/index'
+import type { AddressMeta, CardMeta } from '../../../shared/types'
+import { AddressesTab, CardsTab } from './VaultCards'
+import { cx } from '../components/ui'
 import { ChevronRight, Copy, Cross, Eye, EyeOff, Key, Lock, LockOpen, Plus, Search, Shield, Wand } from '../components/Icons'
 import { EmptyState, Modal, Pill, TextField, formatDate } from '../components/ui'
 
 const normalizeHost = (host: string) => host.toLowerCase().replace(/^www\./, '')
 
+/** The three things a shop asks for, in the order it asks for them. */
+type Section = 'passwords' | 'cards' | 'addresses'
+
 export default function PasswordsPage() {
   const [state, setState] = useState<VaultState | null>(null)
   const [items, setItems] = useState<Credential[]>([])
+  const [cards, setCards] = useState<CardMeta[]>([])
+  const [addresses, setAddresses] = useState<AddressMeta[]>([])
+  const [section, setSection] = useState<Section>('passwords')
   const [query, setQuery] = useState('')
   const [revealed, setRevealed] = useState<Record<string, string>>({})
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -22,6 +31,8 @@ export default function PasswordsPage() {
   const refresh = async () => {
     setState(await window.browser.vaultState())
     setItems(await window.browser.vaultList())
+    setCards(await window.browser.vaultCards())
+    setAddresses(await window.browser.vaultAddresses())
   }
   useEffect(() => {
     void refresh()
@@ -66,25 +77,60 @@ export default function PasswordsPage() {
           <div className="mr-auto">
             <h1 className="text-[22px] font-semibold tracking-[-0.02em]">{t('Пароли')}</h1>
             <p className="text-sm text-dim">
-              {items.length} записей ·{' '}
+              {items.length + cards.length + addresses.length} записей ·{' '}
               {state?.mode === 'password' ? t('защищено мастер-паролем') : t('защищено ключом Windows')}
             </p>
           </div>
-          <div className="relative">
-            <Search width={14} height={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={t('Поиск по сайтам')}
-              className="field focus-ring pl-8"
-              style={{ width: 220 }}
-            />
-          </div>
-          <button className="btn" onClick={() => setAddOpen(true)}>
-            <Plus width={15} height={15} />
-            {t('Добавить')}
-          </button>
+          {section === 'passwords' && (
+            <>
+              <div className="relative">
+                <Search width={14} height={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={t('Поиск по сайтам')}
+                  className="field focus-ring pl-8"
+                  style={{ width: 220 }}
+                />
+              </div>
+              <button className="btn" onClick={() => setAddOpen(true)}>
+                <Plus width={15} height={15} />
+                {t('Добавить')}
+              </button>
+            </>
+          )}
         </header>
+
+        {/* One vault, three kinds of thing in it. */}
+        <div className="animate-fade-up mb-4 flex items-center gap-1">
+          {(
+            [
+              ['passwords', t('Пароли'), items.length],
+              ['cards', t('Карты'), cards.length],
+              ['addresses', t('Адреса'), addresses.length]
+            ] as Array<[Section, string, number]>
+          ).map(([id, name, count]) => (
+            <button
+              key={id}
+              className={cx(
+                'flex h-8 items-center gap-1.5 rounded-[10px] px-3 text-sm',
+                section === id ? 'font-medium text-ink' : 'text-dim hover:text-ink'
+              )}
+              style={{
+                background: section === id ? 'var(--surface-solid)' : 'transparent',
+                boxShadow: section === id ? 'var(--shadow-sm)' : 'none',
+                transition: 'background var(--t-fast) linear, color var(--t-fast) linear'
+              }}
+              onClick={() => {
+                setSection(id)
+                setError('')
+              }}
+            >
+              {name}
+              <span className="text-2xs tabular-nums text-faint">{count}</span>
+            </button>
+          ))}
+        </div>
 
         {/* vault status */}
         <div
@@ -129,7 +175,21 @@ export default function PasswordsPage() {
           </button>
         </div>
 
-        {items.length === 0 ? (
+        {section === 'cards' ? (
+          <CardsTab
+            cards={cards}
+            locked={locked}
+            onChange={() => void refresh()}
+            onError={setError}
+          />
+        ) : section === 'addresses' ? (
+          <AddressesTab
+            addresses={addresses}
+            locked={locked}
+            onChange={() => void refresh()}
+            onError={setError}
+          />
+        ) : items.length === 0 ? (
           <EmptyState
             icon={<Key width={26} height={26} />}
             title={t('Сохранённых паролей нет')}
@@ -225,10 +285,12 @@ export default function PasswordsPage() {
           </div>
         )}
 
-        <p className="mt-4 flex items-center gap-2 text-sm text-faint">
-          <Shield width={14} height={14} />
-          {t('Пароли шифруются по отдельности (AES-256-GCM); сайт и имя пользователя входят в аутентифицируемые данные, поэтому запись нельзя подставить другому сайту.')}
-        </p>
+        {section === 'passwords' && (
+          <p className="mt-4 flex items-center gap-2 text-sm text-faint">
+            <Shield width={14} height={14} />
+            {t('Пароли шифруются по отдельности (AES-256-GCM); сайт и имя пользователя входят в аутентифицируемые данные, поэтому запись нельзя подставить другому сайту.')}
+          </p>
+        )}
         {error && <p className="mt-2 text-sm" style={{ color: 'var(--warn)' }}>{error}</p>}
       </div>
 
