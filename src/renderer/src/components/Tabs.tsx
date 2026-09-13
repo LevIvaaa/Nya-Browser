@@ -522,18 +522,19 @@ export function TabStrip({
  * the strip is favicons and guesswork.
  */
 /**
- * Which big groups the strip shows, in the order it shows them: the one in
- * force first — so switching puts the new one in the same left-hand place —
- * then the pinned ones as they are. A pinned group that is also in force
- * keeps its own place in the row, since that is what pinning it was for.
+ * Which big groups the strip shows, in the order it shows them: the pinned
+ * ones first, because pinned means staying put, and then whichever else is
+ * open — the same shape as a pinned tab and the rest of the strip.
  *
  * The index travels with each, because an unnamed group is called by its
  * number and that number is where it sits in the list, not in this row.
  */
 function chipsOf(spaces: TabSpace[]): Array<{ space: TabSpace; index: number }> {
   const all = spaces.map((space, index) => ({ space, index }))
-  const lead = all.filter((item) => item.space.active && !item.space.pinned)
-  return [...lead, ...all.filter((item) => item.space.pinned)]
+  return [
+    ...all.filter((item) => item.space.pinned),
+    ...all.filter((item) => item.space.active && !item.space.pinned)
+  ]
 }
 
 /**
@@ -547,7 +548,7 @@ function SpaceChip({ space, index }: { space: TabSpace; index: number }) {
   const tint = space.colour || 'var(--accent)'
   return (
     <button
-      className="no-drag flex h-7 shrink-0 items-center gap-1.5 rounded-[9px] px-2 text-2xs font-semibold"
+      className="no-drag flex h-7 shrink-0 items-center gap-1.5 rounded-[9px] pl-1 pr-1.5 text-2xs font-semibold"
       style={{
         background: space.active ? `color-mix(in srgb, ${tint} 22%, transparent)` : 'transparent',
         color: space.active ? 'var(--ink)' : 'var(--text-dim)',
@@ -567,9 +568,10 @@ function SpaceChip({ space, index }: { space: TabSpace; index: number }) {
         void window.browser.setOverlay(`tabs-panel:${Math.round(box.left)}`)
       }}
     >
-      <span className="h-2 w-2 shrink-0 rounded-pill" style={{ background: tint }} />
       {/* How many tabs are in it, before its name. In a square of its own,
-          because a bare number beside a name reads as part of the name. */}
+          because a bare number beside a name reads as part of the name — and
+          it carries the group's colour, so the dot that used to sit in front
+          of it was the same thing said twice. */}
       <span
         className="flex h-[17px] min-w-[17px] shrink-0 items-center justify-center rounded-[6px] px-1 tabular-nums"
         style={{
