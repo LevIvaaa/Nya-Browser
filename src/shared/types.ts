@@ -289,8 +289,22 @@ export interface Playing {
   /** seconds; zero for a live stream */
   duration: number
   video: boolean
+  /** whether there is anything to seek along */
+  seekable: boolean
+  /** how fast it plays, 1 being ordinary; zero when it cannot be changed */
+  rate: number
+  /** how loud, from 0 to 1 */
+  volume: number
+  /** the page answers the next-track button */
+  next: boolean
+  /** the page answers the previous-track button */
+  prev: boolean
+  /** the video can be put in a window of its own */
+  pip: boolean
   /** the site it is playing on */
   host: string
+  /** the tab's own icon, for a page that offers no cover */
+  favicon: string
 }
 
 /**

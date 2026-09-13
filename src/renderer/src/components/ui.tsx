@@ -524,18 +524,21 @@ export function Avatar({
   color,
   crop,
   size = 26,
-  ring
+  ring,
+  /** a light in the avatar's own colours, for when it is hovered */
+  halo
 }: {
   avatar: string
   color: string
   crop?: AvatarCrop
   size?: number
   ring?: boolean
+  halo?: boolean
 }) {
   const url = avatarUrl(avatar)
-  return (
+  const face = (
     <span
-      className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-pill"
+      className="avatar-face inline-flex shrink-0 items-center justify-center overflow-hidden rounded-pill"
       style={{
         width: size,
         height: size,
@@ -546,6 +549,27 @@ export function Avatar({
       }}
     >
       {url ? <img src={url} alt="" draggable={false} style={avatarImageStyle(crop)} /> : avatar}
+    </span>
+  )
+  if (!halo) return face
+  return (
+    <span className="relative inline-flex shrink-0" style={{ width: size, height: size }}>
+      {/*
+        The same picture again, blurred out past its own edge: the light a
+        photograph gives off is made of the photograph, so it is different for
+        every person and needs nobody to choose a colour for it. An avatar
+        that is a letter or a face has no picture, so its colour does the
+        same work.
+      */}
+      <span
+        className="halo"
+        style={
+          url
+            ? { backgroundImage: `url("${url}")`, backgroundSize: 'cover', backgroundPosition: 'center' }
+            : { background: `linear-gradient(140deg, ${color}, color-mix(in srgb, ${color} 55%, #000))` }
+        }
+      />
+      {face}
     </span>
   )
 }

@@ -174,7 +174,18 @@ const api = {
   setSplitRatio: (ratio: number) => ipcRenderer.invoke('tab:split-ratio', ratio),
   mediaCommand: (
     tabId: number,
-    what: 'toggle' | 'play' | 'pause' | 'mute' | 'seek' | 'skip',
+    what:
+      | 'toggle'
+      | 'play'
+      | 'pause'
+      | 'mute'
+      | 'seek'
+      | 'skip'
+      | 'volume'
+      | 'rate'
+      | 'next'
+      | 'prev'
+      | 'pip',
     to?: number
   ): Promise<boolean> => ipcRenderer.invoke('media:command', tabId, what, to),
   capture: (kind: 'view' | 'full' | 'area'): Promise<boolean> =>
