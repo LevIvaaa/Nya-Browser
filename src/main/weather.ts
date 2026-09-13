@@ -3,13 +3,15 @@
 //
 // Open-Meteo is the only service this browser talks to that the user did not
 // navigate to, so it is worth saying what that costs: nothing goes out until
-// the user picks a place, the request carries a rounded coordinate and no key,
-// account or identifier, and the answer is cached so an open start page is not
-// a heartbeat. Turning the widget off stops it completely.
+// the picker is opened or a place is set, the requests are a city name and a
+// rounded coordinate with no key, account or identifier, and the answer is
+// cached so an open start page is not a heartbeat. Turning the widget off
+// stops it completely.
 // ---------------------------------------------------------------------------
 
-import { net } from 'electron'
+import { app, net } from 'electron'
 import { log } from './log'
+import { settings } from './settings'
 import type { Place, Weather } from '../shared/types'
 
 const GEOCODE = 'https://geocoding-api.open-meteo.com/v1/search'
@@ -35,24 +37,97 @@ async function ask(url: string): Promise<unknown> {
   }
 }
 
-/** Cities matching what the user typed, best match first. */
-export async function searchPlaces(query: string): Promise<Place[]> {
+/**
+ * Which languages a name could be written in, judged by the letters used.
+ * Nothing clever: enough to tell Georgian from Greek from Thai, because the
+ * alphabet a person types in narrows the answer more than anything else does.
+ */
+const SCRIPTS: Array<[RegExp, string[]]> = [
+  [/[Ѐ-ӿ]/, ['ru', 'uk', 'bg', 'sr']],
+  [/[Ͱ-Ͽ]/, ['el']],
+  [/[԰-֏]/, ['hy']],
+  [/[א-ת]/, ['he']],
+  [/[؀-ۿ]/, ['ar', 'fa', 'ur']],
+  [/[ऀ-ॿ]/, ['hi', 'mr', 'ne']],
+  [/[฀-๿]/, ['th']],
+  [/[Ⴀ-ჿ]/, ['ka']],
+  [/[가-힯]/, ['ko']],
+  [/[぀-ヿ]/, ['ja']],
+  [/[一-鿿]/, ['zh', 'ja']],
+  [/[a-z]/i, ['en', 'de', 'fr', 'es', 'it', 'pl', 'tr']]
+]
+
+/**
+ * The names are indexed one language at a time, and the language asked for
+ * decides which of them can be found at all: with Russian asked for, «Київ»,
+ * «თბილისი» and «أبوظبي» are no such place — measured against the service
+ * itself. So the search is made in the language of the browser first, then in
+ * the languages the letters could belong to, and it stops at the first answer
+ * that has something in it. Five tries at most, and only a search that came
+ * back empty ever gets past the first.
+ */
+function searchLanguages(query: string): string[] {
+  const mine = (settings.get().language || app.getLocale() || 'en').toLowerCase().split('-')[0]
+  const byLetters = SCRIPTS.find(([letters]) => letters.test(query))?.[1] ?? []
+  return [...new Set([mine, ...byLetters, 'en'])].slice(0, 5)
+}
+
+/**
+ * Cities matching what the user typed, best match first — or null, which
+ * means the service could not be reached. Empty and unreachable are
+ * different answers: one of them is not the person's fault.
+ */
+export async function searchPlaces(query: string): Promise<Place[] | null> {
   const q = query.trim()
   if (q.length < 2) return []
-  try {
-    const url = `${GEOCODE}?name=${encodeURIComponent(q)}&count=6&language=ru&format=json`
-    const data = (await ask(url)) as { results?: Record<string, unknown>[] }
-    return (data.results ?? []).map((r) => ({
-      name: String(r.name ?? ''),
-      region: String(r.admin1 ?? ''),
-      country: String(r.country ?? ''),
-      lat: Number(r.latitude ?? 0),
-      lon: Number(r.longitude ?? 0)
-    }))
-  } catch (error) {
-    log('weather: search failed', String(error))
-    return []
+  let reached = false
+  for (const language of searchLanguages(q)) {
+    try {
+      const url = `${GEOCODE}?name=${encodeURIComponent(q)}&count=6&language=${language}&format=json`
+      const data = (await ask(url)) as { results?: Record<string, unknown>[] }
+      reached = true
+      const found = (data.results ?? []).map((r) => ({
+        name: String(r.name ?? ''),
+        region: String(r.admin1 ?? ''),
+        country: String(r.country ?? ''),
+        lat: Number(r.latitude ?? 0),
+        lon: Number(r.longitude ?? 0)
+      }))
+      // The place actually named first: the service ranks by how big a thing
+      // is, so «Warszawa Neighborhood Historic District» can come before the
+      // city somebody plainly typed the name of.
+      const named = q.toLocaleLowerCase()
+      found.sort(
+        (a, b) =>
+          Number(b.name.toLocaleLowerCase() === named) -
+          Number(a.name.toLocaleLowerCase() === named)
+      )
+      if (found.length > 0) return found
+    } catch (error) {
+      log('weather: search failed', String(error))
+    }
   }
+  return reached ? [] : null
+}
+
+/**
+ * The city this computer's clock is set by. A timezone is named after one,
+ * it is already on the machine, and reading it tells nobody anything — the
+ * search it leads to is the same search typing that name would make. It is
+ * a suggestion in the picker, not a decision: nothing is chosen by it.
+ */
+export async function guessPlace(): Promise<Place | null> {
+  let zone = ''
+  try {
+    zone = Intl.DateTimeFormat().resolvedOptions().timeZone ?? ''
+  } catch {
+    return null
+  }
+  // Europe/Kyiv, America/Argentina/Buenos_Aires — the city is the last part.
+  const city = (zone.split('/').pop() ?? '').replace(/_/g, ' ')
+  if (city.length < 2) return null
+  const found = await searchPlaces(city)
+  return found?.[0] ?? null
 }
 
 export async function currentWeather(lat: number, lon: number): Promise<Weather | null> {

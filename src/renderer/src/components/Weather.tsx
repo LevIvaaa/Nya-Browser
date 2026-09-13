@@ -323,30 +323,57 @@ function PlaceDialog({
   onClose: () => void
   onPick: (place: WeatherSettings) => void
 }) {
-  const [query, setQuery] = useState(place.place)
+  // Empty, not the city already set: that name with its region reads as a
+  // search nothing matches, and the field is here to type a new one in.
+  const [query, setQuery] = useState('')
   const [results, setResults] = useState<Place[]>([])
   const [searching, setSearching] = useState(false)
+  /** the service could not be reached — which is not «no such city» */
+  const [offline, setOffline] = useState(false)
+  /** the city this computer's clock is set by, offered before anything is typed */
+  const [guess, setGuess] = useState<Place | null>(null)
+  const [attempt, setAttempt] = useState(0)
 
   // Typed letters are not sent one by one: the search waits for a pause.
   useEffect(() => {
     const text = query.trim()
     if (text.length < 2) {
       setResults([])
+      setOffline(false)
       return
     }
+    let alive = true
     setSearching(true)
     const timer = setTimeout(() => {
       void window.browser.searchPlaces(text).then((found) => {
-        setResults(found)
+        // An answer to a search you have moved on from is not an answer.
+        if (!alive) return
+        setResults(found ?? [])
+        setOffline(found === null)
         setSearching(false)
       })
     }, 400)
-    return () => clearTimeout(timer)
-  }, [query])
+    return () => {
+      alive = false
+      clearTimeout(timer)
+    }
+  }, [query, attempt])
+
+  // Asked for once, when the picker is opened: the timezone is already on
+  // this machine, and it usually names the city you are in.
+  useEffect(() => {
+    let alive = true
+    void window.browser.guessPlace().then((found) => {
+      if (alive) setGuess(found)
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
 
   const choose = (found: Place) => {
     onPick({
-      // "Киев, Киев" helps nobody: a city that names its own region says it once.
+      // A city that gives its name to the region around it says it once.
       place: [found.name, found.region === found.name ? '' : found.region]
         .filter(Boolean)
         .join(', ')
@@ -390,7 +417,7 @@ function PlaceDialog({
       <div className="flex flex-col gap-3">
         <label className="flex flex-col gap-1.5">
           <span className="text-sm text-dim">{t('Город')}</span>
-          <TextField value={query} onChange={setQuery} placeholder={t('Например, Киев')} width="100%" autoFocus />
+          <TextField value={query} onChange={setQuery} width="100%" autoFocus />
         </label>
 
         <div className="flex min-h-[120px] flex-col">
@@ -409,19 +436,47 @@ function PlaceDialog({
               </span>
             </button>
           ))}
-          {results.length === 0 && (
-            <p className="px-2 py-2 text-sm text-faint">
-              {searching
-                ? t('Ищем…')
-                : query.trim().length < 2
-                  ? t('Начните вводить название города')
-                  : t('Ничего не нашлось')}
-            </p>
-          )}
+          {results.length === 0 &&
+            (searching ? (
+              <p className="px-2 py-2 text-sm text-faint">{t('Ищем…')}</p>
+            ) : offline ? (
+              // Not «no such city»: the difference matters to whoever is
+              // sitting there wondering whether they spelled it wrong.
+              <div className="flex flex-col items-start gap-1 px-2 py-2">
+                <p className="text-sm text-faint">{t('Нет связи с сервисом погоды')}</p>
+                <button className="btn" onClick={() => setAttempt((n) => n + 1)}>
+                  {t('Попробовать снова')}
+                </button>
+              </div>
+            ) : query.trim().length < 2 ? (
+              guess ? (
+                <>
+                  <p className="px-2 pt-1 text-2xs uppercase tracking-wider text-faint">
+                    {t('Рядом с вами')}
+                  </p>
+                  <button
+                    onClick={() => choose(guess)}
+                    className="flex items-baseline gap-2 rounded-[9px] px-2 py-2 text-left hover:bg-[var(--surface-hover)]"
+                    style={{ transition: 'background var(--t-fast) linear' }}
+                  >
+                    <span className="text-base text-ink">{guess.name}</span>
+                    <span className="truncate text-sm text-faint">
+                      {[guess.region, guess.country].filter(Boolean).join(', ')}
+                    </span>
+                  </button>
+                </>
+              ) : (
+                <p className="px-2 py-2 text-sm text-faint">
+                  {t('Начните вводить название города')}
+                </p>
+              )
+            ) : (
+              <p className="px-2 py-2 text-sm text-faint">{t('Ничего не нашлось')}</p>
+            ))}
         </div>
 
         <p className="text-2xs text-faint">
-          {t('Погода приходит с open-meteo.com. Запрос уходит только когда выбран город, без ключей и без вашего точного адреса — координаты округляются.')}
+          {t('Погода приходит с open-meteo.com: поиск города и погода для него, без ключей и без вашего точного адреса — координаты округляются.')}
         </p>
       </div>
     </Modal>

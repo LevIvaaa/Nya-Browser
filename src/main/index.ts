@@ -21,7 +21,7 @@ import { translateBatch } from './translate'
 import { engine, filterStatus, hideCss, loadFilters } from './filters'
 import { addExtension, listExtensions, removeExtension, revealExtension } from './extensions'
 import { favicons } from './favicons'
-import { currentWeather, searchPlaces } from './weather'
+import { currentWeather, guessPlace, searchPlaces } from './weather'
 import { applyMainLanguage } from './i18n'
 import { isKnownLanguage } from '../shared/i18n'
 import {
@@ -724,6 +724,7 @@ function registerIpc() {
   })
   /* ---- weather ---- */
   ipcMain.handle('weather:search', (_event, query: unknown) => searchPlaces(str(query, 80)))
+  ipcMain.handle('weather:guess', () => guessPlace())
   ipcMain.handle('weather:current', (_event, lat: unknown, lon: unknown) => {
     const latitude = Number(lat)
     const longitude = Number(lon)

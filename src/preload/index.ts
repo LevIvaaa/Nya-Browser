@@ -201,7 +201,9 @@ const api = {
   pickDownloadDir: (): Promise<string | null> => ipcRenderer.invoke('settings:download-dir'),
 
   /* ---- weather ---- */
-  searchPlaces: (query: string): Promise<Place[]> => ipcRenderer.invoke('weather:search', query),
+  searchPlaces: (query: string): Promise<Place[] | null> =>
+    ipcRenderer.invoke('weather:search', query),
+  guessPlace: (): Promise<Place | null> => ipcRenderer.invoke('weather:guess'),
   weather: (lat: number, lon: number): Promise<Weather | null> =>
     ipcRenderer.invoke('weather:current', lat, lon),
 
