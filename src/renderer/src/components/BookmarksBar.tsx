@@ -7,7 +7,7 @@ export default function BookmarksBar({ items, onManage }: { items: Bookmark[]; o
   if (items.length === 0) return null
   return (
     <div className="drag flex items-center gap-1 overflow-hidden px-2.5 pb-1.5">
-      <div className="no-drag flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+      <div className="no-drag stagger flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
         {items.map((item) => (
           <button
             key={item.id}
@@ -15,7 +15,7 @@ export default function BookmarksBar({ items, onManage }: { items: Bookmark[]; o
             onAuxClick={(event) => event.button === 1 && void window.browser.newTab(item.url, true)}
             onMouseEnter={() => void window.browser.preconnect(item.url)}
             title={item.url}
-            className="animate-fade flex h-[26px] shrink-0 items-center gap-1.5 rounded-[9px] px-2 text-sm text-dim hover:text-ink"
+            className="flex h-[26px] shrink-0 items-center gap-1.5 rounded-[9px] px-2 text-sm text-dim hover:text-ink"
             style={{ transition: 'background var(--t-fast) linear, color var(--t-fast) linear' }}
             onMouseOver={(event) => (event.currentTarget.style.background = 'var(--surface-hover)')}
             onMouseOut={(event) => (event.currentTarget.style.background = 'transparent')}

@@ -7,7 +7,7 @@ export default function Toasts({ items }: { items: Toast[] }) {
       {items.map((toast) => (
         <div
           key={toast.id}
-          className="animate-toast rounded-pill px-4 py-2 text-sm font-medium"
+          className={`${toast.going ? 'animate-toast-out' : 'animate-toast'} rounded-pill px-4 py-2 text-sm font-medium`}
           style={{
             background: 'var(--elevated)',
             border: '1px solid var(--line)',

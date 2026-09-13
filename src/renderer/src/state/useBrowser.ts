@@ -24,6 +24,8 @@ const FALLBACK_ENGINE: SearchEngine = {
 
 export interface Toast {
   id: number
+  /** on its way out, and drawn as such */
+  going?: boolean
   message: string
 }
 
@@ -55,7 +57,13 @@ export function useBrowser() {
   const pushToast = useCallback((message: string) => {
     const id = Date.now() + Math.random()
     setToasts((list) => [...list, { id, message }].slice(-3))
-    setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), 3200)
+    // Two steps: marked as going, then taken away — so it can be seen to
+    // leave rather than simply stop existing.
+    setTimeout(
+      () => setToasts((list) => list.map((t) => (t.id === id ? { ...t, going: true } : t))),
+      3200
+    )
+    setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), 3460)
   }, [])
 
   useEffect(() => {

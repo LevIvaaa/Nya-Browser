@@ -64,7 +64,7 @@ export default function BookmarksPage({
                 <Folder width={12} height={12} />
                 {folder}
               </h2>
-              <div className="card overflow-hidden">
+              <div className="card stagger overflow-hidden">
                 {list.map((item) => (
                   <div
                     key={item.id}

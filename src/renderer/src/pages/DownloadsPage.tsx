@@ -29,7 +29,7 @@ export default function DownloadsPage({ items }: { items: DownloadItem[] }) {
         {items.length === 0 ? (
           <EmptyState icon={<Download width={26} height={26} />} title={t('Загрузок пока нет')} hint={t('Скачанные файлы появятся здесь.')} />
         ) : (
-          <div className="card overflow-hidden">
+          <div className="card stagger overflow-hidden">
             {items.map((item) => {
               const active = item.state === 'progressing' || item.state === 'paused'
               const pct = item.total > 0 ? Math.round((item.received / item.total) * 100) : 0
