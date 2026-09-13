@@ -34,7 +34,9 @@ export default function TabsPanel({
   const [name, setName] = useState('')
   /** And the one whose colour is being picked. */
   const [painting, setPainting] = useState<number | null>(null)
-  const width = 320
+  // Narrow enough to sit under a chip rather than across the strip; a tab's
+  // title truncates either way, and the list is read down, not across.
+  const width = 268
   const left = Math.max(8, Math.min(x, window.innerWidth - width - 8))
   const active = tabs.find((tab) => tab.active)
   const grouped = new Map<number, TabState[]>()
