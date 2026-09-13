@@ -1,7 +1,7 @@
 import { t } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
 import type { InternalPage, Settings, TabGroup, TabSpace, TabState } from '../../../shared/types'
-import { ChevronDown, Clock, Cross, Download, Gear, Globe, Key, Pin, Plus, Sleep, Star, Tabs, Volume, VolumeOff } from './Icons'
+import { ChevronDown, Clock, Cross, Download, Gear, Globe, Key, Pin, Plus, Sleep, Star, Volume, VolumeOff } from './Icons'
 import { cx } from './ui'
 
 /** The same icons these pages carry in the toolbar and in the menu. */
@@ -472,18 +472,14 @@ export function TabStrip({
       onDragEnd={reorder.onDragEnd}
       onDoubleClick={() => window.browser.maximize()}
     >
-      <TabsButton
-        space={spaces.find((item) => item.active)}
-        named={spaces.some((item) => item.active && item.pinned)}
-      />
-      {/* The pinned ones, side by side, before the tabs of whichever is open. */}
-      {spaces.some((space) => space.pinned) && (
-        <div className="flex shrink-0 items-center gap-0.5 pr-1">
-          {spaces.map((space, index) =>
-            space.pinned ? <SpaceChip key={space.id} space={space} index={index} /> : null
-          )}
-        </div>
-      )}
+      {/* The group in force, and any pinned beside it. */}
+      <div className="flex shrink-0 items-center gap-0.5 pr-1">
+        {spaces.map((space, index) =>
+          space.pinned || space.active ? (
+            <SpaceChip key={space.id} space={space} index={index} />
+          ) : null
+        )}
+      </div>
       <div className="flex min-w-0 items-center gap-1" style={{ flex: '0 1 auto' }}>
         {rows.map((row) =>
           row.kind === 'group' ? (
@@ -528,70 +524,47 @@ export function TabStrip({
  * the strip is favicons and guesswork.
  */
 /**
- * A pinned big group, in the strip next to the others. A group used every
- * day should be one click away rather than one click inside a list.
+ * A big group in the strip: the one in force, and any that are pinned.
+ *
+ * The one in force carries the arrow and opens the list of tabs and groups —
+ * it used to be a separate icon beside it, which said the same thing twice.
+ * The others switch to themselves.
  */
 function SpaceChip({ space, index }: { space: TabSpace; index: number }) {
+  const tint = space.colour || 'var(--accent)'
   return (
     <button
       className="no-drag flex h-7 shrink-0 items-center gap-1.5 rounded-[9px] px-2 text-2xs font-semibold"
       style={{
-        background: space.active
-          ? `color-mix(in srgb, ${space.colour || 'var(--accent)'} 22%, transparent)`
-          : 'transparent',
+        background: space.active ? `color-mix(in srgb, ${tint} 22%, transparent)` : 'transparent',
         color: space.active ? 'var(--ink)' : 'var(--text-dim)',
         boxShadow: space.active
-          ? `inset 0 0 0 1px color-mix(in srgb, ${space.colour || 'var(--accent)'} 45%, transparent)`
+          ? `inset 0 0 0 1px color-mix(in srgb, ${tint} 45%, transparent)`
           : 'none',
         transition: 'background var(--t-fast) linear, color var(--t-fast) linear'
       }}
-      title={space.name || t('Группа {n}', { n: index + 1 })}
-      onClick={() => void window.browser.switchSpace(space.id)}
-    >
-      <span
-        className="h-2 w-2 shrink-0 rounded-pill"
-        style={{ background: space.colour || 'var(--accent)' }}
-      />
-      <span className="max-w-[110px] truncate">
-        {space.name || t('Группа {n}', { n: index + 1 })}
-      </span>
-      <span className="tabular-nums opacity-60">{space.count}</span>
-    </button>
-  )
-}
-
-function TabsButton({
-  space,
-  named
-}: {
-  space?: TabSpace
-  /** whether a pinned chip is already naming the group in force */
-  named?: boolean
-}) {
-  return (
-    <button
-      className="no-drag flex h-7 shrink-0 items-center gap-1.5 rounded-[9px] px-1.5 text-2xs font-semibold text-dim hover:bg-[var(--surface-hover)]"
-      title={t('Все вкладки и группы')}
-      aria-label={t('Все вкладки и группы')}
+      title={
+        space.active
+          ? t('Все вкладки и группы')
+          : space.name || t('Группа {n}', { n: index + 1 })
+      }
       onClick={(event) => {
+        if (!space.active) return void window.browser.switchSpace(space.id)
         const box = (event.currentTarget as HTMLElement).getBoundingClientRect()
         void window.browser.setOverlay(`tabs-panel:${Math.round(box.left)}`)
       }}
     >
-      {/* Which big group these tabs belong to — unless its own chip is already
-          in the strip saying so, in which case this is just the way in. */}
-      {!named && space?.colour && (
-        <span className="h-2 w-2 rounded-pill" style={{ background: space.colour }} />
-      )}
-      {!named && space?.name && <span className="max-w-[120px] truncate">{space.name}</span>}
-      {/* The count was here and it was noise: every chip carries its own, and
-          this button is a way in, not a readout. */}
-      <Tabs width={13} height={13} />
-      <ChevronDown width={11} height={11} />
+      <span className="h-2 w-2 shrink-0 rounded-pill" style={{ background: tint }} />
+      {/* How many tabs are in it, before its name: "4 Работа" reads as a
+          sentence, and trailing off the end read as a stray number. */}
+      <span className="tabular-nums opacity-60">{space.count}</span>
+      <span className="max-w-[120px] truncate">
+        {space.name || t('Группа {n}', { n: index + 1 })}
+      </span>
+      {space.active && <ChevronDown width={11} height={11} />}
     </button>
   )
 }
-
 /* ---------------------------------------------------------------- vertical */
 export function TabRail({
   tabs,
@@ -635,13 +608,13 @@ export function TabRail({
         </button>
       </div>
 
-      {spaces.some((space) => space.pinned) && (
-        <div className="flex flex-wrap gap-1 px-0.5 pb-1">
-          {spaces.map((space, index) =>
-            space.pinned ? <SpaceChip key={space.id} space={space} index={index} /> : null
-          )}
-        </div>
-      )}
+      <div className="flex flex-wrap gap-1 px-0.5 pb-1">
+        {spaces.map((space, index) =>
+          space.pinned || space.active ? (
+            <SpaceChip key={space.id} space={space} index={index} />
+          ) : null
+        )}
+      </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto overflow-x-hidden pr-0.5">
         {rows.map((row) =>
