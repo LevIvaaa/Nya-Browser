@@ -10,6 +10,7 @@ import type {
   CardMeta,
   FilterStatus,
   FindState,
+  Playing,
   InstalledExtension,
   UpdateState,
   WidevineState,
@@ -167,6 +168,12 @@ const api = {
   uiAction: (action: 'find'): Promise<void> => ipcRenderer.invoke('ui:action', action),
   translatePage: (): Promise<boolean> => ipcRenderer.invoke('nav:translate'),
   toggleReader: () => ipcRenderer.invoke('nav:reader'),
+  playing: (): Promise<Playing[]> => ipcRenderer.invoke('media:list'),
+  mediaCommand: (
+    tabId: number,
+    what: 'toggle' | 'play' | 'pause' | 'mute' | 'seek' | 'skip',
+    to?: number
+  ): Promise<boolean> => ipcRenderer.invoke('media:command', tabId, what, to),
   capture: (kind: 'view' | 'full' | 'area'): Promise<boolean> =>
     ipcRenderer.invoke('nav:capture', kind),
   addToHome: (): Promise<boolean> => ipcRenderer.invoke('nav:add-to-home'),
@@ -366,6 +373,7 @@ const api = {
   onPageSection: (cb: (page: string) => void) => on<string>('state:page-section', cb),
   onUpdate: (cb: (state: UpdateState) => void) => on<UpdateState>('state:update', cb),
   onFind: (cb: (state: FindState) => void) => on<FindState>('state:find', cb),
+  onMedia: (cb: (list: Playing[]) => void) => on<Playing[]>('state:media', cb),
   onToast: (cb: (message: string) => void) => on<string>('toast', cb),
   onShortcut: (cb: (action: string) => void) => on<string>('shortcut', cb)
 }

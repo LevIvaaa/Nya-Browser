@@ -269,6 +269,30 @@ export interface AddressMeta {
   used: number
 }
 
+/**
+ * Something playing in a tab, as the tab itself describes it. A page that
+ * fills in the Media Session API — which is most of them, because that is
+ * what feeds the system's own media popup — gives the real title and cover;
+ * the rest give their own title, which is enough to tell one tab from
+ * another.
+ */
+export interface Playing {
+  tabId: number
+  title: string
+  artist: string
+  /** cover art, as a url the page gave */
+  art: string
+  playing: boolean
+  muted: boolean
+  /** seconds */
+  position: number
+  /** seconds; zero for a live stream */
+  duration: number
+  video: boolean
+  /** the site it is playing on */
+  host: string
+}
+
 /** How a search on the page is going: how many, and which one you are on. */
 export interface FindState {
   /** what was searched for, so a count from an old search is not shown against a new one */

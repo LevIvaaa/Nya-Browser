@@ -4,6 +4,7 @@ import {
   app,
   clipboard,
   dialog,
+  globalShortcut,
   nativeImage,
   nativeTheme,
   screen,
@@ -53,6 +54,7 @@ import type {
   Profile,
   InstalledApp,
   PrintOptions,
+  Playing,
   SiteInfo,
   SiteRules,
   WebAppCandidate,
@@ -708,6 +710,10 @@ export class BrowserWindow {
         }
         this.confirmedClose = true
       }
+      // A window that is gone is not playing anything, and must not be
+      // holding the machine's media keys.
+      this.nowPlaying.clear()
+      this.dropMediaKeys()
       this.persistSession()
       this.saveBounds()
       settings.flush()
@@ -1612,6 +1618,7 @@ export class BrowserWindow {
       this.send('state:closed', this.closedStack.slice(-10).reverse())
     }
     tab.destroy(this.win)
+    if (this.nowPlaying.delete(tab.id)) this.sendMedia()
 
     // The last tab out of a group takes the group with it. One left behind
     // was a row in the list holding nothing, which could not be opened,
@@ -2211,6 +2218,107 @@ export class BrowserWindow {
     }
     const image = kind === 'full' ? await this.wholePage(wc) : await wc.capturePage()
     return this.keepPicture(image)
+  }
+
+  /* --------------------------------------------------------------- media */
+
+  /** The window the media keys are pointed at, if any. */
+  private static mediaKeys: BrowserWindow | null = null
+
+  /** What each tab says it is playing, by tab id. */
+  private nowPlaying = new Map<number, Playing>()
+
+  /**
+   * A tab said what it is playing, or that it has stopped. The list is the
+   * browser's, not the tab's: what people want is one place that answers
+   * «where is that sound coming from».
+   */
+  handleMediaState(webContentsId: number, state: Omit<Playing, 'tabId' | 'host'> | null) {
+    const tab = this.tabs.find((t) => t.wc?.id === webContentsId)
+    if (!tab) return
+    if (!state) {
+      if (!this.nowPlaying.delete(tab.id)) return
+    } else {
+      let host = ''
+      try {
+        host = new URL(tab.url).hostname.replace(/^www\./, '')
+      } catch {
+        /* a page with no address of its own */
+      }
+      this.nowPlaying.set(tab.id, { ...state, tabId: tab.id, host })
+    }
+    this.sendMedia()
+  }
+
+  private sendMedia() {
+    // Playing first, then whatever was played last — the order a person
+    // would put them in.
+    const list = [...this.nowPlaying.values()].sort(
+      (a, b) => Number(b.playing) - Number(a.playing)
+    )
+    this.send('state:media', list)
+    this.syncMediaKeys()
+  }
+
+  /**
+   * The keys on a keyboard that say play and skip. They are taken from the
+   * whole machine, so they are taken only while this window is the one making
+   * a sound, and given back the moment it stops — a browser that keeps them
+   * after the video ended is a browser that broke somebody's music player.
+   */
+  private syncMediaKeys() {
+    const wants = this.anythingPlaying()
+    const owner = BrowserWindow.mediaKeys
+    if (wants && owner !== this) {
+      if (owner) owner.dropMediaKeys()
+      BrowserWindow.mediaKeys = this
+      try {
+        globalShortcut.register('MediaPlayPause', () => this.mediaKey('toggle'))
+        globalShortcut.register('MediaNextTrack', () => this.mediaKey('skip', 10))
+        globalShortcut.register('MediaPreviousTrack', () => this.mediaKey('skip', -10))
+      } catch {
+        /* another application holds them; it is welcome to them */
+      }
+    } else if (!wants && owner === this) {
+      this.dropMediaKeys()
+    }
+  }
+
+  private dropMediaKeys() {
+    if (BrowserWindow.mediaKeys === this) BrowserWindow.mediaKeys = null
+    for (const key of ['MediaPlayPause', 'MediaNextTrack', 'MediaPreviousTrack']) {
+      try {
+        globalShortcut.unregister(key)
+      } catch {
+        /* never registered */
+      }
+    }
+  }
+
+  /** Everything playing in this window. */
+  playingNow(): Playing[] {
+    return [...this.nowPlaying.values()].sort((a, b) => Number(b.playing) - Number(a.playing))
+  }
+
+  /** Tells one tab's player what to do. */
+  mediaCommand(tabId: number, what: 'toggle' | 'play' | 'pause' | 'mute' | 'seek' | 'skip', to?: number) {
+    const tab = this.tabs.find((t) => t.id === tabId)
+    const wc = tab?.wc
+    if (!wc || wc.isDestroyed()) return false
+    wc.send('media:command', { do: what, to })
+    return true
+  }
+
+  /** Whether the media keys should be listened for at all. */
+  anythingPlaying() {
+    return [...this.nowPlaying.values()].some((item) => item.playing)
+  }
+
+  /** The one the media keys act on: whatever is playing, newest first. */
+  mediaKey(what: 'toggle' | 'skip', to?: number) {
+    const first = this.playingNow()[0]
+    if (!first) return false
+    return this.mediaCommand(first.tabId, what, to)
   }
 
   /** Whether a picture's area is being drawn over the page right now. */

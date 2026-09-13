@@ -6,6 +6,7 @@ import { AppMenu, ProfileMenu } from './components/Menus'
 import GroupColour from './components/GroupColour'
 import AutofillCard from './components/AutofillOffer'
 import InstallApp from './components/InstallApp'
+import MediaPanel from './components/MediaPanel'
 import PageMenu from './components/PageMenu'
 import PrintSheet from './components/PrintSheet'
 import SavePassword from './components/SavePassword'
@@ -82,6 +83,9 @@ export default function OverlayApp() {
           x={Number(mode.slice('tabs-panel:'.length)) || 0}
           onClose={close}
         />
+      )}
+      {mode.startsWith('media:') && (
+        <MediaPanel x={Number(mode.slice('media:'.length)) || 0} onClose={close} />
       )}
       {mode.startsWith('page-menu:') && (
         <PageMenu
