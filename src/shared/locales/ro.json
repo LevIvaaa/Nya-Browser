@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "Un dosar cu manifest.json sau un fișier .crx ori .zip — se despachetează singur",
   "Папка с данными": "Dosarul cu date",
   "Пароли": "Parole",
+  "Пароли и карты": "Parole și carduri",
   "Пароли из CSV": "Parole din CSV",
   "Пароли не совпадают": "Parolele nu coincid",
   "Пароли под замком": "Parolele sunt blocate",

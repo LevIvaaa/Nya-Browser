@@ -165,7 +165,7 @@ const INTERNAL_PAGES: Record<InternalPage, string> = {
   history: 'История',
   downloads: 'Загрузки',
   bookmarks: 'Закладки',
-  passwords: 'Пароли'
+  passwords: 'Пароли и карты'
 }
 
 class Tab {

@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "manifest.json olan qovluq, ya da .crx və ya .zip faylı — özü açılacaq",
   "Папка с данными": "Məlumat qovluğu",
   "Пароли": "Parollar",
+  "Пароли и карты": "Parollar və kartlar",
   "Пароли из CSV": "CSV-dən parollar",
   "Пароли не совпадают": "Parollar uyğun gəlmir",
   "Пароли под замком": "Parollar kilidlidir",

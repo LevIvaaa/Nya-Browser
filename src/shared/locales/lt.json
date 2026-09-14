@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "Aplankas su manifest.json arba .crx ar .zip failas — išsipakuos pats",
   "Папка с данными": "Duomenų aplankas",
   "Пароли": "Slaptažodžiai",
+  "Пароли и карты": "Slaptažodžiai ir kortelės",
   "Пароли из CSV": "Slaptažodžiai iš CSV",
   "Пароли не совпадают": "Slaptažodžiai nesutampa",
   "Пароли под замком": "Slaptažodžiai užrakinti",

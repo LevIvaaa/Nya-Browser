@@ -75,7 +75,7 @@ export default function PasswordsPage() {
       <div className="mx-auto w-full max-w-[820px] px-6 py-8">
         <header className="animate-fade-up mb-5 flex flex-wrap items-center gap-3">
           <div className="mr-auto">
-            <h1 className="text-[22px] font-semibold tracking-[-0.02em]">{t('Пароли')}</h1>
+            <h1 className="text-[22px] font-semibold tracking-[-0.02em]">{t('Пароли и карты')}</h1>
             <p className="text-sm text-dim">
               {items.length + cards.length + addresses.length} записей ·{' '}
               {state?.mode === 'password' ? t('защищено мастер-паролем') : t('защищено ключом Windows')}

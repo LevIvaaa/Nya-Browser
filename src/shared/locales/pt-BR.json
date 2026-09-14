@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "Uma pasta com manifest.json, ou um arquivo .crx ou .zip — descompacta sozinho",
   "Папка с данными": "Pasta de dados",
   "Пароли": "Senhas",
+  "Пароли и карты": "Senhas e cartões",
   "Пароли из CSV": "Senhas de um CSV",
   "Пароли не совпадают": "As senhas não coincidem",
   "Пароли под замком": "As senhas estão trancadas",

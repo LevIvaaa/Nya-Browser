@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "Mapa z manifest.json ali datoteka .crx oziroma .zip — sama se razpakira",
   "Папка с данными": "Mapa s podatki",
   "Пароли": "Gesla",
+  "Пароли и карты": "Gesla in kartice",
   "Пароли из CSV": "Gesla iz CSV",
   "Пароли не совпадают": "Gesli se ne ujemata",
   "Пароли под замком": "Gesla so zaklenjena",

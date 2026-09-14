@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "A folder with manifest.json, or a .crx or .zip file — it unpacks itself",
   "Папка с данными": "Data folder",
   "Пароли": "Passwords",
+  "Пароли и карты": "Passwords and cards",
   "Пароли из CSV": "Passwords from CSV",
   "Пароли не совпадают": "The passwords do not match",
   "Пароли под замком": "Passwords are locked",

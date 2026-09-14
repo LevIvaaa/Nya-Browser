@@ -89,7 +89,7 @@ const BADGE: Record<
   mir: { from: '#13b467', to: '#087a42', word: 'МИР', size: 10.5 },
   amex: { from: '#3a8fe0', to: '#1b5f9e', word: 'AMEX', size: 9.5 },
   jcb: { from: '#2a6fd0', to: '#0e3f82', word: 'JCB', size: 10.5 },
-  discover: { from: '#ff8a2b', to: '#d85c00', word: 'DISCOVER', size: 6.6 },
+  discover: { from: '#ff8a2b', to: '#d85c00', word: 'DISCOVER', size: 6.2 },
   mastercard: { from: '#2a2b31', to: '#16171b', mark: 'mastercard' },
   unionpay: { from: '#2a2b31', to: '#16171b', mark: 'unionpay' }
 }
@@ -144,7 +144,7 @@ export function BrandBadge({ brand, size = 'sm' }: { brand: string; size?: 'sm' 
             fontSize={known?.size ?? 8}
             fontWeight="700"
             fontStyle={known?.italic ? 'italic' : 'normal'}
-            letterSpacing={known?.word && known.word.length > 5 ? '0.1' : '0.6'}
+            letterSpacing={known?.word && known.word.length > 5 ? '-0.05' : '0.6'}
             style={{ fontFamily: 'inherit' }}
           >
             {known?.word ?? '••••'}

@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "Una carpeta amb manifest.json, o un fitxer .crx o .zip — es desempaqueta sol",
   "Папка с данными": "Carpeta de dades",
   "Пароли": "Contrasenyes",
+  "Пароли и карты": "Contrasenyes i targetes",
   "Пароли из CSV": "Contrasenyes d'un CSV",
   "Пароли не совпадают": "Les contrasenyes no coincideixen",
   "Пароли под замком": "Les contrasenyes estan bloquejades",

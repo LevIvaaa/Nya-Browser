@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "Kansio, jossa on manifest.json, tai .crx- tai .zip-tiedosto — se purkautuu itse",
   "Папка с данными": "Datakansio",
   "Пароли": "Salasanat",
+  "Пароли и карты": "Salasanat ja kortit",
   "Пароли из CSV": "Salasanat CSV-tiedostosta",
   "Пароли не совпадают": "Salasanat eivät täsmää",
   "Пароли под замком": "Salasanat on lukittu",

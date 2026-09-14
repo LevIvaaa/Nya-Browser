@@ -7,7 +7,7 @@ import {
   Eraser,
   Gear,
   Incognito,
-  Key,
+  CardKey,
   Keyboard,
   Plus,
   Printer,
@@ -50,7 +50,7 @@ export function AppMenu({ onClose, onOpen }: { onClose: () => void; onOpen: (vie
         {item(<Star width={15} height={15} />, t('Закладки'), 'Ctrl+Shift+O', () => onOpen('bookmarks'))}
         {item(<Clock width={15} height={15} />, t('История'), 'Ctrl+H', () => onOpen('history'))}
         {item(<Download width={15} height={15} />, t('Загрузки'), 'Ctrl+J', () => onOpen('downloads'))}
-        {item(<Key width={15} height={15} />, t('Пароли'), '', () => onOpen('passwords'))}
+        {item(<CardKey width={15} height={15} />, t('Пароли и карты'), '', () => onOpen('passwords'))}
         <div className="my-1.5" style={{ borderTop: '1px solid var(--line)' }} />
         {item(<Shield width={15} height={15} />, t('Проверка безопасности'), '', () =>
           window.browser.newTab('nya://security')

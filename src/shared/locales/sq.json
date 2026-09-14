@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "Dosje me manifest.json, ose një skedar .crx a .zip — shpaketohet vetë",
   "Папка с данными": "Dosja e të dhënave",
   "Пароли": "Fjalëkalimet",
+  "Пароли и карты": "Fjalëkalime dhe karta",
   "Пароли из CSV": "Fjalëkalime nga CSV",
   "Пароли не совпадают": "Fjalëkalimet nuk përputhen",
   "Пароли под замком": "Fjalëkalimet janë të kyçura",

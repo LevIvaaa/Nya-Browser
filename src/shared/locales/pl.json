@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "Folder z manifest.json albo plik .crx lub .zip — rozpakuje się sam",
   "Папка с данными": "Folder z danymi",
   "Пароли": "Hasła",
+  "Пароли и карты": "Hasła i karty",
   "Пароли из CSV": "Hasła z CSV",
   "Пароли не совпадают": "Hasła się nie zgadzają",
   "Пароли под замком": "Hasła są zablokowane",

@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "Un cartafol con manifest.json, ou un ficheiro .crx ou .zip — descomprímese só",
   "Папка с данными": "Cartafol de datos",
   "Пароли": "Contrasinais",
+  "Пароли и карты": "Contrasinais e tarxetas",
   "Пароли из CSV": "Contrasinais dun CSV",
   "Пароли не совпадают": "Os contrasinais non coinciden",
   "Пароли под замком": "Os contrasinais están bloqueados",

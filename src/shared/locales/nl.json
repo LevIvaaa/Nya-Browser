@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "Een map met manifest.json, of een .crx- of .zip-bestand — pakt zichzelf uit",
   "Папка с данными": "Gegevensmap",
   "Пароли": "Wachtwoorden",
+  "Пароли и карты": "Wachtwoorden en kaarten",
   "Пароли из CSV": "Wachtwoorden uit CSV",
   "Пароли не совпадают": "De wachtwoorden komen niet overeen",
   "Пароли под замком": "Wachtwoorden zijn vergrendeld",

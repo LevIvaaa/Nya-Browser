@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "Folder berisi manifest.json, atau file .crx atau .zip — akan terbongkar sendiri",
   "Папка с данными": "Folder data",
   "Пароли": "Sandi",
+  "Пароли и карты": "Sandi dan kartu",
   "Пароли из CSV": "Sandi dari CSV",
   "Пароли не совпадают": "Sandi tidak cocok",
   "Пароли под замком": "Kata sandi terkunci",

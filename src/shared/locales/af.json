@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "'n Vouer met manifest.json, of 'n .crx- of .zip-lêer — dit pak homself uit",
   "Папка с данными": "Datavouer",
   "Пароли": "Wagwoorde",
+  "Пароли и карты": "Wagwoorde en kaarte",
   "Пароли из CSV": "Wagwoorde uit CSV",
   "Пароли не совпадают": "Die wagwoorde stem nie ooreen nie",
   "Пароли под замком": "Wagwoorde is gesluit",

@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "Mappa með manifest.json, eða .crx eða .zip skrá — hún pakkar sér upp sjálf",
   "Папка с данными": "Gagnamappa",
   "Пароли": "Lykilorð",
+  "Пароли и карты": "Lykilorð og kort",
   "Пароли из CSV": "Lykilorð úr CSV",
   "Пароли не совпадают": "Lykilorðin stemma ekki",
   "Пароли под замком": "Lykilorðin eru læst",

@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "Kaust, kus on manifest.json, või .crx või .zip fail — pakib end ise lahti",
   "Папка с данными": "Andmekaust",
   "Пароли": "Paroolid",
+  "Пароли и карты": "Paroolid ja kaardid",
   "Пароли из CSV": "Paroolid CSV-st",
   "Пароли не совпадают": "Paroolid ei kattu",
   "Пароли под замком": "Paroolid on lukus",

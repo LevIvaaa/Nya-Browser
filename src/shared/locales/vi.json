@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "Thư mục có manifest.json, hoặc tệp .crx hay .zip — nó tự giải nén",
   "Папка с данными": "Thư mục dữ liệu",
   "Пароли": "Mật khẩu",
+  "Пароли и карты": "Mật khẩu và thẻ",
   "Пароли из CSV": "Mật khẩu từ CSV",
   "Пароли не совпадают": "Mật khẩu không khớp",
   "Пароли под замком": "Mật khẩu đang bị khóa",
