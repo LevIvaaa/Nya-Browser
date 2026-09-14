@@ -110,6 +110,7 @@
   "Все профили очищены": "Wasifu wote umesafishwa",
   "Все файлы": "Faili zote",
   "Всегда": "Kila mara",
+  "Всего": "Jumla",
   "Вставить": "Bandika",
   "Вставить JSON": "Bandika JSON",
   "Вставить как текст": "Bandika kama maandishi",
@@ -820,6 +821,7 @@
   "Страница сохранена": "Ukurasa umehifadhiwa",
   "Страница целиком": "Ukurasa mzima",
   "Страницы": "Kurasa",
+  "Считается только время, когда окно перед глазами": "Muda wa dirisha likiwa mbele yako pekee ndio huhesabiwa",
   "Счётчик защиты": "Kihesabu cha ulinzi",
   "Счётчики и пиксели, которые следят за вами между сайтами": "Vihesabu na pikseli vinavyokufuata kati ya tovuti",
   "Там всё останется на месте — здесь появится копия": "Kule kila kitu kinabaki — hapa inaonekana nakala",
@@ -900,6 +902,7 @@
   "Цвет текста главной": "Rangi ya maandishi ya ukurasa wa mwanzo",
   "Цвет этого виджета": "Rangi ya wijeti hii",
   "Цветная": "Rangi",
+  "Цифровое благополучие": "Ustawi wa kidijitali",
   "Часть параметров вступает в силу после перезапуска": "Baadhi ya mipangilio huanza kufanya kazi baada ya kuanzisha upya",
   "Часы": "Saa",
   "Чем искать": "Kutafuta na nini",
@@ -970,5 +973,6 @@
   "страниц истории: {n}": "kurasa za historia: {n}",
   "трекинг": "ufuatiliaji",
   "узнать ваше местоположение": "kujua mahali ulipo",
+  "ч": "saa",
   "читать буфер обмена": "kusoma ubao wa kunakili"
 }

@@ -110,6 +110,7 @@
   "Все профили очищены": "All profiles cleared",
   "Все файлы": "All files",
   "Всегда": "Always",
+  "Всего": "Total",
   "Вставить": "Paste",
   "Вставить JSON": "Paste JSON",
   "Вставить как текст": "Paste as plain text",
@@ -820,6 +821,7 @@
   "Страница сохранена": "Page saved",
   "Страница целиком": "Whole page",
   "Страницы": "Pages",
+  "Считается только время, когда окно перед глазами": "Only time with the window in front of you is counted",
   "Счётчик защиты": "Protection counter",
   "Счётчики и пиксели, которые следят за вами между сайтами": "Counters and pixels that follow you between sites",
   "Там всё останется на месте — здесь появится копия": "Everything stays there — a copy appears here",
@@ -900,6 +902,7 @@
   "Цвет текста главной": "Start page text colour",
   "Цвет этого виджета": "This widget's colour",
   "Цветная": "Colored",
+  "Цифровое благополучие": "Digital wellbeing",
   "Часть параметров вступает в силу после перезапуска": "Some settings take effect after a restart",
   "Часы": "Clock",
   "Чем искать": "What to search with",
@@ -970,5 +973,6 @@
   "страниц истории: {n}": "history pages: {n}",
   "трекинг": "tracking",
   "узнать ваше местоположение": "know your location",
+  "ч": "h",
   "читать буфер обмена": "read the clipboard"
 }

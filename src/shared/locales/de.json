@@ -110,6 +110,7 @@
   "Все профили очищены": "Alle Profile geleert",
   "Все файлы": "Alle Dateien",
   "Всегда": "Immer",
+  "Всего": "Gesamt",
   "Вставить": "Einfügen",
   "Вставить JSON": "JSON einfügen",
   "Вставить как текст": "Als Text einfügen",
@@ -820,6 +821,7 @@
   "Страница сохранена": "Seite gespeichert",
   "Страница целиком": "Ganze Seite",
   "Страницы": "Seiten",
+  "Считается только время, когда окно перед глазами": "Gezählt wird nur die Zeit mit dem Fenster im Blick",
   "Счётчик защиты": "Schutzzähler",
   "Счётчики и пиксели, которые следят за вами между сайтами": "Zähler und Pixel, die Ihnen zwischen Websites folgen",
   "Там всё останется на месте — здесь появится копия": "Dort bleibt alles — hier entsteht eine Kopie",
@@ -900,6 +902,7 @@
   "Цвет текста главной": "Textfarbe der Startseite",
   "Цвет этого виджета": "Farbe dieses Widgets",
   "Цветная": "Farbig",
+  "Цифровое благополучие": "Digitales Wohlbefinden",
   "Часть параметров вступает в силу после перезапуска": "Einige Einstellungen greifen erst nach einem Neustart",
   "Часы": "Uhr",
   "Чем искать": "Womit suchen",
@@ -970,5 +973,6 @@
   "страниц истории: {n}": "Verlaufsseiten: {n}",
   "трекинг": "Tracking",
   "узнать ваше местоположение": "Ihren Standort erfahren",
+  "ч": "Std",
   "читать буфер обмена": "die Zwischenablage lesen"
 }

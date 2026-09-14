@@ -110,6 +110,7 @@
   "Все профили очищены": "Të gjitha profilet u pastruan",
   "Все файлы": "Të gjithë skedarët",
   "Всегда": "Gjithmonë",
+  "Всего": "Gjithsej",
   "Вставить": "Ngjit",
   "Вставить JSON": "Ngjit JSON",
   "Вставить как текст": "Ngjit si tekst",
@@ -820,6 +821,7 @@
   "Страница сохранена": "u ruajt",
   "Страница целиком": "Faqja e plotë",
   "Страницы": "Faqet",
+  "Считается только время, когда окно перед глазами": "Numërohet vetëm koha me dritaren para jush",
   "Счётчик защиты": "Numëruesi i mbrojtjes",
   "Счётчики и пиксели, которые следят за вами между сайтами": "Numërues dhe piksele që ju ndjekin nëpër faqe",
   "Там всё останется на месте — здесь появится копия": "Atje mbetet gjithçka — këtu shfaqet një kopje",
@@ -900,6 +902,7 @@
   "Цвет текста главной": "Ngjyra e tekstit të kryefaqes",
   "Цвет этого виджета": "Ngjyra e këtij widget-i",
   "Цветная": "Me ngjyra",
+  "Цифровое благополучие": "Mirëqenia dixhitale",
   "Часть параметров вступает в силу после перезапуска": "Disa cilësime hyjnë në fuqi pas rinisjes",
   "Часы": "Ora",
   "Чем искать": "Me çfarë të kërkohet",
@@ -970,5 +973,6 @@
   "страниц истории: {n}": "faqe historiku: {n}",
   "трекинг": "gjurmim",
   "узнать ваше местоположение": "të mësojë vendndodhjen tuaj",
+  "ч": "orë",
   "читать буфер обмена": "të lexojë kujtesën e fragmenteve"
 }

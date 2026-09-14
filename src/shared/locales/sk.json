@@ -110,6 +110,7 @@
   "Все профили очищены": "Všetky profily vymazané",
   "Все файлы": "Všetky súbory",
   "Всегда": "Vždy",
+  "Всего": "Celkom",
   "Вставить": "Prilepiť",
   "Вставить JSON": "Prilepiť JSON",
   "Вставить как текст": "Prilepiť ako text",
@@ -820,6 +821,7 @@
   "Страница сохранена": "Stránka bola uložená",
   "Страница целиком": "Celá strana",
   "Страницы": "stránok",
+  "Считается только время, когда окно перед глазами": "Počíta sa len čas, keď je okno pred vami",
   "Счётчик защиты": "Počítadlo ochrany",
   "Счётчики и пиксели, которые следят за вами между сайтами": "Počítadlá a pixely, ktoré vás sledujú medzi webmi",
   "Там всё останется на месте — здесь появится копия": "Tam všetko zostane — sem pribudne kópia",
@@ -900,6 +902,7 @@
   "Цвет текста главной": "Farba textu hlavnej stránky",
   "Цвет этого виджета": "Farba tohto widgetu",
   "Цветная": "Farebné",
+  "Цифровое благополучие": "Digitálna pohoda",
   "Часть параметров вступает в силу после перезапуска": "Niektoré nastavenia sa prejavia po reštarte",
   "Часы": "Hodiny",
   "Чем искать": "Čím vyhľadávať",
@@ -970,5 +973,6 @@
   "страниц истории: {n}": "stránok histórie: {n}",
   "трекинг": "sledovanie",
   "узнать ваше местоположение": "zistiť vašu polohu",
+  "ч": "h",
   "читать буфер обмена": "čítať schránku"
 }

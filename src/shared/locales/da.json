@@ -110,6 +110,7 @@
   "Все профили очищены": "Alle profiler er ryddet",
   "Все файлы": "Alle filer",
   "Всегда": "Altid",
+  "Всего": "I alt",
   "Вставить": "Sæt ind",
   "Вставить JSON": "Sæt JSON ind",
   "Вставить как текст": "Indsæt som tekst",
@@ -820,6 +821,7 @@
   "Страница сохранена": "Side gemt",
   "Страница целиком": "Hele siden",
   "Страницы": "Sider",
+  "Считается только время, когда окно перед глазами": "Kun tid med vinduet foran dig tælles",
   "Счётчик защиты": "Beskyttelsestæller",
   "Счётчики и пиксели, которые следят за вами между сайтами": "Tællere og pixels, der følger dig på tværs af websteder",
   "Там всё останется на месте — здесь появится копия": "Der bliver alt stående — her kommer en kopi",
@@ -900,6 +902,7 @@
   "Цвет текста главной": "Tekstfarve på startsiden",
   "Цвет этого виджета": "Denne widgets farve",
   "Цветная": "Farvet",
+  "Цифровое благополучие": "Digital velvære",
   "Часть параметров вступает в силу после перезапуска": "Nogle indstillinger træder i kraft efter en genstart",
   "Часы": "Ur",
   "Чем искать": "Hvad der skal søges med",
@@ -970,5 +973,6 @@
   "страниц истории: {n}": "historiksider: {n}",
   "трекинг": "sporing",
   "узнать ваше местоположение": "kende din placering",
+  "ч": "t",
   "читать буфер обмена": "læse udklipsholderen"
 }

@@ -15,6 +15,7 @@ import type {
   SplitState,
   InstalledExtension,
   UpdateState,
+  UsageSummary,
   WidevineState,
   HistoryEntry,
   PermissionRequest,
@@ -334,6 +335,8 @@ const api = {
     ipcRenderer.invoke('vault:cipher-sample'),
 
   /* ---- downloads ---- */
+  usage: (): Promise<UsageSummary> => ipcRenderer.invoke('usage:summary'),
+  clearUsage: (): Promise<void> => ipcRenderer.invoke('usage:clear'),
   downloads: (): Promise<DownloadItem[]> => ipcRenderer.invoke('downloads:list'),
   pauseDownload: (id: string) => ipcRenderer.invoke('downloads:pause', id),
   cancelDownload: (id: string) => ipcRenderer.invoke('downloads:cancel', id),

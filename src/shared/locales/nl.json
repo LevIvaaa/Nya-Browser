@@ -110,6 +110,7 @@
   "Все профили очищены": "Alle profielen zijn gewist",
   "Все файлы": "Alle bestanden",
   "Всегда": "Altijd",
+  "Всего": "Totaal",
   "Вставить": "Plakken",
   "Вставить JSON": "JSON plakken",
   "Вставить как текст": "Plakken als tekst",
@@ -820,6 +821,7 @@
   "Страница сохранена": "Pagina opgeslagen",
   "Страница целиком": "Hele pagina",
   "Страницы": "Pagina's",
+  "Считается только время, когда окно перед глазами": "Alleen tijd met het venster voor je telt",
   "Счётчик защиты": "Beschermingsteller",
   "Счётчики и пиксели, которые следят за вами между сайтами": "Tellers en pixels die u tussen websites volgen",
   "Там всё останется на месте — здесь появится копия": "Daar blijft alles staan — hier komt een kopie",
@@ -900,6 +902,7 @@
   "Цвет текста главной": "Tekstkleur van de startpagina",
   "Цвет этого виджета": "Kleur van deze widget",
   "Цветная": "Gekleurd",
+  "Цифровое благополучие": "Digitaal welzijn",
   "Часть параметров вступает в силу после перезапуска": "Sommige instellingen worden pas na een herstart van kracht",
   "Часы": "Klok",
   "Чем искать": "Waarmee zoeken",
@@ -970,5 +973,6 @@
   "страниц истории: {n}": "geschiedenispagina’s: {n}",
   "трекинг": "tracking",
   "узнать ваше местоположение": "uw locatie kennen",
+  "ч": "u",
   "читать буфер обмена": "het klembord lezen"
 }

@@ -26,8 +26,10 @@ import type { ImportSource, VaultState } from '../../../preload/index'
 import { RELEASES_PAGE } from '../../../shared/types'
 import logoUrl from '../assets/logo.png'
 import { Shortcuts } from '../components/Shortcuts'
+import { Wellbeing } from '../components/Wellbeing'
 import {
   Alert,
+  Clock,
   Cross,
   Download,
   Eraser,
@@ -101,6 +103,7 @@ const TABS = [
   { id: 'passwords', label: 'Пароли и карты', icon: <Wallet width={15} height={15} /> },
   { id: 'speed', label: 'Скорость', icon: <Zap width={15} height={15} /> },
   { id: 'downloads', label: 'Загрузки', icon: <Download width={15} height={15} /> },
+  { id: 'time', label: 'Цифровое благополучие', icon: <Clock width={15} height={15} /> },
   { id: 'notify', label: 'Уведомления', icon: <Alert width={15} height={15} /> },
   { id: 'keys', label: 'Горячие клавиши', icon: <Keyboard width={15} height={15} /> },
   { id: 'system', label: 'Система', icon: <Monitor width={15} height={15} /> },
@@ -1339,6 +1342,18 @@ export default function SettingsPage({
           )}
 
           {/* --------------------------------------------------------- about */}
+          {which === 'time' && (
+            <>
+              <Section
+                title={t('Цифровое благополучие')}
+                icon={<Clock width={15} height={15} />}
+                description={t('Считается только время, когда окно перед глазами')}
+              >
+                <Wellbeing />
+              </Section>
+            </>
+          )}
+
           {which === 'notify' && (
             <>
               <Section
