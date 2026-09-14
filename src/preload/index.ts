@@ -340,6 +340,7 @@ const api = {
   openDownload: (id: string) => ipcRenderer.invoke('downloads:open', id),
   revealDownload: (id: string) => ipcRenderer.invoke('downloads:reveal', id),
   removeDownload: (id: string) => ipcRenderer.invoke('downloads:remove', id),
+  downloadAgain: (id: string) => ipcRenderer.invoke('downloads:again', id),
   clearDownloads: () => ipcRenderer.invoke('downloads:clear'),
 
   /* ---- permissions ---- */

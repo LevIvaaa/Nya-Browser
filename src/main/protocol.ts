@@ -3,6 +3,7 @@ import { createReadStream, statSync } from 'fs'
 import { basename, extname, join } from 'path'
 import { Readable } from 'stream'
 import { profiles } from './profiles'
+import { downloads } from './downloads'
 import { servePdf } from './pdf'
 import { securityPage } from './selftest'
 
@@ -74,16 +75,26 @@ export function registerProtocols(ses: Session = session.defaultSession) {
 
   proto.handle('nya-media', async (request) => {
     const url = new URL(request.url)
-    if (url.host !== 'wallpaper' && url.host !== 'avatar') {
+    if (url.host !== 'wallpaper' && url.host !== 'avatar' && url.host !== 'download') {
       return new Response('Not found', { status: 404 })
     }
 
-    const name = basename(decodeURIComponent(url.pathname.replace(/^\//, '')))
-    const ext = extname(name).toLowerCase()
-    if (!name || !MIME[ext]) return new Response('Forbidden', { status: 403 })
+    // A download is addressed by its id, not by a path: the renderer can only
+    // ask for a file this browser downloaded itself, and only for a picture.
+    let file: string
+    if (url.host === 'download') {
+      const id = decodeURIComponent(url.pathname.replace(/^\//, ''))
+      const found = downloads.pathOf(id)
+      if (!found) return new Response('Not found', { status: 404 })
+      if (!MIME[extname(found).toLowerCase()]) return new Response('Forbidden', { status: 403 })
+      file = found
+    } else {
+      const name = basename(decodeURIComponent(url.pathname.replace(/^\//, '')))
+      const ext = extname(name).toLowerCase()
+      if (!name || !MIME[ext]) return new Response('Forbidden', { status: 403 })
+      file = url.host === 'avatar' ? join(profiles.avatarDir(), name) : join(profiles.wallpaperDir(), name)
+    }
 
-    const file =
-      url.host === 'avatar' ? join(profiles.avatarDir(), name) : join(profiles.wallpaperDir(), name)
     let size = 0
     try {
       size = statSync(file).size
@@ -93,7 +104,7 @@ export function registerProtocols(ses: Session = session.defaultSession) {
 
     const range = request.headers.get('range')
     const headers: Record<string, string> = {
-      'content-type': MIME[ext],
+      'content-type': MIME[extname(file).toLowerCase()] ?? 'application/octet-stream',
       'accept-ranges': 'bytes',
       'cache-control': 'no-cache'
     }

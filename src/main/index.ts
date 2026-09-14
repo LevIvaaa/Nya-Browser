@@ -1043,6 +1043,7 @@ function registerIpc() {
   ipcMain.handle('downloads:open', (event, id: unknown) => downloads.open(str(id, 64)))
   ipcMain.handle('downloads:reveal', (event, id: unknown) => downloads.reveal(str(id, 64)))
   ipcMain.handle('downloads:remove', (event, id: unknown) => downloads.remove(str(id, 64)))
+  ipcMain.handle('downloads:again', (event, id: unknown) => current(event).downloadAgain(str(id, 64)))
   ipcMain.handle('downloads:clear', (event) => downloads.clearFinished())
 
   /* ---- permissions ---- */

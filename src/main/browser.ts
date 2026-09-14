@@ -2393,6 +2393,14 @@ export class BrowserWindow {
     }
   }
 
+  /** The same file, asked for again — from the list, without the page. */
+  downloadAgain(id: string) {
+    const url = downloads.sourceOf(id)
+    // The session, not a page: the interface lives in the default session and
+    // a download started there would be invisible to this window's list.
+    if (url && /^https?:/i.test(url)) this.ses.downloadURL(url)
+  }
+
   /**
    * The selected sentence, in the language the browser speaks.
    *
