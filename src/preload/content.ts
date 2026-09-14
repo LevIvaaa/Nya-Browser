@@ -142,6 +142,38 @@ function noFederatedChooser() {
 }
 
 /**
+ * Nothing starts playing on its own.
+ *
+ * Chromium's own autoplay policy is a launch switch: it needs a restart, and
+ * it is all-or-nothing for the whole browser. This is the same idea taken one
+ * page at a time — until a person has clicked, tapped or typed on the page,
+ * play() is refused the way the browser itself refuses it, with the rejection
+ * sites already know how to handle.
+ */
+function noAutoplay() {
+  let touched = false
+  const mark = () => {
+    touched = true
+  }
+  for (const type of ['pointerdown', 'keydown', 'touchstart']) {
+    window.addEventListener(type, mark, { capture: true, passive: true })
+  }
+
+  const play = HTMLMediaElement.prototype.play
+  HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
+    if (touched) return play.call(this)
+    try {
+      this.pause()
+    } catch {
+      /* a element mid-load cannot be paused; refusing the promise is enough */
+    }
+    return Promise.reject(
+      new DOMException('play() failed because the user did not interact with the document first.', 'NotAllowedError')
+    )
+  }
+}
+
+/**
  * YouTube without the ads that arrive inside the video's own response.
  *
  * Two halves, because either alone leaves something through. The player asks
@@ -238,6 +270,10 @@ if (/^https?:$/.test(location.protocol)) {
     contextBridge.executeInMainWorld({ func: noFederatedChooser })
     // Only where it applies, and only while the blocker is on: this is the
     // blocker doing its job by other means, not a thing of its own.
+    // Nothing plays before a person touches the page, when asked for.
+    if (ipcRenderer.sendSync('autoplay:blocked') === true) {
+      contextBridge.executeInMainWorld({ func: noAutoplay })
+    }
     if (/(^|\.)(youtube\.com|youtube-nocookie\.com)$/.test(location.hostname)) {
       if (ipcRenderer.sendSync('ads:on') === true) {
         contextBridge.executeInMainWorld({ func: youtubeWithoutAds })

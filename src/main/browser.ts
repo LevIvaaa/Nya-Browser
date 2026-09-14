@@ -1097,6 +1097,15 @@ export class BrowserWindow {
       focus?: boolean
     } = {}
   ) {
+    // Only the three the browser volunteers: everything else — the address
+    // bar, the profiles, a group's colour — was asked for by a person.
+    if (
+      mode !== null &&
+      settings.get().doNotDisturb &&
+      (mode === 'save-password' || mode === 'autofill' || mode === 'install-app')
+    ) {
+      return
+    }
     this.overlayMode = mode
     const visible = mode !== null
     this.overlayBounds = visible ? (options.bounds ?? null) : null
@@ -1126,6 +1135,10 @@ export class BrowserWindow {
 
   /* ------------------------------------------------------------ broadcast */
   private send(channel: string, payload?: unknown) {
+    // "Do not disturb" is about the browser's own voice: its toasts and its
+    // offers. It never touches a site's own notifications, which are a
+    // permission and live elsewhere.
+    if (channel === 'toast' && settings.get().doNotDisturb) return
     if (!this.chrome.webContents.isDestroyed()) this.chrome.webContents.send(channel, payload)
     // The overlay renders from the same state, so it gets every update too.
     if (!this.overlay.webContents.isDestroyed()) this.overlay.webContents.send(channel, payload)

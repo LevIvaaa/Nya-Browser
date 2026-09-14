@@ -468,6 +468,16 @@ export interface Settings {
   cacheSizeMb: number
   defaultZoom: number
 
+  // ---- notifications
+  /**
+   * The browser keeps its own offers and toasts to itself: no "save this
+   * password?", no update card, no toast about a screenshot. Site
+   * notifications are a separate thing and live under permissions.
+   */
+  doNotDisturb: boolean
+  /** Nothing plays until a person has touched the page. */
+  blockAutoplay: boolean
+
   // ---- shortcuts
   /**
    * Only what differs from the table in shared/shortcuts.ts: command id to

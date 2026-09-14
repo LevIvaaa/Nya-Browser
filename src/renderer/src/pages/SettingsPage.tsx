@@ -101,6 +101,7 @@ const TABS = [
   { id: 'passwords', label: 'Пароли и карты', icon: <Wallet width={15} height={15} /> },
   { id: 'speed', label: 'Скорость', icon: <Zap width={15} height={15} /> },
   { id: 'downloads', label: 'Загрузки', icon: <Download width={15} height={15} /> },
+  { id: 'notify', label: 'Уведомления', icon: <Alert width={15} height={15} /> },
   { id: 'keys', label: 'Горячие клавиши', icon: <Keyboard width={15} height={15} /> },
   { id: 'system', label: 'Система', icon: <Monitor width={15} height={15} /> },
   { id: 'data', label: 'Данные', icon: <Eraser width={15} height={15} /> },
@@ -1338,6 +1339,28 @@ export default function SettingsPage({
           )}
 
           {/* --------------------------------------------------------- about */}
+          {which === 'notify' && (
+            <>
+              <Section
+                title={t('Уведомления')}
+                icon={<Alert width={15} height={15} />}
+              >
+                <Row title={t('Не беспокоить')}>
+                  <Toggle
+                    checked={settings.doNotDisturb}
+                    onChange={(value) => onPatch({ doNotDisturb: value })}
+                  />
+                </Row>
+                <Row title={t('Не запускать видео и звук самостоятельно')}>
+                  <Toggle
+                    checked={settings.blockAutoplay}
+                    onChange={(value) => onPatch({ blockAutoplay: value })}
+                  />
+                </Row>
+              </Section>
+            </>
+          )}
+
           {which === 'keys' && (
             <>
               <Section

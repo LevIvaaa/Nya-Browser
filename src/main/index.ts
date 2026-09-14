@@ -325,6 +325,9 @@ if (!app.requestSingleInstanceLock()) {
     // nothing. Registered before the first window exists.
     // Whether the blocker is on at all, for the one page that needs to do its
     // own blocking from the inside.
+    ipcMain.on('autoplay:blocked', (event) => {
+      event.returnValue = settings.get().blockAutoplay === true
+    })
     ipcMain.on('ads:on', (event) => {
       try {
         event.returnValue = settings.get().blockAds === true
