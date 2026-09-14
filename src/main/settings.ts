@@ -161,6 +161,15 @@ export const DEFAULT_SETTINGS: Settings = {
   mouseGestures: false,
   tabPreview: true,
 
+  reader: {
+    theme: 'system' as const,
+    size: 19,
+    serif: false,
+    width: 44,
+    spacing: 1.65,
+    textOnly: false
+  },
+
   downloadDir: '',
   askWhereToSave: false,
   downloadLimit: 0,
@@ -196,6 +205,20 @@ const domainList = (v: unknown, fallback: string[]) =>
   Array.isArray(v)
     ? [...new Set(v.filter((d): d is string => typeof d === 'string' && HOST_RE.test(d.trim())).map((d) => d.trim().toLowerCase()))].slice(0, 500)
     : fallback
+
+/** The reading sheet's look, with everything clamped to what is readable. */
+function sanitizeReader(v: unknown, d: Settings['reader']): Settings['reader'] {
+  const input = (v ?? {}) as Partial<Settings['reader']>
+  return {
+    theme: oneOf(input.theme, ['system', 'light', 'sepia', 'dark'] as const, d.theme),
+    size: clamp(input.size, 14, 30, d.size),
+    serif: bool(input.serif, d.serif),
+    width: clamp(input.width, 28, 72, d.width),
+    // A tenth of a line either way is what people actually adjust.
+    spacing: Math.round(clamp(input.spacing, 1.2, 2.2, d.spacing) * 20) / 20,
+    textOnly: bool(input.textOnly, d.textOnly)
+  }
+}
 
 function sanitizeBackground(v: unknown): BackgroundSettings {
   const b = (v ?? {}) as Partial<BackgroundSettings>
@@ -417,6 +440,7 @@ export function sanitize(input: Partial<Settings>): Settings {
     alwaysOnTop: bool(input.alwaysOnTop, d.alwaysOnTop),
     mouseGestures: bool(input.mouseGestures, d.mouseGestures),
     tabPreview: bool(input.tabPreview, d.tabPreview),
+    reader: sanitizeReader(input.reader, d.reader),
 
     downloadDir: str(input.downloadDir, 400, d.downloadDir),
     askWhereToSave: bool(input.askWhereToSave, d.askWhereToSave),

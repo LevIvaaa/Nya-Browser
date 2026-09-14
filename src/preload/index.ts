@@ -131,6 +131,14 @@ export interface BlockedEntry {
   kind: 'ad' | 'tracker' | 'crypto' | 'param' | 'upgrade'
 }
 
+/** A page whose words matched a search in the history. */
+export interface TextHit {
+  url: string
+  title: string
+  at: number
+  snippet: string
+}
+
 export interface ClosedTab {
   url: string
   title: string
@@ -411,6 +419,18 @@ const api = {
   /** Asks the page for every file on it; the list arrives through onFiles. */
   harvestFiles: (): Promise<void> => ipcRenderer.invoke('page:harvest'),
   onFiles: (cb: (files: PageFile[]) => void) => on<PageFile[]>('state:files', cb),
+  /** Shows what each translated paragraph said before, on hover. */
+  compareTranslation: (on: boolean): Promise<void> =>
+    ipcRenderer.invoke('translate:compare', on),
+  /** Pages whose text contains this, for the history search. */
+  searchPageText: (query: string): Promise<TextHit[]> =>
+    ipcRenderer.invoke('history:search-text', query),
+  /** The words read out of a picture. */
+  onPictureText: (cb: (data: { text: string }) => void) =>
+    on<{ text: string }>('state:picture-text', cb),
+  /** A few lines through the translator, for the picture card. */
+  translateLines: (lines: string[]): Promise<string[]> =>
+    ipcRenderer.invoke('translate:batch', lines, 'auto'),
   downloadMany: (urls: string[]): Promise<void> => ipcRenderer.invoke('downloads:many', urls),
   /** A link dropped on the browser: fetch it. */
   downloadUrl: (url: string): Promise<void> => ipcRenderer.invoke('downloads:url', url),

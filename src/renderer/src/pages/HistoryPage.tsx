@@ -1,5 +1,6 @@
 import { currentLanguage, t } from '../i18n'
 import { useEffect, useMemo, useState } from 'react'
+import type { TextHit } from '../../../preload/index'
 import type { HistoryEntry } from '../../../shared/types'
 import { Clock, Cross, Search, Trash } from '../components/Icons'
 import { EmptyState, TextField, formatDate } from '../components/ui'
@@ -37,8 +38,35 @@ export default function HistoryPage() {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
 
+  /**
+   * Pages whose words match, as opposed to pages whose name does.
+   *
+   * People remember a sentence far more often than a title, and until now the
+   * history could not be asked about one. The browser keeps the opening of
+   * each page's text; this asks it, and shows the line the phrase was in.
+   */
+  const [inText, setInText] = useState<TextHit[]>([])
+
   const load = () => void window.browser.history().then(setEntries)
   useEffect(load, [])
+
+  useEffect(() => {
+    const q = query.trim()
+    if (q.length < 3) {
+      setInText([])
+      return
+    }
+    let alive = true
+    const timer = window.setTimeout(() => {
+      void window.browser.searchPageText(q).then((hits) => {
+        if (alive) setInText(hits)
+      })
+    }, 200)
+    return () => {
+      alive = false
+      window.clearTimeout(timer)
+    }
+  }, [query])
 
   const window_ = useMemo(() => {
     if (span === 'custom') {
@@ -59,6 +87,13 @@ export default function HistoryPage() {
       return entry.title.toLowerCase().includes(q) || entry.url.toLowerCase().includes(q)
     })
   }, [entries, query, window_])
+
+  /** Matches in the text that are not already matches in the list above. */
+  const deeper = useMemo(() => {
+    if (inText.length === 0) return []
+    const already = new Set(filtered.map((entry) => entry.url))
+    return inText.filter((hit) => !already.has(hit.url)).slice(0, 30)
+  }, [inText, filtered])
 
   const groups = useMemo(() => {
     const map = new Map<string, HistoryEntry[]>()
@@ -180,9 +215,35 @@ export default function HistoryPage() {
           )}
         </div>
 
-        {groups.length === 0 ? (
+        {/* Found in the words rather than in the name. Below the ordinary
+            results, because a page whose title matches is almost always the
+            one that was meant. */}
+        {deeper.length > 0 && (
+          <section className="animate-fade-up mb-6">
+            <h2 className="mb-2 px-1 text-2xs font-semibold uppercase tracking-wider text-faint">
+              {t('Найдено в тексте страниц')}
+            </h2>
+            <div className="card stagger overflow-hidden">
+              {deeper.map((hit) => (
+                <button
+                  key={hit.url}
+                  className="flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left hover:bg-[var(--surface-hover)]"
+                  style={{ borderTop: '1px solid var(--line)', transition: 'background var(--t-fast) linear' }}
+                  onClick={() => void window.browser.newTab(hit.url)}
+                >
+                  <span className="w-full truncate text-sm font-medium">
+                    {hit.title || hit.url}
+                  </span>
+                  <span className="w-full text-2xs leading-relaxed text-dim">{hit.snippet}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {groups.length === 0 && deeper.length === 0 ? (
           <EmptyState icon={<Clock width={26} height={26} />} title={t('Пока ничего нет')} hint={t('Посещённые страницы появятся здесь.')} />
-        ) : (
+        ) : groups.length === 0 ? null : (
           groups.map(([day, list]) => (
             <section key={day} className="animate-fade-up mb-6">
               <h2 className="mb-2 px-1 text-2xs font-semibold uppercase tracking-wider text-faint">{day}</h2>

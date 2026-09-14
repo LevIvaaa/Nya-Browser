@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import jsQR from 'jsqr'
 import { Readability, isProbablyReaderable } from '@mozilla/readability'
+import { keywords, shorten } from '../shared/gist'
 
 /**
  * Autofill content script.
@@ -295,6 +296,16 @@ const isTop = (() => {
 
 const httpOrigin = /^https?:$/.test(location.protocol)
 
+/**
+ * The browser's own PDF viewer is one of these pages too.
+ *
+ * It is not a site, so almost nothing here applies to it — but a PDF in a
+ * language you do not read is exactly as unreadable as a web page in one, and
+ * the translator works on text nodes, which is what the viewer's text layer is
+ * made of.
+ */
+const pdfViewer = location.protocol === 'nya:' && location.host === 'pdf'
+
 /* ------------------------------------------------------ instant hiding */
 // The element-hiding CSS for this host, injected before the first paint.
 // Waiting for DOMContentLoaded (the old way) let ad frames flash for a moment
@@ -359,7 +370,7 @@ window.addEventListener('keydown', (event) => {
  * was there before is kept beside each node, which is the whole of showing the
  * original again.
  */
-if (isTop && httpOrigin) {
+if (isTop && (httpOrigin || pdfViewer)) {
   const SKIP = /^(script|style|noscript|code|pre|kbd|samp|textarea|svg|math)$/i
   /** No page needs more than this translated, and no service wants it. */
   const MAX_NODES = 1500
@@ -451,7 +462,162 @@ if (isTop && httpOrigin) {
     if (!original) return
     for (const item of original) if (item.node.isConnected) item.node.nodeValue = item.text
     original = null
+    compare(false)
   })
+
+  /**
+   * The original, under the cursor.
+   *
+   * A translation is a claim about what the page said, and the only way to
+   * check it is to see both. Holding the pointer over a translated paragraph
+   * shows the sentence it came from — in a bubble, on the spot, without
+   * turning the whole page back.
+   */
+  let comparing = false
+  let bubble: HTMLElement | null = null
+  const clearBubble = () => {
+    bubble?.remove()
+    bubble = null
+  }
+
+  const showOriginal = (event: MouseEvent) => {
+    if (!comparing || !original) return
+    const target = event.target as HTMLElement | null
+    if (!target || target.closest('nya-original')) return
+    // Which of the remembered nodes lives inside what is under the cursor.
+    const found = original.find(
+      (item) => item.node.isConnected && item.node.parentElement && target.contains(item.node.parentElement)
+    )
+    if (!found || !found.text.trim()) return clearBubble()
+    clearBubble()
+    const rect = target.getBoundingClientRect()
+    const host = document.createElement('nya-original')
+    const width = Math.min(420, Math.max(220, window.innerWidth - 32))
+    host.setAttribute(
+      'style',
+      'all: initial; position: fixed; z-index: 2147483644; width: ' +
+        width +
+        'px; left: ' +
+        Math.min(Math.max(8, rect.left), window.innerWidth - width - 8) +
+        'px; top: ' +
+        (rect.bottom + 8 + 120 > window.innerHeight ? Math.max(8, rect.top - 128) : rect.bottom + 8) +
+        'px'
+    )
+    const shadow = host.attachShadow({ mode: 'open' })
+    const style = document.createElement('style')
+    style.textContent =
+      '.box { font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: #f2f3f7;' +
+      ' background: rgba(22,23,30,.96); border: 1px solid rgba(255,255,255,.12); border-radius: 12px;' +
+      ' padding: 10px 12px; box-shadow: 0 18px 44px -16px rgba(0,0,0,.7); max-height: 200px; overflow: auto }'
+    const box = document.createElement('div')
+    box.className = 'box'
+    box.textContent = found.text.trim()
+    shadow.append(style, box)
+    document.documentElement.appendChild(host)
+    bubble = host
+  }
+
+  const compare = (on: boolean) => {
+    comparing = on
+    clearBubble()
+    if (on) document.addEventListener('mouseover', showOriginal, true)
+    else document.removeEventListener('mouseover', showOriginal, true)
+  }
+
+  ipcRenderer.on('translate:compare', (_event, on: boolean) => compare(on === true))
+
+  /**
+   * One word, translated where it stands.
+   *
+   * Holding Ctrl and pointing at a word is the gesture every dictionary
+   * extension has settled on, and it is worth having built in: reading a page
+   * in a language you half-know should not mean copying words into another
+   * tab. Nothing is sent until the key is held, and only the one word goes.
+   */
+  {
+    let last = ''
+    let timer: ReturnType<typeof setTimeout> | null = null
+    let word: HTMLElement | null = null
+
+    const clearWord = () => {
+      word?.remove()
+      word = null
+    }
+
+    const wordAt = (x: number, y: number): string => {
+      const range = (document as unknown as {
+        caretRangeFromPoint?: (x: number, y: number) => Range | null
+      }).caretRangeFromPoint?.(x, y)
+      const node = range?.startContainer
+      if (!node || node.nodeType !== Node.TEXT_NODE) return ''
+      const text = node.nodeValue ?? ''
+      const at = range?.startOffset ?? 0
+      const before = text.slice(0, at).match(/[\p{L}\p{M}'’-]*$/u)?.[0] ?? ''
+      const after = text.slice(at).match(/^[\p{L}\p{M}'’-]*/u)?.[0] ?? ''
+      const whole = (before + after).trim()
+      return whole.length > 1 && whole.length < 40 ? whole : ''
+    }
+
+    document.addEventListener(
+      'mousemove',
+      (event) => {
+        if (!event.ctrlKey) {
+          last = ''
+          if (timer) clearTimeout(timer)
+          timer = null
+          return clearWord()
+        }
+        const found = wordAt(event.clientX, event.clientY)
+        if (!found || found === last) return
+        last = found
+        if (timer) clearTimeout(timer)
+        const x = event.clientX
+        const y = event.clientY
+        timer = setTimeout(async () => {
+          const answer: string[] = await ipcRenderer.invoke('translate:batch', [found], 'auto')
+          const said = answer?.[0]
+          if (!said || said.toLowerCase() === found.toLowerCase()) return
+          clearWord()
+          const host = document.createElement('nya-word')
+          host.setAttribute(
+            'style',
+            'all: initial; position: fixed; z-index: 2147483645; left: ' +
+              Math.min(x, window.innerWidth - 260) +
+              'px; top: ' +
+              (y + 18) +
+              'px; max-width: 250px'
+          )
+          const shadow = host.attachShadow({ mode: 'open' })
+          const style = document.createElement('style')
+          style.textContent =
+            '.w { font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: #f2f3f7;' +
+            ' background: rgba(22,23,30,.96); border: 1px solid rgba(255,255,255,.12); border-radius: 10px;' +
+            ' padding: 7px 10px; box-shadow: 0 14px 34px -14px rgba(0,0,0,.7) }' +
+            '.src { color: rgba(242,243,247,.6); font-size: 11px; display: block }'
+          const box = document.createElement('div')
+          box.className = 'w'
+          const src = document.createElement('span')
+          src.className = 'src'
+          src.textContent = found
+          const to = document.createElement('span')
+          to.textContent = said
+          box.append(src, to)
+          shadow.append(style, box)
+          document.documentElement.appendChild(host)
+          word = host
+        }, 260)
+      },
+      true
+    )
+
+    window.addEventListener('keyup', (event) => {
+      if (event.key === 'Control') {
+        last = ''
+        clearWord()
+      }
+    })
+    window.addEventListener('blur', clearWord)
+  }
 }
 if (isTop && httpOrigin) {
   const PASSWORD = 'input[type="password"]:not([disabled]):not([readonly])'
@@ -1379,6 +1545,45 @@ if (isTop && httpOrigin) {
   )
 }
 
+/* ==========================================================================
+ * What this page said
+ *
+ * History remembers titles; people remember sentences. So the opening of the
+ * page's own text is handed over once, a moment after it settles, and the
+ * history page can be searched for a phrase rather than for a name.
+ *
+ * Only the main document, only http and https, and only what is visible: no
+ * scripts, no styles, no navigation. A private window never gets here at all,
+ * because the browser does not ask.
+ * ====================================================================== */
+{
+  const SKIP = /^(script|style|noscript|nav|header|footer|aside|svg|template)$/i
+
+  const visibleText = (): string => {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const parent = (node as Text).parentElement
+        if (!parent || SKIP.test(parent.tagName)) return NodeFilter.FILTER_REJECT
+        if (!(node.nodeValue ?? '').trim()) return NodeFilter.FILTER_REJECT
+        return NodeFilter.FILTER_ACCEPT
+      }
+    })
+    const parts: string[] = []
+    let total = 0
+    for (let node = walker.nextNode(); node && total < 6000; node = walker.nextNode()) {
+      const piece = (node.nodeValue ?? '').trim()
+      parts.push(piece)
+      total += piece.length + 1
+    }
+    return parts.join(' ')
+  }
+
+  ipcRenderer.on('page:read-text', () => {
+    if (location.protocol !== 'http:' && location.protocol !== 'https:') return
+    ipcRenderer.send('page:text', { url: location.href, title: document.title, text: visibleText() })
+  })
+}
+
 /** The word for minutes, handed over by the browser in the reader's language. */
 let MINUTES = 'мин'
 const NEWLINE = String.fromCharCode(10)
@@ -1396,20 +1601,120 @@ ipcRenderer.on('reader:words', (_event, words: { minutes?: string }) => {
  * copy of the document so the page itself is never touched. What it finds is
  * drawn inside a shadow root: the site's own stylesheet cannot reach in, ours
  * cannot leak out, and turning it off is removing one element.
+ *
+ * Around it is everything reading an article actually needs — how big the text
+ * is and how wide the column, where you are in it, what is in it, what it says
+ * in short, and the article read out loud. All of it lives here, in the page,
+ * because that is where the text is; the browser only says when to start and
+ * remembers how it was left.
  */
 if (isTop && httpOrigin) {
+  interface Look {
+    theme: 'system' | 'light' | 'sepia' | 'dark'
+    dark: boolean
+    size: number
+    serif: boolean
+    width: number
+    spacing: number
+    textOnly: boolean
+  }
+
+  /** The words the sheet uses, in the language the browser is wearing. */
+  const words = {
+    minutes: 'мин',
+    contents: 'Оглавление',
+    aloud: 'Озвучить',
+    stop: 'Остановить',
+    summary: 'Коротко',
+    pdf: 'В PDF',
+    settings: 'Вид',
+    close: 'Закрыть',
+    textOnly: 'Только текст',
+    size: 'Размер',
+    width: 'Ширина',
+    spacing: 'Интервал',
+    serif: 'С засечками',
+    theme: 'Тема',
+    quote: 'Цитата скопирована'
+  }
+  ipcRenderer.on('reader:words', (_event, next: Partial<typeof words>) => {
+    if (next && typeof next === 'object') Object.assign(words, next)
+  })
+
   let host: HTMLElement | null = null
   let hidden = ''
+  let look: Look = {
+    theme: 'system',
+    dark: true,
+    size: 19,
+    serif: false,
+    width: 44,
+    spacing: 1.65,
+    textOnly: false
+  }
 
   const off = () => {
     if (!host) return
+    speechSynthesis.cancel()
     host.remove()
     host = null
     document.documentElement.style.overflow = hidden
     ipcRenderer.send('reader:state', { on: false })
   }
 
-  const on = async (look: { dark: boolean; size: number; serif: boolean }) => {
+  /** Two headings that read the same, whatever the spacing and case. */
+  const same = (a: string, b: string) =>
+    a.replace(/\s+/g, ' ').trim().toLowerCase() === b.replace(/\s+/g, ' ').trim().toLowerCase()
+
+  /** Roughly how long this is to read, which is the one number people want. */
+  const readingTime = (text: string) => {
+    const count = text.trim().split(/\s+/).length
+    const minutes = Math.max(1, Math.round(count / 200))
+    return `${minutes} ` + words.minutes
+  }
+
+  /**
+   * Marks those words inside one element, without touching links.
+   *
+   * Capped on purpose. Twelve words across a long article is three hundred
+   * marks, which is not a hint — it is a highlighter emptied over the page.
+   * Sixty is enough to see where the subject is discussed and few enough that
+   * the page still reads as text.
+   */
+  function markWords(root: HTMLElement, list: string[], most = 60) {
+    if (list.length === 0) return
+    let marked = 0
+    const pattern = new RegExp(`(^|[^\\p{L}])(${list.map(escapeRe).join('|')})(?=$|[^\\p{L}])`, 'giu')
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    const texts: Text[] = []
+    while (walker.nextNode()) {
+      const node = walker.currentNode as Text
+      // Not the title, not a heading, not a link, not code: those are read
+      // rather than skimmed, and marking them is noise.
+      if (!node.data.trim()) continue
+      if (node.parentElement?.closest('mark, a, pre, code, h1, h2, h3, h4, .by')) continue
+      texts.push(node)
+    }
+    for (const node of texts) {
+      if (marked >= most) break
+      if (!pattern.test(node.data)) continue
+      pattern.lastIndex = 0
+      const holder = document.createElement('span')
+      holder.innerHTML = node.data
+        .replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[ch] as string)
+        .replace(pattern, (whole, before: string, word: string) => {
+          if (marked >= most) return whole
+          marked += 1
+          return `${before}<mark>${word}</mark>`
+        })
+      node.replaceWith(...Array.from(holder.childNodes))
+    }
+  }
+
+  const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+  const on = async (next: Look) => {
+    look = { ...look, ...next }
     // Readability rewrites the document it is given, so it is given a copy.
     if (!isProbablyReaderable(document)) {
       ipcRenderer.send('reader:state', { on: false, nothing: true })
@@ -1426,10 +1731,16 @@ if (isTop && httpOrigin) {
     // Open, not closed: the isolation that matters here is the stylesheet's,
     // and a shadow root nobody can look into cannot be checked either.
     const shadow = host.attachShadow({ mode: 'open' })
-    const ink = look.dark ? '#e7e7ee' : '#1a1a20'
-    const paper = look.dark ? '#15151b' : '#fbfbfd'
-    const dim = look.dark ? '#9a9aa8' : '#6b6b78'
-    const line = look.dark ? '#2a2a34' : '#e3e3ea'
+
+    // Three papers, and the one the browser is wearing.
+    const dark = look.theme === 'dark' || (look.theme === 'system' && look.dark)
+    const sepia = look.theme === 'sepia'
+    const ink = dark ? '#e7e7ee' : sepia ? '#3b3025' : '#1a1a20'
+    const paper = dark ? '#15151b' : sepia ? '#f4ecd8' : '#fbfbfd'
+    const dim = dark ? '#9a9aa8' : sepia ? '#7a6a55' : '#6b6b78'
+    const line = dark ? '#2a2a34' : sepia ? '#e0d4ba' : '#e3e3ea'
+    const accent = '#7c6cff'
+
     const style = document.createElement('style')
     style.textContent = [
       `:host { all: initial }`,
@@ -1439,26 +1750,74 @@ if (isTop && httpOrigin) {
       `  to { opacity: 1; transform: none } }`,
       `.sheet { animation: nya-read-in .26s cubic-bezier(.22,1,.36,1) both;`,
       `  position: absolute; inset: 0; overflow-y: auto; background: ${paper}; color: ${ink};`,
-      `  font: ${look.size}px/1.65 ${look.serif ? 'Georgia, "Times New Roman", serif' : 'system-ui, -apple-system, "Segoe UI", sans-serif'} }`,
-            `.column { max-width: 44em; margin: 0 auto; padding: 56px 24px 96px }`,
+      `  font: ${look.size}px/${look.spacing} ${look.serif ? 'Georgia, "Times New Roman", serif' : 'system-ui, -apple-system, "Segoe UI", sans-serif'} }`,
+      `.column { max-width: ${look.width}em; margin: 0 auto; padding: 72px 24px 96px }`,
       // The article brings its own class names with it; none of ours may be
       // among them, and anything it does bring is neutralised here.
       `.column * { position: static !important; float: none !important }`,
       `h1 { font-size: 1.9em; line-height: 1.2; margin: 0 0 .3em; letter-spacing: -.02em }`,
       `.by { color: ${dim}; font-size: .85em; margin: 0 0 2em; padding-bottom: 1.2em; border-bottom: 1px solid ${line} }`,
       `p, li { margin: 0 0 1.1em }`,
-      `h2, h3, h4 { line-height: 1.25; margin: 1.8em 0 .6em }`,
+      `h2, h3, h4 { line-height: 1.25; margin: 1.8em 0 .6em; scroll-margin-top: 80px }`,
       `img, video, figure, table { max-width: 100%; height: auto; margin: 1.4em 0 }`,
+      look.textOnly ? `img, video, figure, iframe, svg, picture { display: none !important }` : '',
       `figcaption, small { color: ${dim}; font-size: .85em }`,
       `a { color: inherit; text-underline-offset: 2px }`,
+      `mark { background: color-mix(in srgb, ${accent} 26%, transparent); color: inherit; border-radius: 3px; padding: 0 1px }`,
       `pre, code { font-family: ui-monospace, Consolas, monospace; font-size: .9em }`,
-      `pre { overflow-x: auto; padding: 1em; border-radius: 10px; background: ${look.dark ? '#1d1d25' : '#f1f1f6'} }`,
+      `pre { overflow-x: auto; padding: 1em; border-radius: 10px; background: ${dark ? '#1d1d25' : sepia ? '#ece0c6' : '#f1f1f6'} }`,
       `blockquote { margin: 1.4em 0; padding-left: 1.2em; border-left: 3px solid ${line}; color: ${dim} }`,
-      `hr { border: 0; border-top: 1px solid ${line}; margin: 2em 0 }`
-    ].join(NEWLINE)
+      `hr { border: 0; border-top: 1px solid ${line}; margin: 2em 0 }`,
+      // ---- the bar across the top, and the two panels that drop out of it
+      `.bar { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 6px;`,
+      `  padding: 8px 14px; background: ${paper}; border-bottom: 1px solid ${line};`,
+      `  font: 13px system-ui, -apple-system, "Segoe UI", sans-serif }`,
+      `.btn { font: 600 12px system-ui; color: ${ink}; background: transparent; border: 0;`,
+      `  border-radius: 8px; padding: 6px 9px; cursor: pointer; white-space: nowrap }`,
+      `.btn:hover { background: color-mix(in srgb, ${ink} 10%, transparent) }`,
+      `.btn.on { color: ${accent}; background: color-mix(in srgb, ${accent} 16%, transparent) }`,
+      `.grow { flex: 1 }`,
+      `.progress { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: transparent }`,
+      `.progress > i { display: block; height: 100%; width: 0; background: ${accent}; transition: width .1s linear }`,
+      `.panel { position: sticky; top: 41px; z-index: 2; max-height: 46vh; overflow-y: auto;`,
+      `  background: ${paper}; border-bottom: 1px solid ${line}; padding: 10px 14px 14px;`,
+      `  font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif }`,
+      `.toc a { display: block; padding: 4px 0; color: ${dim}; text-decoration: none; cursor: pointer }`,
+      `.toc a:hover { color: ${ink} }`,
+      `.toc a.deep { padding-left: 16px; font-size: .95em }`,
+      `.gist li { margin: 0 0 .6em }`,
+      `.row { display: flex; align-items: center; gap: 10px; margin: 8px 0 }`,
+      `.row > span:first-child { width: 92px; color: ${dim} }`,
+      `.row input[type=range] { flex: 1; accent-color: ${accent} }`,
+      `.swatch { width: 26px; height: 26px; border-radius: 8px; border: 1px solid ${line}; cursor: pointer }`,
+      `.swatch.on { outline: 2px solid ${accent}; outline-offset: 1px }`,
+      `.speaking { background: color-mix(in srgb, ${accent} 18%, transparent); border-radius: 4px }`
+    ]
+      .filter(Boolean)
+      .join(NEWLINE)
 
     const page = document.createElement('div')
     page.className = 'sheet'
+
+    /* ------------------------------------------------------------ the bar */
+    const bar = document.createElement('div')
+    bar.className = 'bar'
+    const progress = document.createElement('div')
+    progress.className = 'progress'
+    const progressBar = document.createElement('i')
+    progress.appendChild(progressBar)
+    bar.appendChild(progress)
+
+    const button = (label: string, act: () => void) => {
+      const el = document.createElement('button')
+      el.className = 'btn'
+      el.textContent = label
+      el.addEventListener('click', act)
+      bar.appendChild(el)
+      return el
+    }
+
+    /* --------------------------------------------------------- the article */
     const wrap = document.createElement('div')
     wrap.className = 'column'
     const title = document.createElement('h1')
@@ -1484,29 +1843,263 @@ if (isTop && httpOrigin) {
     const heading = parsed.querySelector('h1, h2')
     if (heading && same(heading.textContent ?? '', title.textContent ?? '')) heading.remove()
     for (const node of Array.from(parsed.body.childNodes)) wrap.appendChild(node)
+
+    page.appendChild(bar)
+    const panels = document.createElement('div')
+    page.appendChild(panels)
     page.appendChild(wrap)
     shadow.appendChild(style)
     shadow.appendChild(page)
+
+    /* ------------------------------------------------------- what is in it */
+    const headings = Array.from(wrap.querySelectorAll('h2, h3')) as HTMLElement[]
+    headings.forEach((node, index) => {
+      node.id = node.id || `nya-h${index}`
+    })
+
+    let panel: HTMLElement | null = null
+    const closePanel = () => {
+      panel?.remove()
+      panel = null
+      for (const el of Array.from(bar.querySelectorAll('.btn.on'))) el.classList.remove('on')
+    }
+    const openPanel = (owner: HTMLElement, build: (into: HTMLElement) => void) => {
+      const wasMine = owner.classList.contains('on')
+      closePanel()
+      if (wasMine) return
+      owner.classList.add('on')
+      panel = document.createElement('div')
+      panel.className = 'panel'
+      build(panel)
+      panels.appendChild(panel)
+    }
+
+    const tocButton = button(words.contents, () =>
+      openPanel(tocButton, (into) => {
+        const list = document.createElement('div')
+        list.className = 'toc'
+        for (const node of headings) {
+          const link = document.createElement('a')
+          link.textContent = node.textContent?.trim() ?? ''
+          if (node.tagName === 'H3') link.className = 'deep'
+          link.addEventListener('click', () => {
+            node.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            closePanel()
+          })
+          list.appendChild(link)
+        }
+        into.appendChild(list)
+      })
+    )
+    if (headings.length < 2) tocButton.remove()
+
+    const gist = shorten(article.textContent ?? '')
+    const gistButton = button(words.summary, () =>
+      openPanel(gistButton, (into) => {
+        const list = document.createElement('ul')
+        list.className = 'gist'
+        for (const sentence of gist) {
+          const item = document.createElement('li')
+          item.textContent = sentence
+          list.appendChild(item)
+        }
+        into.appendChild(list)
+      })
+    )
+    if (gist.length === 0) gistButton.remove()
+
+    /* --------------------------------------------------------- read aloud */
+    let speaking = false
+    const aloudButton = button(words.aloud, () => {
+      if (speaking) {
+        speechSynthesis.cancel()
+        speaking = false
+        aloudButton.textContent = words.aloud
+        aloudButton.classList.remove('on')
+        return
+      }
+      const text = (article.textContent ?? '').replace(/\s+/g, ' ').trim()
+      if (!text) return
+      speak(text)
+      speaking = true
+      aloudButton.textContent = words.stop
+      aloudButton.classList.add('on')
+    })
+
+    bar.appendChild(Object.assign(document.createElement('div'), { className: 'grow' }))
+
+    /* ---------------------------------------------------------- the look */
+    const lookButton = button(words.settings, () =>
+      openPanel(lookButton, (into) => {
+        const slider = (
+          label: string,
+          value: number,
+          min: number,
+          max: number,
+          step: number,
+          set: (n: number) => void
+        ) => {
+          const row = document.createElement('div')
+          row.className = 'row'
+          const name = document.createElement('span')
+          name.textContent = label
+          const input = document.createElement('input')
+          input.type = 'range'
+          input.min = String(min)
+          input.max = String(max)
+          input.step = String(step)
+          input.value = String(value)
+          const shown = document.createElement('span')
+          shown.textContent = String(value)
+          input.addEventListener('input', () => {
+            shown.textContent = input.value
+            set(Number(input.value))
+          })
+          row.append(name, input, shown)
+          into.appendChild(row)
+        }
+
+        // Every change redraws the sheet from the same article, which is how
+        // the column can widen under you without the page reloading.
+        const again = (patch: Partial<Look>) => {
+          const next = { ...look, ...patch }
+          ipcRenderer.send('reader:look', patch)
+          off()
+          void on(next)
+        }
+
+        const themes = document.createElement('div')
+        themes.className = 'row'
+        const themeName = document.createElement('span')
+        themeName.textContent = words.theme
+        themes.appendChild(themeName)
+        for (const [id, colour] of [
+          ['light', '#fbfbfd'],
+          ['sepia', '#f4ecd8'],
+          ['dark', '#15151b']
+        ] as Array<[Look['theme'], string]>) {
+          const swatch = document.createElement('button')
+          swatch.className = look.theme === id ? 'swatch on' : 'swatch'
+          swatch.style.background = colour
+          swatch.addEventListener('click', () => again({ theme: id }))
+          themes.appendChild(swatch)
+        }
+        into.appendChild(themes)
+
+        slider(words.size, look.size, 14, 30, 1, (size) => again({ size }))
+        slider(words.width, look.width, 28, 72, 2, (width) => again({ width }))
+        slider(words.spacing, look.spacing, 1.2, 2.2, 0.05, (spacing) => again({ spacing }))
+
+        for (const [label, key] of [
+          [words.serif, 'serif'],
+          [words.textOnly, 'textOnly']
+        ] as Array<[string, 'serif' | 'textOnly']>) {
+          const row = document.createElement('div')
+          row.className = 'row'
+          const name = document.createElement('span')
+          name.textContent = label
+          const box = document.createElement('input')
+          box.type = 'checkbox'
+          box.checked = Boolean(look[key])
+          box.addEventListener('change', () => again({ [key]: box.checked } as Partial<Look>))
+          row.append(name, box)
+          into.appendChild(row)
+        }
+      })
+    )
+
+    button(words.pdf, () => {
+      ipcRenderer.send('reader:pdf', {
+        title: article.title || document.title,
+        byline: by,
+        url: location.href,
+        html: wrap.innerHTML
+      })
+    })
+    button(words.close, off)
+
     document.documentElement.appendChild(host)
     hidden = document.documentElement.style.overflow
     document.documentElement.style.overflow = 'hidden'
+
+    // The words worth finding, underlined where they are.
+    markWords(wrap, keywords(article.textContent ?? ''))
+
+    // How far down the article you are, along the bottom of the bar.
+    const trackProgress = () => {
+      const seen = page.scrollTop
+      const whole = page.scrollHeight - page.clientHeight
+      progressBar.style.width = `${whole > 0 ? Math.min(100, Math.round((seen / whole) * 100)) : 0}%`
+    }
+    page.addEventListener('scroll', trackProgress, { passive: true })
+    trackProgress()
+
+    // A quotation keeps where it came from. Copying out of a reading sheet is
+    // almost always for somewhere else, and a quote without its source is the
+    // thing everybody then has to go looking for again.
+    page.addEventListener('copy', (event) => {
+      const text = String(window.getSelection() ?? '').trim()
+      if (text.length < 40) return
+      const clip = (event as ClipboardEvent).clipboardData
+      if (!clip) return
+      event.preventDefault()
+      clip.setData('text/plain', `«${text}»\n— ${article.title || document.title}, ${location.href}`)
+    })
+
     ipcRenderer.send('reader:state', { on: true })
   }
 
-  /** Two headings that read the same, whatever the spacing and case. */
-  const same = (a: string, b: string) =>
-    a.replace(/\s+/g, ' ').trim().toLowerCase() === b.replace(/\s+/g, ' ').trim().toLowerCase()
+  /**
+   * The article, read out.
+   *
+   * Chromium's own speech synthesis, with the system's voices, so nothing is
+   * downloaded and nothing leaves the machine. It is fed in pieces because a
+   * single utterance of a long article cannot be paused, resumed or stopped
+   * sensibly on any platform.
+   */
+  function speak(text: string) {
+    speechSynthesis.cancel()
+    const pieces = text.match(/[^.!?…]+[.!?…]*\s*/g) ?? [text]
+    let at = 0
+    const chunks: string[] = []
+    let buffer = ''
+    for (const piece of pieces) {
+      if (buffer.length + piece.length > 400) {
+        chunks.push(buffer)
+        buffer = ''
+      }
+      buffer += piece
+    }
+    if (buffer) chunks.push(buffer)
 
-  /** Roughly how long this is to read, which is the one number people want. */
-  const readingTime = (text: string) => {
-    const words = text.trim().split(/\s+/).length
-    const minutes = Math.max(1, Math.round(words / 200))
-    return `${minutes} ` + MINUTES
+    const voices = speechSynthesis.getVoices()
+    const wanted = (document.documentElement.lang || navigator.language || 'ru').slice(0, 2)
+    const voice = voices.find((one) => one.lang.toLowerCase().startsWith(wanted))
+
+    const next = () => {
+      if (at >= chunks.length) return
+      const say = new SpeechSynthesisUtterance(chunks[at])
+      if (voice) say.voice = voice
+      say.onend = () => {
+        at += 1
+        next()
+      }
+      speechSynthesis.speak(say)
+    }
+    next()
   }
 
-  ipcRenderer.on('reader:toggle', (_event, look: { dark: boolean; size: number; serif: boolean }) => {
+  /** The selection, read out — from the page or from the sheet. */
+  ipcRenderer.on('reader:speak-selection', () => {
+    const text = String(window.getSelection() ?? '').trim()
+    if (!text) return
+    speak(text)
+  })
+  ipcRenderer.on('reader:speak-stop', () => speechSynthesis.cancel())
+
+  ipcRenderer.on('reader:toggle', (_event, next: Look) => {
     if (host) return off()
-    void on(look ?? { dark: true, size: 19, serif: false })
+    void on(next ?? look)
   })
 
   // Leaving the page leaves reading mode with it.

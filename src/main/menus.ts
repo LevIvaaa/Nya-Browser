@@ -2,6 +2,7 @@ import { t } from './i18n'
 import { swapLayout } from '../shared/layout'
 import { Menu, clipboard, shell, type MenuItemConstructorOptions, type WebContents } from 'electron'
 import { GROUP_COLOURS, type BrowserWindow } from './browser'
+import { ocrAvailable } from './ocr'
 
 /** Colour names for the group menu; the palette itself lives in browser.ts. */
 const GROUP_COLOUR_NAMES: Record<string, string> = {
@@ -75,6 +76,15 @@ export function pageContextMenu(
         label: t('Прочитать QR-код'),
         click: () =>
           wc.send('qr:scan', { src: params.srcURL, open: t('Открыть'), copy: t('Копировать') })
+      },
+      {
+        label: t('Текст с картинки'),
+        enabled: ocrAvailable(),
+        click: () => void browser.readPicture(params.srcURL)
+      },
+      {
+        label: t('Найти эту картинку'),
+        click: () => browser.searchByImage(params.srcURL)
       },
       { type: 'separator' }
     )
@@ -150,6 +160,7 @@ export function pageContextMenu(
         label: t('Перевести'),
         click: () => void browser.translateSelection(wc, params.selectionText)
       },
+      { label: t('Озвучить выделенное'), click: () => browser.speakSelection() },
       { type: 'separator' }
     )
   }

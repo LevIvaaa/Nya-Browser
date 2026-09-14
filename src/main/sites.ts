@@ -38,6 +38,8 @@ function cleanRules(input: unknown): SiteRules {
     rules.zoom = Math.max(-3, Math.min(4, raw.zoom))
   }
   if (raw.blocking === 'off') rules.blocking = 'off'
+  if (raw.reader === true) rules.reader = true
+  if (raw.translate === 'always' || raw.translate === 'never') rules.translate = raw.translate
   return rules
 }
 
@@ -45,7 +47,9 @@ function cleanRules(input: unknown): SiteRules {
 const isEmpty = (rules: SiteRules) =>
   Object.keys(rules.permissions ?? {}).length === 0 &&
   rules.zoom === undefined &&
-  rules.blocking === undefined
+  rules.blocking === undefined &&
+  !rules.reader &&
+  rules.translate === undefined
 
 export const hostOfSite = (host: string) => host.toLowerCase().replace(/^www\./, '')
 
@@ -84,7 +88,9 @@ class Sites {
     const next = cleanRules({
       permissions: { ...current.permissions, ...patch.permissions },
       zoom: patch.zoom === undefined ? current.zoom : patch.zoom,
-      blocking: patch.blocking === undefined ? current.blocking : patch.blocking
+      blocking: patch.blocking === undefined ? current.blocking : patch.blocking,
+      reader: patch.reader === undefined ? current.reader : patch.reader,
+      translate: patch.translate === undefined ? current.translate : patch.translate
     })
     // An exception that says nothing is not kept: the list is meant to be a
     // list of decisions, not of hosts that were once visited.

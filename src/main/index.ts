@@ -12,8 +12,10 @@ import { vault } from './vault'
 import { downloads } from './downloads'
 import { usage } from './usage'
 import { drafts } from './drafts'
+import { pageText } from './pagetext'
 import { applyBackup, makeBackup, readBackup } from './backup'
 import { initLog, log } from './log'
+import { readerToPdf } from './readerpdf'
 import { flushAll, installExitHooks } from './store'
 import { registerProtocols, registerSchemes } from './protocol'
 import { helloAvailable, helloVerify } from './hello'
@@ -716,7 +718,11 @@ function registerIpc() {
     // A page cannot make this into a firehose: a bounded number of bounded
     // strings, and nothing at all if it sends something else.
     const texts = list.slice(0, 200).map((item) => str(item, 5000))
-    return translateBatch(texts, str(to, 8) || 'ru')
+    // 'auto' means "the language this browser is wearing": the page side asks
+    // for one word without knowing what that is.
+    const wanted = str(to, 8)
+    const target = !wanted || wanted === 'auto' ? (settings.get().language || app.getLocale()).slice(0, 2) : wanted
+    return translateBatch(texts, target)
   })
   ipcMain.on('translate:done', (event, payload: unknown) => {
     const data = (payload ?? {}) as { count?: unknown }
@@ -929,7 +935,10 @@ function registerIpc() {
   ipcMain.handle('history:all', (event) => history.all())
   ipcMain.handle('history:recent', (event, limit?: unknown) => history.recent(num(limit) || 60))
   ipcMain.handle('history:remove', (event, url: unknown) => history.remove(str(url, 2048)))
-  ipcMain.handle('history:clear', (event) => history.clear())
+  ipcMain.handle('history:clear', (event) => {
+    history.clear()
+    pageText.clear()
+  })
 
   /* ---- passwords ---- */
   ipcMain.handle('vault:state', (event) => ({
@@ -1270,6 +1279,35 @@ function registerIpc() {
     drafts.keep(str(data.url, 2000), clean)
   })
   ipcMain.on('page:gesture', (event) => downloads.noteGesture(event.sender.id))
+  ipcMain.on('page:text', (event, payload: unknown) => {
+    const data = (payload ?? {}) as { url?: unknown; title?: unknown; text?: unknown }
+    pageText.keep(str(data.url, 2000), str(data.title, 300), str(data.text, 8000))
+  })
+  ipcMain.handle('history:search-text', (event, query: unknown) => pageText.find(str(query, 200)))
+  ipcMain.handle('translate:compare', (event, on: unknown) =>
+    current(event).compareTranslation(flag(on))
+  )
+  /** How the reading sheet was left, kept for the next article. */
+  ipcMain.on('reader:look', (event, patch: unknown) => {
+    const next = (patch ?? {}) as Partial<Settings['reader']>
+    settings.patch({ reader: { ...settings.get().reader, ...next } })
+  })
+  /**
+   * The article as a file.
+   *
+   * Printing the page prints the site: its header, its banners, its footer.
+   * This prints what the sheet is showing — the same words in the same shape,
+   * on paper the size of paper — out of a window nobody sees.
+   */
+  ipcMain.on('reader:pdf', (event, payload: unknown) => {
+    const data = (payload ?? {}) as { title?: unknown; byline?: unknown; url?: unknown; html?: unknown }
+    void readerToPdf({
+      title: str(data.title, 300),
+      byline: str(data.byline, 300),
+      url: str(data.url, 2000),
+      html: typeof data.html === 'string' ? data.html.slice(0, 4_000_000) : ''
+    })
+  })
   /**
    * A stroke drawn with the right button held. The page reports the shape; the
    * meaning lives here, where the commands are.
