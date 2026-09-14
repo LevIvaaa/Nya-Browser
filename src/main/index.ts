@@ -660,6 +660,10 @@ function registerIpc() {
       height: num(r.height)
     })
   })
+  ipcMain.on('page:scroll', (event, y: unknown) => {
+    const top = Number(y)
+    if (Number.isFinite(top) && top >= 0) current(event).noteScroll(event.sender.id, top)
+  })
   ipcMain.on('reader:state', (event, payload: unknown) => {
     const data = (payload ?? {}) as { on?: unknown; nothing?: unknown }
     current(event).handleReaderState(event.sender.id, {

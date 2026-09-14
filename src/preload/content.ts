@@ -1109,6 +1109,35 @@ if (isTop && httpOrigin) {
 }
 
 /* ==========================================================================
+   Где эту страницу читали
+   ========================================================================== */
+
+/**
+ * The browser keeps the scroll position of every tab so a restored session
+ * opens where it was left. The page is the only one who knows it, and it says
+ * so rarely: once things stop moving, and once more when the page goes away.
+ */
+{
+  let timer = 0
+  let last = -1
+  const tell = () => {
+    const y = Math.round(window.scrollY)
+    if (y === last) return
+    last = y
+    ipcRenderer.send('page:scroll', y)
+  }
+  window.addEventListener(
+    'scroll',
+    () => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(tell, 900)
+    },
+    { passive: true, capture: true }
+  )
+  window.addEventListener('pagehide', tell)
+}
+
+/* ==========================================================================
    Глазок у поля пароля
    ========================================================================== */
 
