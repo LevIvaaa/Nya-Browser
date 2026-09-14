@@ -776,6 +776,18 @@ export class BrowserWindow {
 
     setPermissionPrompt((request) => this.askPermission(request))
     downloads.onChange((items) => this.send('state:downloads', items))
+    // The two things a download says out loud: that it will not fit, and that
+    // it has landed — the second with a way to the folder, because that is
+    // what the next click always is.
+    downloads.onTrouble((name) => this.toast(t('Не хватает места для {name}', { name })))
+    downloads.onUnpacked(() => this.toast(t('Архив распакован')))
+    downloads.onDone((item) => {
+      if (settings.get().doNotDisturb) return
+      this.send('toast', {
+        message: t('{name} загружен', { name: item.name }),
+        action: { label: t('Показать в папке'), id: `reveal:${item.id}` }
+      })
+    })
 
     this.startSleepLoop()
     this.startEdgeWatch()
@@ -837,6 +849,9 @@ export class BrowserWindow {
         this.broadcast()
       }
     )
+    // What was downloaded is per profile, and a half-finished file has to be
+    // written down before the window closes if it is to be picked up after.
+    if (!this.incognito) downloads.load(dir)
     downloads.attach(this.ses)
 
     // Extensions belong to the profile, and Chromium keeps no registry of them,
@@ -2469,6 +2484,38 @@ export class BrowserWindow {
   noteScroll(wcId: number, y: number) {
     const tab = this.tabs.find((t) => t.wc?.id === wcId)
     if (tab) tab.scroll = y
+  }
+
+  /** Asks the page what files it has on it. The answer arrives separately. */
+  harvestFiles() {
+    const wc = this.getActive()?.wc
+    if (!wc || wc.isDestroyed()) return
+    wc.send('page:harvest')
+  }
+
+  /** The page's answer, on its way to the panel that shows it. */
+  showFiles(webContentsId: number, files: Array<{ url: string; name: string; kind: string }>) {
+    const tab = this.tabs.find((t) => t.wc?.id === webContentsId)
+    if (!tab || tab.id !== this.activeId) return
+    this.send('state:files', files)
+    this.setOverlayMode('files')
+  }
+
+  /** Everything that was ticked, one after another. */
+  downloadMany(urls: string[]) {
+    for (const url of urls.slice(0, 100)) this.downloadFrom(url)
+  }
+
+  /**
+   * A link somebody dropped on the browser, or picked out of a page. The
+   * address the page it came from is written down with it, so the list can
+   * say later where a file was found.
+   */
+  downloadFrom(url: string) {
+    if (!/^https?:\/\//i.test(url)) return
+    const here = this.getActive()?.wc
+    if (here && !here.isDestroyed()) downloads.noteSource(here.getURL())
+    this.ses.downloadURL(url)
   }
 
   /** The same file, asked for again — from the list, without the page. */

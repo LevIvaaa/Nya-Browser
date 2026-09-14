@@ -496,6 +496,19 @@ export interface Settings {
   // ---- downloads
   downloadDir: string
   askWhereToSave: boolean
+  /** ceiling for all downloads together, in kilobytes a second; 0 is none */
+  downloadLimit: number
+  /** how many may run at once; the rest wait in the queue */
+  downloadAtOnce: number
+  /**
+   * What to call a saved file: {name} {ext} {host} {date} {time}. Empty means
+   * whatever the site called it.
+   */
+  downloadNameRule: string
+  /** unpack an archive next to itself once it has landed */
+  downloadUnzip: boolean
+  /** ask when a page starts a download nobody clicked for */
+  downloadAsk: boolean
 }
 
 export interface AvatarCrop {
@@ -657,9 +670,23 @@ export interface DownloadItem {
   path: string
   received: number
   total: number
-  state: 'progressing' | 'paused' | 'completed' | 'cancelled' | 'interrupted'
+  /** 'queued' is waiting for a free slot or for a time that has not come */
+  state: 'progressing' | 'paused' | 'queued' | 'completed' | 'cancelled' | 'interrupted'
   startedAt: number
   speed: number
+  /** the page it was started from */
+  source?: string
+  /** sha-256 of the finished file, lower case hex */
+  hash?: string
+  mime?: string
+  /** this download's own ceiling, in kilobytes a second; 0 is no ceiling */
+  limit?: number
+  /** held back until this moment */
+  startsAt?: number
+  /** interrupted, and enough is known to pick it up again */
+  resumable?: boolean
+  /** the page started it by itself, and it is held until somebody says yes */
+  unasked?: boolean
 }
 
 /** What the vault thinks of one saved password. See main/vault.ts. */

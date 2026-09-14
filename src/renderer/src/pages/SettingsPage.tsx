@@ -75,7 +75,8 @@ import {
   Toggle,
   avatarImageStyle,
   avatarUrl,
-  cx
+  cx,
+  formatBytes
 } from '../components/ui'
 
 interface Props {
@@ -1044,6 +1045,61 @@ export default function SettingsPage({
               </Row>
               <Row title={t('Спрашивать, куда сохранять')} hint={t('Диалог для каждого файла')}>
                 <Toggle checked={settings.askWhereToSave} onChange={(v) => onPatch({ askWhereToSave: v })} />
+              </Row>
+              <Row
+                title={t('Сколько качать одновременно')}
+                hint={t('Остальные ждут очереди')}
+              >
+                <Slider
+                  value={settings.downloadAtOnce}
+                  min={1}
+                  max={6}
+                  width={140}
+                  onChange={(downloadAtOnce) => onPatch({ downloadAtOnce })}
+                />
+              </Row>
+              <Row
+                title={t('Ограничить скорость')}
+                hint={t('Чтобы загрузка не съедала весь канал')}
+              >
+                <Slider
+                  value={settings.downloadLimit}
+                  min={0}
+                  max={20480}
+                  step={256}
+                  width={180}
+                  format={(kb) => (kb === 0 ? t('без границ') : `${formatBytes(kb * 1024)}${t('/с')}`)}
+                  onChange={(downloadLimit) => onPatch({ downloadLimit })}
+                />
+              </Row>
+              <Row
+                title={t('Имя файла по правилу')}
+                hint={t('Пусто — как назвал сайт')}
+              >
+                <TextField
+                  value={settings.downloadNameRule}
+                  onChange={(downloadNameRule) => onPatch({ downloadNameRule })}
+                  placeholder="{date} {name}"
+                  width={200}
+                />
+              </Row>
+              <Row
+                title={t('Распаковывать архивы')}
+                hint={t('ZIP рядом с файлом')}
+              >
+                <Toggle
+                  checked={settings.downloadUnzip}
+                  onChange={(downloadUnzip) => onPatch({ downloadUnzip })}
+                />
+              </Row>
+              <Row
+                title={t('Спрашивать о загрузках без клика')}
+                hint={t('Когда страница начинает скачивание сама')}
+              >
+                <Toggle
+                  checked={settings.downloadAsk}
+                  onChange={(downloadAsk) => onPatch({ downloadAsk })}
+                />
               </Row>
             </Section>
           )}

@@ -1208,6 +1208,95 @@ if (isTop && httpOrigin) {
   }
 }
 
+/* ==========================================================================
+ * Somebody is here
+ *
+ * One bit, sent at most once a second: a person touched this page. The browser
+ * uses it for exactly one question — whether a download that just started was
+ * asked for by anybody. Nothing about what was pressed is sent, because
+ * nothing about it is needed.
+ * ====================================================================== */
+{
+  let last = 0
+  const touched = () => {
+    const now = Date.now()
+    if (now - last < 1000) return
+    last = now
+    ipcRenderer.send('page:gesture')
+  }
+  for (const kind of ['pointerdown', 'keydown', 'wheel'] as const) {
+    document.addEventListener(kind, touched, { capture: true, passive: true })
+  }
+}
+
+/* ==========================================================================
+ * Everything on this page that is a file
+ *
+ * A gallery, a page of documents, an album of scans: every one of them ends
+ * with the same twenty minutes of right-click, save as, right-click, save as.
+ * The browser asks the page once, the page answers with the list, and the
+ * person ticks what they want.
+ *
+ * Only what the page itself links to or shows. Nothing is guessed from an
+ * address, and nothing is fetched here.
+ * ====================================================================== */
+{
+  /** Endings worth offering. An .html link is a page, not a file. */
+  const FILE_RE =
+    /\.(pdf|docx?|xlsx?|pptx?|odt|ods|rtf|txt|csv|epub|fb2|djvu|zip|rar|7z|tar|gz|bz2|xz|iso|dmg|exe|msi|apk|deb|rpm|mp3|m4a|flac|wav|ogg|opus|mp4|mkv|webm|mov|avi|m4v|png|jpe?g|gif|webp|avif|bmp|svg|ttf|otf|woff2?)(\?|#|$)/i
+
+  interface Found {
+    url: string
+    name: string
+    kind: 'picture' | 'media' | 'file'
+  }
+
+  const nameOf = (url: string) => {
+    try {
+      const path = new URL(url, location.href).pathname
+      return decodeURIComponent(path.split('/').filter(Boolean).pop() ?? '') || url
+    } catch {
+      return url
+    }
+  }
+
+  const absolute = (url: string | null | undefined): string => {
+    if (!url) return ''
+    try {
+      const full = new URL(url, location.href)
+      return /^https?:$/.test(full.protocol) ? full.toString() : ''
+    } catch {
+      return ''
+    }
+  }
+
+  ipcRenderer.on('page:harvest', () => {
+    const seen = new Set<string>()
+    const found: Found[] = []
+    const add = (url: string, kind: Found['kind']) => {
+      if (!url || seen.has(url) || found.length >= 300) return
+      seen.add(url)
+      found.push({ url, name: nameOf(url), kind })
+    }
+
+    for (const a of Array.from(document.querySelectorAll('a[href]'))) {
+      const url = absolute(a.getAttribute('href'))
+      // A link with a download attribute is a file whatever it is called.
+      if (url && (FILE_RE.test(url) || a.hasAttribute('download'))) add(url, 'file')
+    }
+    for (const img of Array.from(document.querySelectorAll('img'))) {
+      const picture = img as HTMLImageElement
+      // Thumbnails and spacers are not what anybody means by "the pictures".
+      if (picture.naturalWidth > 0 && picture.naturalWidth < 150) continue
+      add(absolute(picture.currentSrc || picture.src), 'picture')
+    }
+    for (const media of Array.from(document.querySelectorAll('video, audio, source'))) {
+      add(absolute(media.getAttribute('src')), 'media')
+    }
+    ipcRenderer.send('page:files', { host: location.host, files: found.slice(0, 300) })
+  })
+}
+
 /** The word for minutes, handed over by the browser in the reader's language. */
 let MINUTES = 'мин'
 const NEWLINE = String.fromCharCode(10)

@@ -1,5 +1,5 @@
 import { t } from './i18n'
-import { app, clipboard, dialog, ipcMain, Menu, nativeTheme, net, session, shell, type MenuItemConstructorOptions } from 'electron'
+import { app, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, session, shell, type MenuItemConstructorOptions } from 'electron'
 import { basename, join } from 'path'
 import { readFileSync, writeFileSync } from 'fs'
 import { execFile, execFileSync } from 'child_process'
@@ -442,6 +442,14 @@ function registerIpc() {
     }
     return browser ?? windows.values().next().value!
   }
+
+  /**
+   * A 16×16 transparent square. Chromium's startDrag refuses an empty image,
+   * and a file whose type has no icon registered would otherwise not be
+   * draggable at all.
+   */
+  const BLANK_ICON =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAFElEQVR42mNkYPhfz0AEYBxVSF+FAP5FDvcfRYWgAAAAAElFTkSuQmCC'
 
   const str = (value: unknown, max = 4096) => (typeof value === 'string' ? value.slice(0, max) : '')
   const num = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
@@ -1245,6 +1253,26 @@ function registerIpc() {
     }
     drafts.keep(str(data.url, 2000), clean)
   })
+  ipcMain.on('page:gesture', (event) => downloads.noteGesture(event.sender.id))
+  ipcMain.handle('page:harvest', (event) => current(event).harvestFiles())
+  ipcMain.on('page:files', (event, payload: unknown) => {
+    const data = (payload ?? {}) as { files?: unknown }
+    const rows = Array.isArray(data.files) ? data.files : []
+    const files = rows
+      .map((row) => (row ?? {}) as { url?: unknown; name?: unknown; kind?: unknown })
+      .filter((row) => typeof row.url === 'string' && /^https?:\/\//i.test(row.url))
+      .slice(0, 300)
+      .map((row) => ({
+        url: str(row.url, 4000),
+        name: str(row.name, 300),
+        kind: str(row.kind, 20)
+      }))
+    current(event).showFiles(event.sender.id, files)
+  })
+  ipcMain.handle('downloads:many', (event, urls: unknown) => {
+    const list = Array.isArray(urls) ? urls : []
+    current(event).downloadMany(list.filter((u): u is string => typeof u === 'string'))
+  })
   ipcMain.on('draft:ask', (event, url: unknown) => {
     const fields = drafts.find(str(url, 2000))
     if (fields) event.sender.send('draft:have', { url: str(url, 2000), fields })
@@ -1262,6 +1290,41 @@ function registerIpc() {
   ipcMain.handle('downloads:remove', (event, id: unknown) => downloads.remove(str(id, 64)))
   ipcMain.handle('downloads:again', (event, id: unknown) => current(event).downloadAgain(str(id, 64)))
   ipcMain.handle('downloads:clear', (event) => downloads.clearFinished())
+  ipcMain.handle('downloads:pause-all', (event, resume: unknown) => downloads.pauseAll(flag(resume)))
+  ipcMain.handle('downloads:limit', (event, id: unknown, kbs: unknown) =>
+    downloads.setLimit(str(id, 64), num(kbs))
+  )
+  ipcMain.handle('downloads:start-at', (event, id: unknown, at: unknown) =>
+    downloads.setStart(str(id, 64), num(at))
+  )
+  ipcMain.handle('downloads:resume', (event, id: unknown) => downloads.resume(str(id, 64)))
+  ipcMain.handle('downloads:allow', (event, id: unknown) => downloads.allow(str(id, 64)))
+  /**
+   * A finished file, handed to the system's drag. Only by id, and only when
+   * the browser downloaded it: the renderer never names a path.
+   */
+  ipcMain.handle('downloads:drag', async (event, id: unknown) => {
+    const path = downloads.pathOf(str(id, 64))
+    if (!path) return
+    let icon = await app.getFileIcon(path, { size: 'normal' }).catch(() => null)
+    // startDrag refuses an empty image, and a file with no icon of its own is
+    // still worth dragging.
+    if (!icon || icon.isEmpty()) icon = nativeImage.createFromDataURL(BLANK_ICON)
+    try {
+      event.sender.startDrag({ file: path, icon })
+    } catch {
+      /* the drag was refused; nothing else to do about it */
+    }
+  })
+  ipcMain.handle('downloads:url', (event, url: unknown) => current(event).downloadFrom(str(url, 4000)))
+  /**
+   * The button on a toast. Only ids the browser itself put there are acted on,
+   * and each one names what it does.
+   */
+  ipcMain.handle('toast:action', (event, id: unknown) => {
+    const value = str(id, 100)
+    if (value.startsWith('reveal:')) downloads.reveal(value.slice('reveal:'.length))
+  })
 
   /* ---- permissions ---- */
   ipcMain.handle('permission:answer', (event, id: unknown, allow: unknown) =>

@@ -517,6 +517,13 @@ export const Pip = (p: P) => (
     <rect x="11.5" y="11" width="7.5" height="6" rx="1.5" />
   </svg>
 )
+/** A sheet of paper with its corner turned: a document, whatever is in it. */
+export const Doc = (p: P) => (
+  <svg {...svg(p, 1.6)}>
+    <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+    <path d="M14 3v5h5" />
+  </svg>
+)
 export const Note = (p: P) => (
   <svg {...svg(p, 1.6)}>
     <path d="M9 17.5V6l10-2v11.5" />

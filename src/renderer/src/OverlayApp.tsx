@@ -7,6 +7,7 @@ import GroupColour from './components/GroupColour'
 import AutofillCard from './components/AutofillOffer'
 import InstallApp from './components/InstallApp'
 import MediaPanel from './components/MediaPanel'
+import PageFiles from './components/PageFiles'
 import PageMenu from './components/PageMenu'
 import PrintSheet from './components/PrintSheet'
 import SavePassword from './components/SavePassword'
@@ -15,6 +16,7 @@ import TabsPanel from './components/TabsPanel'
 import SitePanel from './components/SitePanel'
 import UpdateCard from './components/UpdateCard'
 import type { UpdateState } from '../../shared/types'
+import type { PageFile } from '../../preload/index'
 
 /**
  * The overlay renderer.
@@ -73,6 +75,11 @@ export default function OverlayApp() {
   const [shot, setShot] = useState('')
   useEffect(() => window.browser.onShot(setShot), [])
 
+  // The same for the list of files a page has on it: it arrives before the
+  // mode that shows it.
+  const [files, setFiles] = useState<PageFile[]>([])
+  useEffect(() => window.browser.onFiles(setFiles), [])
+
   if (!mode || !settings) return null
 
   return (
@@ -80,6 +87,7 @@ export default function OverlayApp() {
       {mode === 'site' && <SitePanel onClose={close} />}
       {mode === 'autofill' && <AutofillCard offer={autofill} onClose={close} />}
       {mode === 'print' && <PrintSheet onClose={close} />}
+      {mode === 'files' && <PageFiles files={files} onClose={close} />}
       {mode === 'save-password' && <SavePassword offer={savePassword} onClose={close} />}
       {mode.startsWith('tabs-panel:') && (
         <TabsPanel
