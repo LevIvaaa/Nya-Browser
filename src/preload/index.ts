@@ -97,6 +97,19 @@ export interface AutofillOffer {
   postsTo?: string
 }
 
+/**
+ * A word from the browser. Most are a sentence and nothing else; a few carry
+ * the one button that sentence implies — "downloaded" and "open the folder".
+ */
+export type ToastMessage = string | { message: string; action?: { label: string; id: string } }
+
+/** One thing a page links to or shows that could be kept. */
+export interface PageFile {
+  url: string
+  name: string
+  kind: string
+}
+
 export interface SavePasswordOffer {
   host: string
   username: string
@@ -340,6 +353,25 @@ const api = {
   /** One-time codes, kept beside the password they belong to. */
   vaultSetCode: (id: string, secret: string): Promise<boolean> =>
     ipcRenderer.invoke('vault:set-code', id, secret),
+  /* ---- downloads ---- */
+  pauseAllDownloads: (resume: boolean): Promise<void> =>
+    ipcRenderer.invoke('downloads:pause-all', resume),
+  limitDownload: (id: string, kbs: number): Promise<void> =>
+    ipcRenderer.invoke('downloads:limit', id, kbs),
+  startDownloadAt: (id: string, at: number): Promise<void> =>
+    ipcRenderer.invoke('downloads:start-at', id, at),
+  resumeDownload: (id: string): Promise<boolean> => ipcRenderer.invoke('downloads:resume', id),
+  /** Yes to a download the page started by itself. */
+  allowDownload: (id: string): Promise<void> => ipcRenderer.invoke('downloads:allow', id),
+  /** Hands a finished file to the system's own drag, out of the window. */
+  dragDownload: (id: string): Promise<void> => ipcRenderer.invoke('downloads:drag', id),
+  /** Asks the page for every file on it; the list arrives through onFiles. */
+  harvestFiles: (): Promise<void> => ipcRenderer.invoke('page:harvest'),
+  onFiles: (cb: (files: PageFile[]) => void) => on<PageFile[]>('state:files', cb),
+  downloadMany: (urls: string[]): Promise<void> => ipcRenderer.invoke('downloads:many', urls),
+  /** A link dropped on the browser: fetch it. */
+  downloadUrl: (url: string): Promise<void> => ipcRenderer.invoke('downloads:url', url),
+
   vaultSetNote: (id: string, text: string): Promise<boolean> =>
     ipcRenderer.invoke('vault:set-note', id, text),
   /** Anything in the vault that matches a few typed letters. */
@@ -471,7 +503,9 @@ const api = {
   onSplit: (cb: (state: SplitState | null) => void) => on<SplitState | null>('state:split', cb),
   onExtensions: (cb: (list: ExtensionAction[]) => void) =>
     on<ExtensionAction[]>('state:extensions', cb),
-  onToast: (cb: (message: string) => void) => on<string>('toast', cb),
+  onToast: (cb: (message: ToastMessage) => void) => on<ToastMessage>('toast', cb),
+  /** The button on a toast was pressed. */
+  toastAction: (id: string): Promise<void> => ipcRenderer.invoke('toast:action', id),
   onShortcut: (cb: (action: string) => void) => on<string>('shortcut', cb)
 }
 

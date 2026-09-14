@@ -157,7 +157,12 @@ export const DEFAULT_SETTINGS: Settings = {
   shortcuts: {},
 
   downloadDir: '',
-  askWhereToSave: false
+  askWhereToSave: false,
+  downloadLimit: 0,
+  downloadAtOnce: 3,
+  downloadNameRule: '',
+  downloadUnzip: false,
+  downloadAsk: true
 }
 
 /* -------------------------------------------------------------- validation */
@@ -404,7 +409,12 @@ export function sanitize(input: Partial<Settings>): Settings {
     shortcuts: sanitizeShortcuts(input.shortcuts),
 
     downloadDir: str(input.downloadDir, 400, d.downloadDir),
-    askWhereToSave: bool(input.askWhereToSave, d.askWhereToSave)
+    askWhereToSave: bool(input.askWhereToSave, d.askWhereToSave),
+    downloadLimit: clamp(input.downloadLimit, 0, 1_000_000, d.downloadLimit),
+    downloadAtOnce: clamp(input.downloadAtOnce, 1, 6, d.downloadAtOnce),
+    downloadNameRule: str(input.downloadNameRule, 120, d.downloadNameRule),
+    downloadUnzip: bool(input.downloadUnzip, d.downloadUnzip),
+    downloadAsk: bool(input.downloadAsk, d.downloadAsk)
   }
 }
 

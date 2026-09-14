@@ -22,6 +22,7 @@ const KEEP_AFTER_DONE = 6000
 const STATE_LABEL: Record<DownloadItem['state'], string> = {
   progressing: 'загружается',
   paused: 'приостановлено',
+  queued: 'в очереди',
   completed: 'готово',
   cancelled: 'отменено',
   interrupted: 'прервано'
@@ -41,7 +42,11 @@ export default function DownloadPlate({
   const seen = useRef<Set<string> | null>(null)
   const hideAt = useRef<number | null>(null)
 
-  const busy = items.some((item) => item.state === 'progressing' || item.state === 'paused')
+  const busy = items.some(
+    (item) => item.state === 'progressing' || item.state === 'paused' || item.state === 'queued'
+  )
+  /** A link is being dragged over the plate right now. */
+  const [over, setOver] = useState(false)
 
   useEffect(() => {
     if (seen.current === null) {
@@ -77,10 +82,33 @@ export default function DownloadPlate({
         background: 'var(--elevated)',
         backdropFilter: 'blur(24px) saturate(160%)',
         boxShadow: 'var(--shadow-lg)',
-        border: '1px solid var(--line)'
+        border: `1px solid ${over ? 'var(--accent)' : 'var(--line)'}`,
+        transition: 'border-color var(--t-fast) linear'
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      /* A link dragged onto the plate is downloaded. It is the shortest way
+         from "that file, over there" to "that file, on this machine", and
+         every other browser has quietly had it for years. */
+      onDragOver={(event) => {
+        event.preventDefault()
+        event.dataTransfer.dropEffect = 'copy'
+        if (!over) setOver(true)
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(event) => {
+        event.preventDefault()
+        setOver(false)
+        const url =
+          event.dataTransfer
+            .getData('text/uri-list')
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            // A uri-list may carry comments; the first real line is the link.
+            .find((line) => line && !line.startsWith('#')) ||
+          event.dataTransfer.getData('text/plain')
+        if (url && /^https?:\/\//i.test(url.trim())) void window.browser.downloadUrl(url.trim())
+      }}
     >
       <header className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: '1px solid var(--line)' }}>
         <span className="flex-1 text-sm font-semibold">{t('Загрузки')}</span>
@@ -93,20 +121,50 @@ export default function DownloadPlate({
       </header>
 
       {recent.map((item) => {
-        const active = item.state === 'progressing' || item.state === 'paused'
+        const active =
+          item.state === 'progressing' || item.state === 'paused' || item.state === 'queued'
         const pct = item.total > 0 ? Math.min(100, Math.round((item.received / item.total) * 100)) : 0
         return (
           <div key={item.id} className="px-3 py-2.5" style={{ borderTop: '1px solid var(--line)' }}>
             <div className="flex items-center gap-2">
-              <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.name}</span>
-              {active ? (
+              <span
+                className="min-w-0 flex-1 truncate text-sm font-medium"
+                draggable={item.state === 'completed'}
+                onDragStart={(event) => {
+                  event.preventDefault()
+                  void window.browser.dragDownload(item.id)
+                }}
+              >
+                {item.name}
+              </span>
+              {item.unasked ? (
+                <>
+                  <button
+                    className="btn btn-primary h-[26px] px-2 text-2xs"
+                    onClick={() => window.browser.allowDownload(item.id)}
+                  >
+                    {t('Разрешить')}
+                  </button>
+                  <button
+                    className="icon-btn"
+                    title={t('Отменить')}
+                    onClick={() => window.browser.cancelDownload(item.id)}
+                  >
+                    <Cross width={13} height={13} />
+                  </button>
+                </>
+              ) : active ? (
                 <>
                   <button
                     className="icon-btn"
                     title={t('Пауза')}
                     onClick={() => window.browser.pauseDownload(item.id)}
                   >
-                    {item.state === 'paused' ? <Play width={13} height={13} /> : <Pause width={13} height={13} />}
+                    {item.state === 'progressing' ? (
+                      <Pause width={13} height={13} />
+                    ) : (
+                      <Play width={13} height={13} />
+                    )}
                   </button>
                   <button
                     className="icon-btn"
@@ -134,7 +192,15 @@ export default function DownloadPlate({
               )}
             </div>
 
-            {active && (
+            {/* Said before the numbers, because it is the reason the numbers
+                are not moving. */}
+            {item.unasked && (
+              <p className="mt-1.5 text-2xs" style={{ color: 'var(--warn)' }}>
+                {t('Страница начала загрузку сама')}
+              </p>
+            )}
+
+            {active && !item.unasked && (
               <>
                 <div
                   className="mt-2 h-[3px] w-full overflow-hidden rounded-pill"
@@ -164,7 +230,9 @@ export default function DownloadPlate({
                       {t('/с')}
                     </span>
                   )}
-                  {item.state === 'paused' && <span className="ml-auto">{t('приостановлено')}</span>}
+                  {item.state !== 'progressing' && (
+                    <span className="ml-auto">{t(STATE_LABEL[item.state])}</span>
+                  )}
                 </div>
               </>
             )}

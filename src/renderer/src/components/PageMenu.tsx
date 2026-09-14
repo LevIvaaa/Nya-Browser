@@ -1,7 +1,7 @@
 import { t } from '../i18n'
 import { useState } from 'react'
 import type { TabState } from '../../../shared/types'
-import { Camera, Copy, Download, Grid, Minus, Plus, Printer, Scroll, Search, Translate } from './Icons'
+import { Camera, Copy, Download, Folder, Grid, Minus, Plus, Printer, Scroll, Search, Translate } from './Icons'
 
 /**
  * What can be done with the page that is open, next to the address it is at.
@@ -169,6 +169,12 @@ export default function PageMenu({
             <Download width={15} height={15} />,
             t('Сохранить'),
             () => void window.browser.savePage(),
+            usable
+          )}
+          {item(
+            <Folder width={15} height={15} />,
+            t('Файлы на странице'),
+            () => void window.browser.harvestFiles(),
             usable
           )}
           {item(

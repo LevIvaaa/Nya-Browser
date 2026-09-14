@@ -11,7 +11,7 @@ import type {
   WebAppCandidate,
   WindowState
 } from '../../../shared/types'
-import type { AutofillOffer, Bookmark, ClosedTab, SavePasswordOffer } from '../../../preload/index'
+import type { AutofillOffer, Bookmark, ClosedTab, SavePasswordOffer, ToastMessage } from '../../../preload/index'
 import type { TabSpace } from '../../../shared/types'
 
 const FALLBACK_ENGINE: SearchEngine = {
@@ -27,6 +27,8 @@ export interface Toast {
   /** on its way out, and drawn as such */
   going?: boolean
   message: string
+  /** the one thing this message implies you might want to do next */
+  action?: { label: string; id: string }
 }
 
 /** One place for every piece of state the main process pushes to the UI. */
@@ -54,9 +56,11 @@ export function useBrowser() {
   const [edge, setEdge] = useState(false)
   const [toasts, setToasts] = useState<Toast[]>([])
 
-  const pushToast = useCallback((message: string) => {
+  const pushToast = useCallback((input: ToastMessage) => {
     const id = Date.now() + Math.random()
-    setToasts((list) => [...list, { id, message }].slice(-3))
+    const message = typeof input === 'string' ? input : input.message
+    const action = typeof input === 'string' ? undefined : input.action
+    setToasts((list) => [...list, { id, message, action }].slice(-3))
     // Two steps: marked as going, then taken away — so it can be seen to
     // leave rather than simply stop existing.
     setTimeout(

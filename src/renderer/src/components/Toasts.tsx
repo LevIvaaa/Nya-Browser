@@ -7,7 +7,7 @@ export default function Toasts({ items }: { items: Toast[] }) {
       {items.map((toast) => (
         <div
           key={toast.id}
-          className={`${toast.going ? 'animate-toast-out' : 'animate-toast'} rounded-pill px-4 py-2 text-sm font-medium`}
+          className={`${toast.going ? 'animate-toast-out' : 'animate-toast'} pointer-events-auto rounded-pill py-2 pl-4 text-sm font-medium ${toast.action ? 'pr-2' : 'pr-4'}`}
           style={{
             background: 'var(--elevated)',
             border: '1px solid var(--line)',
@@ -15,7 +15,16 @@ export default function Toasts({ items }: { items: Toast[] }) {
             backdropFilter: 'blur(24px) saturate(180%)'
           }}
         >
-          {toast.message}
+          <span className="align-middle">{toast.message}</span>
+          {toast.action && (
+            <button
+              className="ml-2.5 align-middle rounded-pill px-2.5 py-[3px] text-2xs font-semibold"
+              style={{ color: 'var(--accent)', background: 'var(--accent-soft)' }}
+              onClick={() => void window.browser.toastAction(toast.action!.id)}
+            >
+              {toast.action.label}
+            </button>
+          )}
         </div>
       ))}
     </div>

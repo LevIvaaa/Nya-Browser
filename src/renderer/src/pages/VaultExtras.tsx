@@ -4,7 +4,7 @@ import type { Credential } from '../../../preload/index'
 import type { PasswordAudit } from '../../../shared/types'
 import { DEFAULT_SHAPE, judge, makePassword } from '../../../shared/password'
 import type { PasswordShape } from '../../../shared/password'
-import { Copy, Cross, Download, Note, Plus, Refresh, Trash, Wand } from '../components/Icons'
+import { Copy, Cross, Doc, Download, Plus, Refresh, Trash, Wand } from '../components/Icons'
 import { EmptyState, Modal, Pill, Slider, Toggle, formatBytes, formatDate } from '../components/ui'
 
 /**
@@ -199,7 +199,7 @@ export function FileBlock({
             className="flex min-w-0 flex-1 items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-sm"
             style={{ background: 'var(--field-idle)' }}
           >
-            <Note width={13} height={13} className="shrink-0 text-faint" />
+            <Doc width={13} height={13} className="shrink-0 text-faint" />
             <span className="truncate">{file.name}</span>
             <span className="ml-auto shrink-0 text-2xs tabular-nums text-faint">
               {formatBytes(file.size)}
