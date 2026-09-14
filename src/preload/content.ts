@@ -1584,6 +1584,475 @@ if (isTop && httpOrigin) {
   })
 }
 
+/* ==========================================================================
+ * Everything else about what is playing
+ *
+ * The browser already knows what a tab is playing and can start, stop and
+ * seek it. This is the rest of what people do with a video or a track: come
+ * back to where they stopped, keep one loud site quieter than the others, make
+ * speech audible on a bad recording, fall asleep to something, take a frame
+ * out of it, turn the subtitles on, skip the silences, and keep the player in
+ * sight while reading the page under it.
+ *
+ * All of it lives in the page, over the ordinary <video> and <audio> elements,
+ * and none of it needs the site's cooperation.
+ * ====================================================================== */
+if (isTop && httpOrigin) {
+  /** How this site is set, as the browser remembers it. */
+  interface MediaLook {
+    rate: number
+    volume: number
+    /** an upper bound for this site, as a share of full volume */
+    ceiling: number
+    /** even out the loud and the quiet parts */
+    level: boolean
+    /** lift the range speech lives in */
+    voice: boolean
+    /** turn subtitles on by themselves where there are any */
+    subtitles: boolean
+    /** run through the quiet parts rather than sitting through them */
+    skipSilence: boolean
+  }
+
+  let look: MediaLook = {
+    rate: 1,
+    volume: 1,
+    ceiling: 1,
+    level: false,
+    voice: false,
+    subtitles: false,
+    skipSilence: false
+  }
+
+  /** What the player says, in the language the browser wears. */
+  const words = {
+    replay: 'Назад на 15 секунд',
+    frame: 'Снимок кадра',
+    sleep: 'Таймер сна',
+    off: 'Выключить',
+    minutes: 'мин',
+    speed: 'Скорость',
+    chapters: 'Главы'
+  }
+  ipcRenderer.on('media:words', (_event, next: Partial<typeof words>) => {
+    if (next && typeof next === 'object') Object.assign(words, next)
+  })
+
+  const media = () =>
+    Array.from(document.querySelectorAll<HTMLMediaElement>('video, audio')).filter(
+      (el) => el.readyState > 0 || el.currentSrc || el.src
+    )
+
+  /** Whatever is playing, or the last thing that was. */
+  const current = (): HTMLMediaElement | null => {
+    const all = media()
+    return (
+      all.find((el) => !el.paused && !el.ended) ??
+      all.find((el) => el.currentTime > 0 && !el.ended) ??
+      all[0] ??
+      null
+    )
+  }
+
+  /* ---------------------------------------------------- where you stopped */
+
+  /**
+   * Coming back to where you were.
+   *
+   * A forty-minute talk closed at minute twenty-six reopens at minute
+   * twenty-six. The position is kept by the browser against the address, not
+   * by the site, so it works on the sites that never bothered — which is most
+   * of them. Anything under two minutes is not worth remembering, and anything
+   * within thirty seconds of the end is finished.
+   */
+  const remember = (el: HTMLMediaElement) => {
+    if (!Number.isFinite(el.duration) || el.duration < 120) return
+    const at = el.currentTime
+    if (at < 20 || at > el.duration - 30) {
+      ipcRenderer.send('media:forget', { url: location.href })
+      return
+    }
+    ipcRenderer.send('media:position', { url: location.href, at: Math.round(at), of: Math.round(el.duration) })
+  }
+
+  ipcRenderer.on('media:resume-at', (_event, at: number) => {
+    const el = current()
+    if (!el || typeof at !== 'number' || at < 20) return
+    if (!Number.isFinite(el.duration) || at > el.duration - 30) return
+    // Only if the page has not already put it somewhere itself.
+    if (el.currentTime > 5) return
+    el.currentTime = at
+  })
+
+  /* -------------------------------------------------------- the sound path */
+
+  /**
+   * One audio graph per element, built the first time it is needed.
+   *
+   * A MediaElementSource can only be made once per element and takes the sound
+   * away from the element for good, so it is made only when something actually
+   * needs it — levelling, voice lift or silence-skipping — and kept.
+   */
+  interface Chain {
+    ctx: AudioContext
+    gain: GainNode
+    compressor: DynamicsCompressorNode
+    voice: BiquadFilterNode
+    analyser: AnalyserNode
+  }
+  const chains = new WeakMap<HTMLMediaElement, Chain>()
+
+  function chainFor(el: HTMLMediaElement): Chain | null {
+    const found = chains.get(el)
+    if (found) return found
+    try {
+      const ctx = new AudioContext()
+      const source = ctx.createMediaElementSource(el)
+      const compressor = ctx.createDynamicsCompressor()
+      // Gentle: the point is to stop a whisper and an explosion being forty
+      // decibels apart, not to squash the music flat.
+      compressor.threshold.value = -28
+      compressor.knee.value = 24
+      compressor.ratio.value = 4
+      compressor.attack.value = 0.01
+      compressor.release.value = 0.25
+      const voice = ctx.createBiquadFilter()
+      // Two to four kilohertz is where consonants live; lifting it is what
+      // makes a badly mixed film audible without turning everything up.
+      voice.type = 'peaking'
+      voice.frequency.value = 2600
+      voice.Q.value = 0.9
+      voice.gain.value = 0
+      const gain = ctx.createGain()
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 1024
+      source.connect(compressor)
+      compressor.connect(voice)
+      voice.connect(gain)
+      gain.connect(analyser)
+      analyser.connect(ctx.destination)
+      const chain = { ctx, gain, compressor, voice, analyser }
+      chains.set(el, chain)
+      return chain
+    } catch {
+      // Cross-origin media cannot be routed; the plain element still plays.
+      return null
+    }
+  }
+
+  /** Puts the whole of this site's settings onto one element. */
+  function apply(el: HTMLMediaElement) {
+    if (look.rate !== 1) el.playbackRate = look.rate
+    const wanted = Math.min(look.volume, look.ceiling)
+    if (wanted < 1) el.volume = Math.max(0, Math.min(1, wanted))
+    if (look.subtitles) showSubtitles(el)
+    if (look.level || look.voice || look.skipSilence) {
+      const chain = chainFor(el)
+      if (chain) {
+        void chain.ctx.resume()
+        chain.compressor.ratio.value = look.level ? 4 : 1
+        chain.compressor.threshold.value = look.level ? -28 : 0
+        chain.voice.gain.value = look.voice ? 7 : 0
+      }
+    }
+  }
+
+  /** The first subtitle track there is, shown. */
+  function showSubtitles(el: HTMLMediaElement) {
+    const tracks = Array.from(el.textTracks ?? [])
+    const wanted =
+      tracks.find((track) => track.kind === 'captions' || track.kind === 'subtitles') ?? null
+    if (!wanted) return
+    if (tracks.some((track) => track.mode === 'showing')) return
+    wanted.mode = 'showing'
+  }
+
+  /* -------------------------------------------------- running past silence */
+
+  /**
+   * The quiet parts, at speed.
+   *
+   * A lecture with long pauses is an hour of which ten minutes are somebody
+   * thinking. When nothing has been heard for a second and a half, this runs
+   * at double speed until something is; it is the one trick that makes a bad
+   * recording watchable, and it costs one look at the waveform every tenth of
+   * a second.
+   */
+  let silenceTimer: ReturnType<typeof setInterval> | null = null
+  function watchSilence() {
+    if (silenceTimer) clearInterval(silenceTimer)
+    silenceTimer = setInterval(() => {
+      if (!look.skipSilence) return
+      const el = current()
+      if (!el || el.paused) return
+      const chain = chains.get(el)
+      if (!chain) return
+      const data = new Uint8Array(chain.analyser.frequencyBinCount)
+      chain.analyser.getByteTimeDomainData(data)
+      let peak = 0
+      for (const sample of data) peak = Math.max(peak, Math.abs(sample - 128))
+      const quiet = peak < 4
+      const base = look.rate || 1
+      if (quiet) {
+        quietFor += 100
+        if (quietFor > 1500 && el.playbackRate < base * 2) el.playbackRate = base * 2
+      } else {
+        quietFor = 0
+        if (el.playbackRate > base) el.playbackRate = base
+      }
+    }, 100)
+  }
+  let quietFor = 0
+
+  /* ------------------------------------------------------------ the player */
+
+  let panel: HTMLElement | null = null
+  let sleepAt = 0
+  let sleepTimer: ReturnType<typeof setInterval> | null = null
+
+  const closePanel = () => {
+    panel?.remove()
+    panel = null
+  }
+
+  /**
+   * A small player that stays put.
+   *
+   * Scrolling a page away from the video is the ordinary way of losing the
+   * controls, and picture-in-picture takes the picture out of the page
+   * altogether. This is the middle: the controls, the position and the two
+   * things people reach for — back fifteen seconds and a frame — in a corner,
+   * over the page, while the video stays where it is.
+   */
+  function openPanel() {
+    closePanel()
+    const el = current()
+    if (!el) return
+    const host = document.createElement('nya-player')
+    host.setAttribute(
+      'style',
+      'all: initial; position: fixed; z-index: 2147483644; right: 16px; bottom: 16px; width: 320px'
+    )
+    const shadow = host.attachShadow({ mode: 'open' })
+    const style = document.createElement('style')
+    style.textContent = [
+      '@keyframes nya-player-in { from { opacity: 0; transform: translateY(10px) }',
+      '  to { opacity: 1; transform: none } }',
+      '.box { animation: nya-player-in .22s cubic-bezier(.22,1,.36,1) both;',
+      '  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: #f2f3f7;',
+      '  background: rgba(22,23,30,.96); border: 1px solid rgba(255,255,255,.12); border-radius: 14px;',
+      '  padding: 12px; box-shadow: 0 20px 48px -18px rgba(0,0,0,.75) }',
+      '.title { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }',
+      '.row { display: flex; align-items: center; gap: 8px; margin-top: 10px }',
+      '.btn { font: 600 12px system-ui; color: #c4bcff; background: rgba(124,108,255,.18); border: 0;',
+      '  border-radius: 8px; padding: 6px 9px; cursor: pointer; white-space: nowrap }',
+      '.btn.plain { color: rgba(242,243,247,.72); background: rgba(255,255,255,.08) }',
+      '.line { flex: 1; accent-color: #7c6cff }',
+      '.time { font-variant-numeric: tabular-nums; color: rgba(242,243,247,.6); font-size: 11px }',
+      '.shot { display: block; width: 100%; border-radius: 8px; margin-top: 10px }'
+    ].join(' ')
+
+    const box = document.createElement('div')
+    box.className = 'box'
+    const title = document.createElement('span')
+    title.className = 'title'
+    title.textContent = navigator.mediaSession?.metadata?.title || document.title
+    box.appendChild(title)
+
+    const seekRow = document.createElement('div')
+    seekRow.className = 'row'
+    const seek = document.createElement('input')
+    seek.type = 'range'
+    seek.className = 'line'
+    seek.min = '0'
+    seek.max = String(Math.max(1, Math.round(el.duration || 1)))
+    seek.value = String(Math.round(el.currentTime || 0))
+    const time = document.createElement('span')
+    time.className = 'time'
+    const clock = (n: number) => {
+      const whole = Math.max(0, Math.round(n))
+      const m = Math.floor(whole / 60)
+      const s = whole % 60
+      return `${m}:${String(s).padStart(2, '0')}`
+    }
+    time.textContent = `${clock(el.currentTime)} / ${clock(el.duration || 0)}`
+    seek.addEventListener('input', () => {
+      el.currentTime = Number(seek.value)
+    })
+    seekRow.append(seek, time)
+    box.appendChild(seekRow)
+
+    const buttons = document.createElement('div')
+    buttons.className = 'row'
+    const make = (label: string, act: () => void, plain = false) => {
+      const button = document.createElement('button')
+      button.className = plain ? 'btn plain' : 'btn'
+      button.textContent = label
+      button.addEventListener('click', act)
+      buttons.appendChild(button)
+      return button
+    }
+    const playButton = make(el.paused ? '▶' : '❚❚', () => {
+      if (el.paused) void el.play()
+      else el.pause()
+      playButton.textContent = el.paused ? '▶' : '❚❚'
+    })
+    make('↺ 15', () => {
+      el.currentTime = Math.max(0, el.currentTime - 15)
+    }, true)
+    make(words.frame, () => grabFrame(el, box), true)
+    make('✕', closePanel, true)
+    box.appendChild(buttons)
+
+    shadow.append(style, box)
+    document.documentElement.appendChild(host)
+    panel = host
+
+    const tick = setInterval(() => {
+      if (!panel) return clearInterval(tick)
+      seek.max = String(Math.max(1, Math.round(el.duration || 1)))
+      if (document.activeElement !== seek) seek.value = String(Math.round(el.currentTime || 0))
+      time.textContent = `${clock(el.currentTime)} / ${clock(el.duration || 0)}`
+      playButton.textContent = el.paused ? '▶' : '❚❚'
+    }, 500)
+  }
+
+  /**
+   * The frame on screen, as a picture.
+   *
+   * Drawn from the video into a canvas, which is refused outright for media
+   * from another origin without permission — so this says so rather than
+   * handing back a black rectangle.
+   */
+  function grabFrame(el: HTMLMediaElement, into: HTMLElement) {
+    if (!(el instanceof HTMLVideoElement)) return
+    try {
+      const canvas = document.createElement('canvas')
+      canvas.width = el.videoWidth
+      canvas.height = el.videoHeight
+      const ctx = canvas.getContext('2d')
+      if (!ctx || !canvas.width) return
+      ctx.drawImage(el, 0, 0, canvas.width, canvas.height)
+      const data = canvas.toDataURL('image/png')
+      ipcRenderer.send('media:frame', { data, title: document.title })
+      const preview = into.querySelector('.shot') ?? document.createElement('img')
+      preview.className = 'shot'
+      ;(preview as HTMLImageElement).src = data
+      into.appendChild(preview)
+    } catch {
+      ipcRenderer.send('media:frame', { data: '', title: '' })
+    }
+  }
+
+  /* ----------------------------------------------------------- the browser */
+
+  ipcRenderer.on('media:look', (_event, next: Partial<MediaLook>) => {
+    look = { ...look, ...(next ?? {}) }
+    for (const el of media()) apply(el)
+    watchSilence()
+  })
+
+  ipcRenderer.on('media:panel', () => (panel ? closePanel() : openPanel()))
+
+  ipcRenderer.on('media:replay', () => {
+    const el = current()
+    if (el) el.currentTime = Math.max(0, el.currentTime - 15)
+  })
+
+  ipcRenderer.on('media:frame-now', () => {
+    const el = current()
+    if (el) grabFrame(el, panel?.shadowRoot?.querySelector('.box') ?? document.createElement('div'))
+  })
+
+  ipcRenderer.on('media:subtitles', () => {
+    const el = current()
+    if (!el) return
+    const tracks = Array.from(el.textTracks ?? [])
+    const on = tracks.some((track) => track.mode === 'showing')
+    for (const track of tracks) track.mode = on ? 'disabled' : track.mode
+    if (!on) showSubtitles(el)
+  })
+
+  /**
+   * Stop in so many minutes.
+   *
+   * The thing everybody wants from a player at midnight, and almost nothing
+   * on the web has. It fades the sound down over the last ten seconds rather
+   * than cutting it, because being woken by silence arriving suddenly is its
+   * own kind of rude.
+   */
+  ipcRenderer.on('media:sleep', (_event, minutes: number) => {
+    if (sleepTimer) clearInterval(sleepTimer)
+    sleepTimer = null
+    if (!minutes || minutes <= 0) {
+      sleepAt = 0
+      return
+    }
+    sleepAt = Date.now() + minutes * 60_000
+    sleepTimer = setInterval(() => {
+      const left = sleepAt - Date.now()
+      const el = current()
+      if (!el) return
+      if (left <= 0) {
+        el.pause()
+        el.volume = Math.min(1, look.volume)
+        if (sleepTimer) clearInterval(sleepTimer)
+        sleepTimer = null
+        sleepAt = 0
+        return
+      }
+      if (left < 10_000) el.volume = Math.max(0, Math.min(1, look.volume) * (left / 10_000))
+    }, 500)
+  })
+
+  /** Chapters, where the page gives any. */
+  ipcRenderer.on('media:chapters', () => {
+    const el = current()
+    const tracks = Array.from(el?.textTracks ?? []).filter((track) => track.kind === 'chapters')
+    const out: Array<{ at: number; title: string }> = []
+    for (const track of tracks) {
+      track.mode = 'hidden'
+      for (const cue of Array.from(track.cues ?? [])) {
+        out.push({ at: Math.round(cue.startTime), title: String((cue as VTTCue).text ?? '').slice(0, 120) })
+      }
+    }
+    ipcRenderer.send('media:chapters', { list: out.slice(0, 200) })
+  })
+
+  /* Anything that turns up later gets the same treatment. */
+  const watch = () => {
+    for (const el of media()) {
+      if (el.dataset.nyaSeen) continue
+      el.dataset.nyaSeen = '1'
+      apply(el)
+      el.addEventListener('loadedmetadata', () => {
+        apply(el)
+        ipcRenderer.send('media:ask-position', { url: location.href })
+      })
+      el.addEventListener('timeupdate', () => {
+        if (Math.round(el.currentTime) % 5 === 0) remember(el)
+      })
+      el.addEventListener('ended', () => ipcRenderer.send('media:ended', { url: location.href }))
+    }
+  }
+  const observer = new MutationObserver(watch)
+  const start = () => {
+    watch()
+    observer.observe(document.documentElement, { childList: true, subtree: true })
+    ipcRenderer.send('media:ask-look', { host: location.host })
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start, { once: true })
+  } else {
+    start()
+  }
+  window.addEventListener('pagehide', () => {
+    const el = current()
+    if (el) remember(el)
+    closePanel()
+  })
+}
+
 /** The word for minutes, handed over by the browser in the reader's language. */
 let MINUTES = 'мин'
 const NEWLINE = String.fromCharCode(10)

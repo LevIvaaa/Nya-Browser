@@ -119,6 +119,30 @@ export interface SiteRules {
    * every page on this host, 'never' stops the browser offering.
    */
   translate?: 'always' | 'never'
+  /** how this site's media is set, when it is set at all */
+  media?: SiteMedia
+}
+
+/**
+ * How one site's video and audio behave.
+ *
+ * Kept per site rather than per page, because that is how people think about
+ * it: one lecture site always at one and a half speed, one news site always
+ * quieter than everything else.
+ */
+export interface SiteMedia {
+  /** playback rate; 1 is untouched */
+  rate?: number
+  /** an upper bound on volume for this site, as a share of full */
+  ceiling?: number
+  /** even out the loud and the quiet parts */
+  level?: boolean
+  /** lift the range speech lives in */
+  voice?: boolean
+  /** show subtitles by themselves where there are any */
+  subtitles?: boolean
+  /** run through silence rather than sitting through it */
+  skipSilence?: boolean
 }
 
 /**

@@ -40,6 +40,20 @@ function cleanRules(input: unknown): SiteRules {
   if (raw.blocking === 'off') rules.blocking = 'off'
   if (raw.reader === true) rules.reader = true
   if (raw.translate === 'always' || raw.translate === 'never') rules.translate = raw.translate
+  const media = raw.media as Record<string, unknown> | undefined
+  if (media && typeof media === 'object') {
+    const kept: NonNullable<SiteRules['media']> = {}
+    const num = (v: unknown, lo: number, hi: number) =>
+      typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : undefined
+    const rate = num(media.rate, 0.25, 4)
+    const ceiling = num(media.ceiling, 0, 1)
+    if (rate !== undefined && rate !== 1) kept.rate = rate
+    if (ceiling !== undefined && ceiling < 1) kept.ceiling = ceiling
+    for (const key of ['level', 'voice', 'subtitles', 'skipSilence'] as const) {
+      if (media[key] === true) kept[key] = true
+    }
+    if (Object.keys(kept).length > 0) rules.media = kept
+  }
   return rules
 }
 
@@ -49,7 +63,8 @@ const isEmpty = (rules: SiteRules) =>
   rules.zoom === undefined &&
   rules.blocking === undefined &&
   !rules.reader &&
-  rules.translate === undefined
+  rules.translate === undefined &&
+  rules.media === undefined
 
 export const hostOfSite = (host: string) => host.toLowerCase().replace(/^www\./, '')
 
@@ -90,7 +105,8 @@ class Sites {
       zoom: patch.zoom === undefined ? current.zoom : patch.zoom,
       blocking: patch.blocking === undefined ? current.blocking : patch.blocking,
       reader: patch.reader === undefined ? current.reader : patch.reader,
-      translate: patch.translate === undefined ? current.translate : patch.translate
+      translate: patch.translate === undefined ? current.translate : patch.translate,
+      media: patch.media === undefined ? current.media : { ...current.media, ...patch.media }
     })
     // An exception that says nothing is not kept: the list is meant to be a
     // list of decisions, not of hosts that were once visited.
