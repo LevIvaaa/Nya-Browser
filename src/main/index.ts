@@ -642,6 +642,9 @@ function registerIpc() {
     if (!command) return false
     return current(event).mediaCommand(num(tabId), command, to === undefined ? undefined : num(to))
   })
+  ipcMain.handle('shortcuts:capture', (event, on: unknown) => {
+    current(event).setCapturingShortcut(on === true)
+  })
   ipcMain.handle('nav:capture', (event, kind: unknown) =>
     current(event).capture(kind === 'full' ? 'full' : kind === 'area' ? 'area' : 'view')
   )

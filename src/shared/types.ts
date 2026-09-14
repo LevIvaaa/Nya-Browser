@@ -468,6 +468,14 @@ export interface Settings {
   cacheSizeMb: number
   defaultZoom: number
 
+  // ---- shortcuts
+  /**
+   * Only what differs from the table in shared/shortcuts.ts: command id to
+   * combination. An empty string is a deliberate "no key for this one", which
+   * is why an absent entry and an empty one mean different things.
+   */
+  shortcuts: Record<string, string>
+
   // ---- downloads
   downloadDir: string
   askWhereToSave: boolean

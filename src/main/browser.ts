@@ -45,6 +45,7 @@ import {
   setPermissionPrompt,
   stats, isBlockedPopup } from './security'
 import { engine, hideCss } from './filters'
+import { comboOf, shortcutMap } from '../shared/shortcuts'
 import { extensionActions, loadExtensions, setExtensionSession } from './extensions'
 import { normalizeInput } from '../shared/search'
 import type {
@@ -1187,6 +1188,7 @@ export class BrowserWindow {
 
   applySettings() {
     const s = settings.get()
+    this.shortcutTable = null
     this.startEdgeWatch()
     history.setEnabled(s.saveHistory)
     refreshCustomLists()
@@ -1462,6 +1464,10 @@ export class BrowserWindow {
   /* ------------------------------------------------------------ shortcuts */
   handleInput(input: Electron.Input, fromChrome: boolean, wc?: Electron.WebContents): boolean {
     if (input.type !== 'keyDown') return false
+    // The settings page is listening for the next chord to bind it. While it
+    // is, the window answers nothing — otherwise every key it tries to record
+    // would do its old job instead of being recorded.
+    if (this.capturingShortcut && fromChrome) return false
     if (process.platform === 'darwin' && input.meta) return false
     const mod = process.platform === 'darwin' ? input.meta : input.control
     const key = input.key.length === 1 ? input.key.toLowerCase() : input.key
@@ -1491,8 +1497,6 @@ export class BrowserWindow {
     }
 
     if (key === 'F5') return this.run(() => this.reload(input.shift))
-    if (key === 'F11') return this.run(() => this.win.setFullScreen(!this.win.isFullScreen()))
-    if (key === 'F12') return this.run(() => this.openDevTools())
     if (key === 'F6') return this.run(() => this.focusAddress())
     if (key === 'Escape' && !fromChrome) {
       // Escape is the browser's own key — it stops a page loading — so a page
@@ -1507,76 +1511,98 @@ export class BrowserWindow {
       return this.run(() => this.stop())
     }
 
-    if (input.alt && !mod) {
-      if (key === 'ArrowLeft') return this.run(() => this.goBack())
-      if (key === 'ArrowRight') return this.run(() => this.goForward())
-      if (key === 'd') return this.run(() => this.focusAddress())
-      return false
-    }
+    // Alt+D is the second name of the address bar on Windows and is not in
+    // the table: it is a platform convention, not a preference.
+    if (input.alt && !mod && key === 'd') return this.run(() => this.focusAddress())
 
-    if (!mod) return false
-
-    if (input.shift) {
-      switch (key) {
-        case 'n':
-          return this.run(() => this.chrome.webContents.send('shortcut', 'new-private-window'))
-        case 't':
-          return this.run(() => this.reopenClosed())
-        case 'r':
-          return this.run(() => this.reload(true))
-        case 'b':
-          return this.run(() => this.uiShortcut('toggle-tabs'))
-        case 'p':
-          return this.run(() => this.uiShortcut('profiles'))
-        case 'o':
-          return this.run(() => this.uiShortcut('bookmarks'))
-        case 'Tab':
-          return this.run(() => this.cycleTab(-1))
-        case 'Delete':
-          return this.run(() => this.uiShortcut('clear-data'))
-        default:
-          return false
+    // The zoom keys and Ctrl+1…9 stay where they are. They are what the key
+    // is on this platform; the table is for the rest.
+    if (mod && !input.alt && !input.shift) {
+      if (key === '=' || key === '+') return this.run(() => this.setZoom(0.5))
+      if (key === '-') return this.run(() => this.setZoom(-0.5))
+      if (key === '0') return this.run(() => this.setZoom('reset'))
+      if (/^[1-9]$/.test(key)) {
+        const here = this.here()
+        const index = key === '9' ? here.length - 1 : Number(key) - 1
+        const tab = here[index]
+        return this.run(() => tab && this.switchTab(tab.id))
       }
     }
+    if (mod && input.shift && key === 'Delete') return this.run(() => this.uiShortcut('clear-data'))
 
-    switch (key) {
-      case 'n':
-        return this.run(() => this.chrome.webContents.send('shortcut', 'new-window'))
-      case 't':
-        return this.run(() => this.newTab())
-      case 'w':
-        return this.run(() => this.closeTab(this.activeId))
-      case 'l':
-        return this.run(() => this.focusAddress())
-      case 'r':
-        return this.run(() => this.reload())
-      case 'd':
-        return this.run(() => this.bookmarkCurrent())
-      case 'f':
-        return this.run(() => this.uiShortcut('find'))
-      case 'j':
-        return this.run(() => this.uiShortcut('downloads'))
-      case 'h':
-        return this.run(() => this.uiShortcut('history'))
-      case ',':
-        return this.run(() => this.uiShortcut('settings'))
-      case 'Tab':
-        return this.run(() => this.cycleTab(1))
-      case '=':
-      case '+':
-        return this.run(() => this.setZoom(0.5))
-      case '-':
-        return this.run(() => this.setZoom(-0.5))
-      case '0':
-        return this.run(() => this.setZoom('reset'))
+    const command = this.shortcuts().get(comboOf(input))
+    if (!command) return false
+    return this.run(() => this.runCommand(command))
+  }
+
+  /** True while the settings page is recording a new binding. */
+  private capturingShortcut = false
+
+  setCapturingShortcut(on: boolean) {
+    this.capturingShortcut = on
+  }
+
+  /** Rebuilt when the settings change, not on every keypress. */
+  private shortcutTable: Map<string, string> | null = null
+
+  private shortcuts(): Map<string, string> {
+    if (!this.shortcutTable) this.shortcutTable = shortcutMap(settings.get().shortcuts)
+    return this.shortcutTable
+  }
+
+  /** One place where a command id becomes something happening. */
+  runCommand(id: string) {
+    switch (id) {
+      case 'new-tab':
+        return this.newTab()
+      case 'close-tab':
+        return this.closeTab(this.activeId)
+      case 'reopen-tab':
+        return this.reopenClosed()
+      case 'next-tab':
+        return this.cycleTab(1)
+      case 'prev-tab':
+        return this.cycleTab(-1)
+      case 'new-window':
+        return this.chrome.webContents.send('shortcut', 'new-window')
+      case 'new-private-window':
+        return this.chrome.webContents.send('shortcut', 'new-private-window')
+      case 'focus-address':
+        return this.focusAddress()
+      case 'reload':
+        return this.reload()
+      case 'back':
+        return this.goBack()
+      case 'forward':
+        return this.goForward()
+      case 'bookmark':
+        return this.bookmarkCurrent()
+      case 'find':
+        return this.uiShortcut('find')
+      case 'downloads':
+        return this.uiShortcut('downloads')
+      case 'history':
+        return this.uiShortcut('history')
+      case 'bookmarks':
+        return this.uiShortcut('bookmarks')
+      case 'settings':
+        return this.uiShortcut('settings')
+      case 'profiles':
+        return this.uiShortcut('profiles')
+      case 'toggle-tabs':
+        return this.uiShortcut('toggle-tabs')
+      case 'fullscreen':
+        return this.win.setFullScreen(!this.win.isFullScreen())
+      case 'devtools':
+        return this.openDevTools()
+      case 'capture-area':
+        void this.capture('area')
+        return
+      case 'capture-full':
+        void this.capture('full')
+        return
       default:
-        if (/^[1-9]$/.test(key)) {
-          const here = this.here()
-          const index = key === '9' ? here.length - 1 : Number(key) - 1
-          const tab = here[index]
-          return this.run(() => tab && this.switchTab(tab.id))
-        }
-        return false
+        return
     }
   }
 
