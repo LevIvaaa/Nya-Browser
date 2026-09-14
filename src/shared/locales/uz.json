@@ -110,6 +110,7 @@
   "Все профили очищены": "Barcha profillar tozalandi",
   "Все файлы": "Barcha fayllar",
   "Всегда": "Doim",
+  "Всего": "Jami",
   "Вставить": "Qoʻyish",
   "Вставить JSON": "JSON qoʻyish",
   "Вставить как текст": "Matn sifatida joylash",
@@ -820,6 +821,7 @@
   "Страница сохранена": "Sahifa saqlandi",
   "Страница целиком": "Butun sahifa",
   "Страницы": "Sahifalar",
+  "Считается только время, когда окно перед глазами": "Faqat oyna ko‘z oldingizda bo‘lgan vaqt hisoblanadi",
   "Счётчик защиты": "Himoya hisoblagichi",
   "Счётчики и пиксели, которые следят за вами между сайтами": "Saytlar orasida sizni kuzatadigan hisoblagich va piksellar",
   "Там всё останется на месте — здесь появится копия": "U yerda hammasi qoladi — bu yerda nusxasi paydo bo‘ladi",
@@ -900,6 +902,7 @@
   "Цвет текста главной": "Bosh sahifa matni rangi",
   "Цвет этого виджета": "Bu vidjetning rangi",
   "Цветная": "Rangli",
+  "Цифровое благополучие": "Raqamli farovonlik",
   "Часть параметров вступает в силу после перезапуска": "Baʼzi sozlamalar qayta ishga tushirilgandan soʻng kuchga kiradi",
   "Часы": "Soat",
   "Чем искать": "Nima bilan qidirish",
@@ -970,5 +973,6 @@
   "страниц истории: {n}": "tarix sahifasi: {n}",
   "трекинг": "kuzatuv",
   "узнать ваше местоположение": "joylashuvingizni bilish",
+  "ч": "soat",
   "читать буфер обмена": "almashish buferini oʻqish"
 }

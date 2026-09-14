@@ -110,6 +110,7 @@
   "Все профили очищены": "Minden profil kiürítve",
   "Все файлы": "Minden fájl",
   "Всегда": "Mindig",
+  "Всего": "Összesen",
   "Вставить": "Beillesztés",
   "Вставить JSON": "JSON beillesztése",
   "Вставить как текст": "Beillesztés szövegként",
@@ -820,6 +821,7 @@
   "Страница сохранена": "Az oldal mentve",
   "Страница целиком": "Teljes oldal",
   "Страницы": "Oldalak",
+  "Считается только время, когда окно перед глазами": "Csak az számít, amikor az ablak előtted van",
   "Счётчик защиты": "Védelmi számláló",
   "Счётчики и пиксели, которые следят за вами между сайтами": "Számlálók és pixelek, amelyek webhelyek között követik Önt",
   "Там всё останется на месте — здесь появится копия": "Ott minden marad — ide másolat kerül",
@@ -900,6 +902,7 @@
   "Цвет текста главной": "Kezdőoldal szövegszíne",
   "Цвет этого виджета": "Ennek a widgetnek a színe",
   "Цветная": "Színes",
+  "Цифровое благополучие": "Digitális jóllét",
   "Часть параметров вступает в силу после перезапуска": "Egyes beállítások újraindítás után lépnek érvénybe",
   "Часы": "Óra",
   "Чем искать": "Mivel keressen",
@@ -970,5 +973,6 @@
   "страниц истории: {n}": "előzményoldal: {n}",
   "трекинг": "követés",
   "узнать ваше местоположение": "tudni szeretné az Ön helyét",
+  "ч": "ó",
   "читать буфер обмена": "olvasni szeretné a vágólapot"
 }

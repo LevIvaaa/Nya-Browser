@@ -110,6 +110,7 @@
   "Все профили очищены": "S'han netejat tots els perfils",
   "Все файлы": "Tots els fitxers",
   "Всегда": "Sempre",
+  "Всего": "Total",
   "Вставить": "Enganxa",
   "Вставить JSON": "Enganxa el JSON",
   "Вставить как текст": "Enganxa com a text",
@@ -820,6 +821,7 @@
   "Страница сохранена": "Pàgina desada",
   "Страница целиком": "Pàgina sencera",
   "Страницы": "Pàgines",
+  "Считается только время, когда окно перед глазами": "Només compta el temps amb la finestra al davant",
   "Счётчик защиты": "Comptador de protecció",
   "Счётчики и пиксели, которые следят за вами между сайтами": "Comptadors i píxels que us segueixen entre llocs web",
   "Там всё останется на месте — здесь появится копия": "Allà queda tot — aquí apareix una còpia",
@@ -900,6 +902,7 @@
   "Цвет текста главной": "Color del text de la pàgina d'inici",
   "Цвет этого виджета": "Color d'aquest giny",
   "Цветная": "De colors",
+  "Цифровое благополучие": "Benestar digital",
   "Часть параметров вступает в силу после перезапуска": "Alguns paràmetres tenen efecte després de reiniciar",
   "Часы": "Rellotge",
   "Чем искать": "Amb què cercar",
@@ -970,5 +973,6 @@
   "страниц истории: {n}": "pàgines de l’historial: {n}",
   "трекинг": "seguiment",
   "узнать ваше местоположение": "saber la vostra ubicació",
+  "ч": "h",
   "читать буфер обмена": "llegir el porta-retalls"
 }

@@ -110,6 +110,7 @@
   "Все профили очищены": "Öll snið hreinsuð",
   "Все файлы": "Allar skrár",
   "Всегда": "Alltaf",
+  "Всего": "Samtals",
   "Вставить": "Líma",
   "Вставить JSON": "Líma JSON",
   "Вставить как текст": "Líma sem texta",
@@ -820,6 +821,7 @@
   "Страница сохранена": "Síða vistuð",
   "Страница целиком": "Öll síðan",
   "Страницы": "Síður",
+  "Считается только время, когда окно перед глазами": "Aðeins tími með gluggann fyrir framan þig telur",
   "Счётчик защиты": "Varnarteljari",
   "Счётчики и пиксели, которые следят за вами между сайтами": "Teljarar og pixlar sem fylgja þér milli vefsvæða",
   "Там всё останется на месте — здесь появится копия": "Þar verður allt áfram — hér birtist afrit",
@@ -900,6 +902,7 @@
   "Цвет текста главной": "Litur texta á upphafssíðu",
   "Цвет этого виджета": "Litur þessarar græju",
   "Цветная": "Litað",
+  "Цифровое благополучие": "Stafræn vellíðan",
   "Часть параметров вступает в силу после перезапуска": "Sumar stillingar taka gildi eftir endurræsingu",
   "Часы": "Klukka",
   "Чем искать": "Með hverju á að leita",
@@ -970,5 +973,6 @@
   "страниц истории: {n}": "ferilsíður: {n}",
   "трекинг": "rakning",
   "узнать ваше местоположение": "vita staðsetningu þína",
+  "ч": "klst",
   "читать буфер обмена": "lesa klippiborðið"
 }

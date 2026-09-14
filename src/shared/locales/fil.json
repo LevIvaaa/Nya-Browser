@@ -110,6 +110,7 @@
   "Все профили очищены": "Nalinis ang lahat ng profile",
   "Все файлы": "Lahat ng file",
   "Всегда": "Palagi",
+  "Всего": "Kabuuan",
   "Вставить": "I-paste",
   "Вставить JSON": "I-paste ang JSON",
   "Вставить как текст": "I-paste bilang tekstong payak",
@@ -820,6 +821,7 @@
   "Страница сохранена": "Na-save ang page",
   "Страница целиком": "Buong pahina",
   "Страницы": "Mga pahina",
+  "Считается только время, когда окно перед глазами": "Binibilang lang ang oras na nasa harap mo ang window",
   "Счётчик защиты": "Counter ng proteksiyon",
   "Счётчики и пиксели, которые следят за вами между сайтами": "Mga counter at pixel na sumusunod sa iyo sa pagitan ng mga site",
   "Там всё останется на месте — здесь появится копия": "Doon mananatili ang lahat — dito lilitaw ang kopya",
@@ -900,6 +902,7 @@
   "Цвет текста главной": "Kulay ng teksto sa pangunahing pahina",
   "Цвет этого виджета": "Kulay ng widget na ito",
   "Цветная": "May kulay",
+  "Цифровое благополучие": "Digital na kagalingan",
   "Часть параметров вступает в силу после перезапуска": "May ilang setting na magkakabisa pagkatapos ng restart",
   "Часы": "Orasan",
   "Чем искать": "Pang-hanap",
@@ -970,5 +973,6 @@
   "страниц истории: {n}": "mga pahina ng kasaysayan: {n}",
   "трекинг": "pagsubaybay",
   "узнать ваше местоположение": "malaman ang iyong lokasyon",
+  "ч": "oras",
   "читать буфер обмена": "basahin ang clipboard"
 }

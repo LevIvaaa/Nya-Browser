@@ -110,6 +110,7 @@
   "Все профили очищены": "Tüm profiller temizlendi",
   "Все файлы": "Tüm dosyalar",
   "Всегда": "Her zaman",
+  "Всего": "Toplam",
   "Вставить": "Yapıştır",
   "Вставить JSON": "JSON yapıştır",
   "Вставить как текст": "Düz metin olarak yapıştır",
@@ -820,6 +821,7 @@
   "Страница сохранена": "Sayfa kaydedildi",
   "Страница целиком": "Tam sayfa",
   "Страницы": "Sayfalar",
+  "Считается только время, когда окно перед глазами": "Yalnızca pencere önünüzdeyken geçen süre sayılır",
   "Счётчик защиты": "Koruma sayacı",
   "Счётчики и пиксели, которые следят за вами между сайтами": "Sizi siteler arasında izleyen sayaçlar ve pikseller",
   "Там всё останется на месте — здесь появится копия": "Orada her şey kalır — burada bir kopyası oluşur",
@@ -900,6 +902,7 @@
   "Цвет текста главной": "Ana sayfa metin rengi",
   "Цвет этого виджета": "Bu bileşenin rengi",
   "Цветная": "Renkli",
+  "Цифровое благополучие": "Dijital iyi oluş",
   "Часть параметров вступает в силу после перезапуска": "Bazı ayarlar yeniden başlatınca etkinleşir",
   "Часы": "Saat",
   "Чем искать": "Neyle aramalı",
@@ -970,5 +973,6 @@
   "страниц истории: {n}": "geçmiş sayfası: {n}",
   "трекинг": "izleme",
   "узнать ваше местоположение": "konumunuzu öğrenmek",
+  "ч": "s",
   "читать буфер обмена": "panoyu okumak"
 }

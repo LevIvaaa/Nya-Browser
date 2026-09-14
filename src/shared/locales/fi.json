@@ -110,6 +110,7 @@
   "Все профили очищены": "Kaikki profiilit tyhjennetty",
   "Все файлы": "Kaikki tiedostot",
   "Всегда": "Aina",
+  "Всего": "Yhteensä",
   "Вставить": "Liitä",
   "Вставить JSON": "Liitä JSON",
   "Вставить как текст": "Liitä tekstinä",
@@ -820,6 +821,7 @@
   "Страница сохранена": "Sivu tallennettu",
   "Страница целиком": "Koko sivu",
   "Страницы": "Sivut",
+  "Считается только время, когда окно перед глазами": "Lasketaan vain aika, kun ikkuna on edessäsi",
   "Счётчик защиты": "Suojauslaskuri",
   "Счётчики и пиксели, которые следят за вами между сайтами": "Laskurit ja pikselit, jotka seuraavat sinua sivustolta toiselle",
   "Там всё останется на месте — здесь появится копия": "Siellä kaikki säilyy — tänne tulee kopio",
@@ -900,6 +902,7 @@
   "Цвет текста главной": "Aloitussivun tekstin väri",
   "Цвет этого виджета": "Tämän widgetin väri",
   "Цветная": "Värillinen",
+  "Цифровое благополучие": "Digitaalinen hyvinvointi",
   "Часть параметров вступает в силу после перезапуска": "Osa asetuksista tulee voimaan vasta uudelleenkäynnistyksen jälkeen",
   "Часы": "Kello",
   "Чем искать": "Millä haetaan",
@@ -970,5 +973,6 @@
   "страниц истории: {n}": "historiasivuja: {n}",
   "трекинг": "seuranta",
   "узнать ваше местоположение": "tietää sijaintisi",
+  "ч": "t",
   "читать буфер обмена": "lukea leikepöytää"
 }

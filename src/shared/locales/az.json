@@ -110,6 +110,7 @@
   "Все профили очищены": "Bütün profillər təmizləndi",
   "Все файлы": "Bütün fayllar",
   "Всегда": "Həmişə",
+  "Всего": "Cəmi",
   "Вставить": "Yerləşdir",
   "Вставить JSON": "JSON yerləşdir",
   "Вставить как текст": "Sadə mətn kimi yapışdır",
@@ -820,6 +821,7 @@
   "Страница сохранена": "Səhifə saxlandı",
   "Страница целиком": "Bütün səhifə",
   "Страницы": "Səhifələr",
+  "Считается только время, когда окно перед глазами": "Yalnız pəncərə qarşınızda olan vaxt sayılır",
   "Счётчик защиты": "Qoruma sayğacı",
   "Счётчики и пиксели, которые следят за вами между сайтами": "Saytlar arasında sizi izləyən sayğaclar və piksellər",
   "Там всё останется на месте — здесь появится копия": "Orada hər şey qalır — burada surəti yaranır",
@@ -900,6 +902,7 @@
   "Цвет текста главной": "Ana səhifənin mətn rəngi",
   "Цвет этого виджета": "Bu vidcetin rəngi",
   "Цветная": "Rəngli",
+  "Цифровое благополучие": "Rəqəmsal rifah",
   "Часть параметров вступает в силу после перезапуска": "Bəzi parametrlər yenidən başladıqdan sonra qüvvəyə minir",
   "Часы": "Saat",
   "Чем искать": "Nə ilə axtarmalı",
@@ -970,5 +973,6 @@
   "страниц истории: {n}": "tarixçə səhifəsi: {n}",
   "трекинг": "izləmə",
   "узнать ваше местоположение": "yerinizi öyrənmək",
+  "ч": "s",
   "читать буфер обмена": "mübadilə buferini oxumaq"
 }

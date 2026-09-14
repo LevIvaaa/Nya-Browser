@@ -110,6 +110,7 @@
   "Все профили очищены": "Visi profili notīrīti",
   "Все файлы": "Visi faili",
   "Всегда": "Vienmēr",
+  "Всего": "Kopā",
   "Вставить": "Ielīmēt",
   "Вставить JSON": "Ielīmēt JSON",
   "Вставить как текст": "Ielīmēt kā tekstu",
@@ -820,6 +821,7 @@
   "Страница сохранена": "Lapa saglabāta",
   "Страница целиком": "Visa lappuse",
   "Страницы": "Lapas",
+  "Считается только время, когда окно перед глазами": "Tiek skaitīts tikai laiks, kad logs ir jūsu priekšā",
   "Счётчик защиты": "Aizsardzības skaitītājs",
   "Счётчики и пиксели, которые следят за вами между сайтами": "Skaitītāji un pikseļi, kas seko jums starp vietnēm",
   "Там всё останется на месте — здесь появится копия": "Tur viss paliek — šeit parādās kopija",
@@ -900,6 +902,7 @@
   "Цвет текста главной": "Sākumlapas teksta krāsa",
   "Цвет этого виджета": "Šī logrīka krāsa",
   "Цветная": "Krāsaini",
+  "Цифровое благополучие": "Digitālā labsajūta",
   "Часть параметров вступает в силу после перезапуска": "Daļa iestatījumu stājas spēkā pēc restartēšanas",
   "Часы": "Pulkstenis",
   "Чем искать": "Ar ko meklēt",
@@ -970,5 +973,6 @@
   "страниц истории: {n}": "vēstures lapas: {n}",
   "трекинг": "izsekošana",
   "узнать ваше местоположение": "uzzināt jūsu atrašanās vietu",
+  "ч": "st",
   "читать буфер обмена": "lasīt starpliktuvi"
 }

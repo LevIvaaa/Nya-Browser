@@ -110,6 +110,7 @@
   "Все профили очищены": "Visi profiliai išvalyti",
   "Все файлы": "Visi failai",
   "Всегда": "Visada",
+  "Всего": "Iš viso",
   "Вставить": "Įklijuoti",
   "Вставить JSON": "Įklijuoti JSON",
   "Вставить как текст": "Įklijuoti kaip tekstą",
@@ -820,6 +821,7 @@
   "Страница сохранена": "Puslapis išsaugotas",
   "Страница целиком": "Visas puslapis",
   "Страницы": "Puslapiai",
+  "Считается только время, когда окно перед глазами": "Skaičiuojamas tik laikas, kai langas priešais jus",
   "Счётчик защиты": "Apsaugos skaitiklis",
   "Счётчики и пиксели, которые следят за вами между сайтами": "Skaitikliai ir pikseliai, sekantys jus tarp svetainių",
   "Там всё останется на месте — здесь появится копия": "Ten viskas lieka — čia atsiranda kopija",
@@ -900,6 +902,7 @@
   "Цвет текста главной": "Pradžios puslapio teksto spalva",
   "Цвет этого виджета": "Šio valdiklio spalva",
   "Цветная": "Spalvotas",
+  "Цифровое благополучие": "Skaitmeninė gerovė",
   "Часть параметров вступает в силу после перезапуска": "Dalis nustatymų įsigalioja po paleidimo iš naujo",
   "Часы": "Laikrodis",
   "Чем искать": "Kuo ieškoti",
@@ -970,5 +973,6 @@
   "страниц истории: {n}": "istorijos puslapių: {n}",
   "трекинг": "sekimas",
   "узнать ваше местоположение": "sužinoti jūsų vietą",
+  "ч": "val",
   "читать буфер обмена": "skaityti iškarpinę"
 }

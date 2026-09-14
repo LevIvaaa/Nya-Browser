@@ -655,6 +655,18 @@ export interface DownloadItem {
   speed: number
 }
 
+/** How long the browser was looked at, and where. See main/usage.ts. */
+export interface UsageSpan {
+  seconds: number
+  sites: Array<{ host: string; seconds: number }>
+}
+
+export interface UsageSummary {
+  today: UsageSpan
+  week: UsageSpan
+  month: UsageSpan
+}
+
 export interface PermissionRequest {
   id: string
   origin: string

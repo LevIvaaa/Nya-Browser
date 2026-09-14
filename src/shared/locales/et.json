@@ -110,6 +110,7 @@
   "Все профили очищены": "Kõik profiilid on puhastatud",
   "Все файлы": "Kõik failid",
   "Всегда": "Alati",
+  "Всего": "Kokku",
   "Вставить": "Kleebi",
   "Вставить JSON": "Kleebi JSON",
   "Вставить как текст": "Kleebi tekstina",
@@ -820,6 +821,7 @@
   "Страница сохранена": "Leht on salvestatud",
   "Страница целиком": "Terve lehekülg",
   "Страницы": "Leheküljed",
+  "Считается только время, когда окно перед глазами": "Arvestatakse ainult aega, mil aken on ees",
   "Счётчик защиты": "Kaitse loendur",
   "Счётчики и пиксели, которые следят за вами между сайтами": "Loendurid ja pikslid, mis jälgivad sind saitide vahel",
   "Там всё останется на месте — здесь появится копия": "Seal jääb kõik alles — siia tekib koopia",
@@ -900,6 +902,7 @@
   "Цвет текста главной": "Avalehe teksti värv",
   "Цвет этого виджета": "Selle vidina värv",
   "Цветная": "Värviline",
+  "Цифровое благополучие": "Digitaalne heaolu",
   "Часть параметров вступает в силу после перезапуска": "Osa sätteid jõustub pärast taaskäivitust",
   "Часы": "Kell",
   "Чем искать": "Millega otsida",
@@ -970,5 +973,6 @@
   "страниц истории: {n}": "ajaloo lehti: {n}",
   "трекинг": "jälgimine",
   "узнать ваше местоположение": "teada sinu asukohta",
+  "ч": "t",
   "читать буфер обмена": "lugeda lõikelauda"
 }

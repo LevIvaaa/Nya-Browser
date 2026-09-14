@@ -9,6 +9,7 @@ import { bookmarks } from './bookmarks'
 import { profiles, AVATAR_CHOICES, AVATAR_PICTURE_EXTENSIONS, COLOR_CHOICES } from './profiles'
 import { vault } from './vault'
 import { downloads } from './downloads'
+import { usage } from './usage'
 import { initLog, log } from './log'
 import { flushAll, installExitHooks } from './store'
 import { registerProtocols, registerSchemes } from './protocol'
@@ -1041,6 +1042,10 @@ function registerIpc() {
   ipcMain.handle('vault:cipher-sample', (event) => vault.cipherSample())
 
   /* ---- downloads ---- */
+  ipcMain.handle('usage:summary', () => usage.summary())
+  ipcMain.handle('usage:clear', () => {
+    usage.clear()
+  })
   ipcMain.handle('downloads:list', (event) => downloads.list())
   ipcMain.handle('downloads:pause', (event, id: unknown) => downloads.pause(str(id, 64)))
   ipcMain.handle('downloads:cancel', (event, id: unknown) => downloads.cancel(str(id, 64)))

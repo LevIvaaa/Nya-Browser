@@ -110,6 +110,7 @@
   "Все профили очищены": "Semua profil telah dibersihkan",
   "Все файлы": "Semua fail",
   "Всегда": "Sentiasa",
+  "Всего": "Jumlah",
   "Вставить": "Tampal",
   "Вставить JSON": "Tampal JSON",
   "Вставить как текст": "Tampal sebagai teks",
@@ -820,6 +821,7 @@
   "Страница сохранена": "Halaman disimpan",
   "Страница целиком": "Seluruh halaman",
   "Страницы": "Halaman",
+  "Считается только время, когда окно перед глазами": "Hanya masa dengan tetingkap di hadapan anda dikira",
   "Счётчик защиты": "Pembilang perlindungan",
   "Счётчики и пиксели, которые следят за вами между сайтами": "Pembilang dan piksel yang mengekori anda antara laman",
   "Там всё останется на месте — здесь появится копия": "Di sana semuanya kekal — di sini muncul salinan",
@@ -900,6 +902,7 @@
   "Цвет текста главной": "Warna teks laman utama",
   "Цвет этого виджета": "Warna widget ini",
   "Цветная": "Berwarna",
+  "Цифровое благополучие": "Kesejahteraan digital",
   "Часть параметров вступает в силу после перезапуска": "Sebahagian tetapan berkuat kuasa selepas mula semula",
   "Часы": "Jam",
   "Чем искать": "Cari dengan apa",
@@ -970,5 +973,6 @@
   "страниц истории: {n}": "halaman sejarah: {n}",
   "трекинг": "penjejakan",
   "узнать ваше местоположение": "mengetahui lokasi anda",
+  "ч": "j",
   "читать буфер обмена": "membaca papan keratan"
 }

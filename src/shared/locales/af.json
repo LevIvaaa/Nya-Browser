@@ -110,6 +110,7 @@
   "Все профили очищены": "Alle profiele skoongemaak",
   "Все файлы": "Alle lêers",
   "Всегда": "Altyd",
+  "Всего": "Totaal",
   "Вставить": "Plak",
   "Вставить JSON": "Plak JSON",
   "Вставить как текст": "Plak as gewone teks",
@@ -820,6 +821,7 @@
   "Страница сохранена": "Bladsy gestoor",
   "Страница целиком": "Hele bladsy",
   "Страницы": "Bladsye",
+  "Считается только время, когда окно перед глазами": "Slegs tyd met die venster voor jou tel",
   "Счётчик защиты": "Beskermingsteller",
   "Счётчики и пиксели, которые следят за вами между сайтами": "Tellers en pixels wat jou tussen werwe volg",
   "Там всё останется на месте — здесь появится копия": "Daar bly alles — hier verskyn ’n kopie",
@@ -900,6 +902,7 @@
   "Цвет текста главной": "Tekskleur van die tuisblad",
   "Цвет этого виджета": "Hierdie legstuk se kleur",
   "Цветная": "Kleurling",
+  "Цифровое благополучие": "Digitale welstand",
   "Часть параметров вступает в силу после перезапуска": "Sommige instellings tree eers na 'n herbegin in werking",
   "Часы": "Horlosie",
   "Чем искать": "Waarmee om te soek",
@@ -970,5 +973,6 @@
   "страниц истории: {n}": "geskiedenisbladsye: {n}",
   "трекинг": "nasporing",
   "узнать ваше местоположение": "jou ligging weet",
+  "ч": "u",
   "читать буфер обмена": "die knipbord lees"
 }

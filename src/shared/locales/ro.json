@@ -110,6 +110,7 @@
   "Все профили очищены": "Toate profilurile au fost curățate",
   "Все файлы": "Toate fișierele",
   "Всегда": "Întotdeauna",
+  "Всего": "Total",
   "Вставить": "Lipește",
   "Вставить JSON": "Lipește JSON",
   "Вставить как текст": "Lipiți ca text",
@@ -820,6 +821,7 @@
   "Страница сохранена": "Pagina salvată",
   "Страница целиком": "Pagină întreagă",
   "Страницы": "Pagini",
+  "Считается только время, когда окно перед глазами": "Se numără doar timpul cu fereastra în față",
   "Счётчик защиты": "Contorul de protecție",
   "Счётчики и пиксели, которые следят за вами между сайтами": "Contoare și pixeli care te urmăresc între site-uri",
   "Там всё останется на месте — здесь появится копия": "Acolo rămâne tot — aici apare o copie",
@@ -900,6 +902,7 @@
   "Цвет текста главной": "Culoarea textului de pe pagina de start",
   "Цвет этого виджета": "Culoarea acestui widget",
   "Цветная": "Colorate",
+  "Цифровое благополучие": "Bunăstare digitală",
   "Часть параметров вступает в силу после перезапуска": "Unele setări intră în vigoare după repornire",
   "Часы": "Ceas",
   "Чем искать": "Cu ce cauți",
@@ -970,5 +973,6 @@
   "страниц истории: {n}": "pagini din istoric: {n}",
   "трекинг": "urmărire",
   "узнать ваше местоположение": "să afle locația ta",
+  "ч": "h",
   "читать буфер обмена": "să citească clipboardul"
 }

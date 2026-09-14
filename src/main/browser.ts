@@ -29,6 +29,7 @@ import { looksLikePdf, pdfSource, pdfViewerUrl } from './pdf'
 import { translateBatch } from './translate'
 import { WALLPAPER_EXTENSIONS, registerProtocols } from './protocol'
 import { sites } from './sites'
+import { usage } from './usage'
 import { apps, inScope, readManifest } from './apps'
 import { allowCertificateOnce, installCertificateTrust, refusedCertificate } from './trust'
 import { groupContextMenu, pageContextMenu, tabContextMenu, uiContextMenu } from './menus'
@@ -777,7 +778,16 @@ export class BrowserWindow {
 
     this.startSleepLoop()
     this.startEdgeWatch()
+    this.timeTimer = setInterval(() => this.countTime(), 15_000)
+    this.win.on('closed', () => {
+      if (this.timeTimer) clearInterval(this.timeTimer)
+      this.timeTimer = null
+      usage.flush()
+    })
   }
+
+  /** Ticks while this window is being looked at; see countTime(). */
+  private timeTimer: ReturnType<typeof setInterval> | null = null
 
   /* ------------------------------------------------------------- profiles */
   /** Binds the window to the active profile's session and data stores. */
@@ -789,6 +799,8 @@ export class BrowserWindow {
     history.setEnabled(settings.get().saveHistory)
     bookmarks.load(dir)
     sites.load(dir)
+    // Time spent is per profile, like everything else a person does here.
+    if (!this.incognito) usage.load(dir)
     // Held shut on purpose when the setting says to ask: the OS keychain would
     // otherwise open the vault before anyone had been asked anything.
     vault.load(dir, settings.get().passwordsAskOnStart)
@@ -2412,6 +2424,24 @@ export class BrowserWindow {
       this.send('toast', t('Не удалось сохранить снимок'))
       return false
     }
+  }
+
+  /**
+   * Counts the time this window is actually looked at.
+   *
+   * Only while the window has the focus and the tab in front is a site: a
+   * browser left open behind a text editor is not time spent reading, and the
+   * settings page is not a site. Fifteen seconds is the grain — fine enough to
+   * be honest over an evening, coarse enough that nobody's afternoon is
+   * reconstructable from it.
+   */
+  private countTime() {
+    if (this.incognito) return
+    if (this.win.isDestroyed() || !this.win.isFocused()) return
+    const tab = this.getActive()
+    if (!tab || tab.internal !== null || tab.sleeping) return
+    const host = hostOfUrl(tab.url)
+    if (host) usage.add(host, 15)
   }
 
   /** Where a page says it is being read, kept for the next start. */
