@@ -36,7 +36,6 @@ import {
   Grid,
   Image,
   Install,
-  CardKey,
   Key,
   Keyboard,
   LayoutHidden,
@@ -54,6 +53,7 @@ import {
   Sun,
   Trash,
   Users,
+  Wallet,
   Zap
 } from '../components/Icons'
 import {
@@ -97,7 +97,7 @@ const TABS = [
   { id: 'search', label: 'Поиск', icon: <Search width={15} height={15} /> },
   { id: 'profiles', label: 'Профили', icon: <Users width={15} height={15} /> },
   { id: 'privacy', label: 'Приватность', icon: <Shield width={15} height={15} /> },
-  { id: 'passwords', label: 'Пароли и карты', icon: <CardKey width={15} height={15} /> },
+  { id: 'passwords', label: 'Пароли и карты', icon: <Wallet width={15} height={15} /> },
   { id: 'speed', label: 'Скорость', icon: <Zap width={15} height={15} /> },
   { id: 'downloads', label: 'Загрузки', icon: <Download width={15} height={15} /> },
   { id: 'system', label: 'Система', icon: <Monitor width={15} height={15} /> },
