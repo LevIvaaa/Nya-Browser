@@ -13,6 +13,7 @@ import { downloads } from './downloads'
 import { usage } from './usage'
 import { drafts } from './drafts'
 import { pageText } from './pagetext'
+import { playback } from './playback'
 import { applyBackup, makeBackup, readBackup } from './backup'
 import { initLog, log } from './log'
 import { readerToPdf } from './readerpdf'
@@ -1279,6 +1280,47 @@ function registerIpc() {
     drafts.keep(str(data.url, 2000), clean)
   })
   ipcMain.on('page:gesture', (event) => downloads.noteGesture(event.sender.id))
+  /* ---- media: 1.6 ---- */
+  ipcMain.on('media:position', (event, payload: unknown) => {
+    const data = (payload ?? {}) as { url?: unknown; at?: unknown; of?: unknown }
+    playback.keep(str(data.url, 2000), num(data.at), num(data.of))
+  })
+  ipcMain.on('media:forget', (event, payload: unknown) => {
+    const data = (payload ?? {}) as { url?: unknown }
+    playback.drop(str(data.url, 2000))
+  })
+  ipcMain.on('media:ask-position', (event, payload: unknown) => {
+    const data = (payload ?? {}) as { url?: unknown }
+    const at = playback.find(str(data.url, 2000))
+    if (at > 0) event.sender.send('media:resume-at', at)
+  })
+  ipcMain.on('media:ended', (event, payload: unknown) => {
+    const data = (payload ?? {}) as { url?: unknown }
+    playback.drop(str(data.url, 2000))
+    current(event).playNextInQueue(event.sender.id)
+  })
+  ipcMain.on('media:frame', (event, payload: unknown) => {
+    const data = (payload ?? {}) as { data?: unknown }
+    current(event).keepFrame(str(data.data, 12_000_000))
+  })
+  ipcMain.on('media:chapters', (event, payload: unknown) => {
+    const data = (payload ?? {}) as { list?: unknown }
+    const rows = Array.isArray(data.list) ? data.list : []
+    current(event).showChapters(
+      rows.slice(0, 200).map((row) => {
+        const one = (row ?? {}) as { at?: unknown; title?: unknown }
+        return { at: num(one.at), title: str(one.title, 120) }
+      })
+    )
+  })
+  ipcMain.handle('media:player', (event, what: unknown, to: unknown) =>
+    current(event).playerCommand(
+      str(what, 20) as 'panel' | 'replay' | 'frame-now' | 'subtitles' | 'chapters',
+      num(to)
+    )
+  )
+  ipcMain.handle('media:sleep', (event, minutes: unknown) => current(event).setSleepTimer(num(minutes)))
+  ipcMain.handle('media:queue', (event, on: unknown) => current(event).setQueue(flag(on)))
   ipcMain.on('page:text', (event, payload: unknown) => {
     const data = (payload ?? {}) as { url?: unknown; title?: unknown; text?: unknown }
     pageText.keep(str(data.url, 2000), str(data.title, 300), str(data.text, 8000))

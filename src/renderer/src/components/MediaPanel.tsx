@@ -1,18 +1,7 @@
 import { t } from '../i18n'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Playing } from '../../../shared/types'
-import {
-  Back10,
-  Forward10,
-  Note,
-  Pause,
-  Pip,
-  Play,
-  SkipBack,
-  SkipForward,
-  Volume,
-  VolumeOff
-} from './Icons'
+import { Back10, Camera, Forward10, Note, Pause, Pip, Play, SkipBack, SkipForward, Sleep, Volume, VolumeOff } from './Icons'
 
 /**
  * What is playing, and where.
@@ -432,7 +421,79 @@ function Hero({ item, onClose }: { item: Playing; onClose: () => void }) {
             </button>
           )}
         </div>
+
+        <Extras video={item.video} />
       </div>
+    </div>
+  )
+}
+
+/**
+ * The row of things a player is asked for once it has been watched for a
+ * while: go back fifteen seconds, take this frame, put the subtitles on, keep
+ * the controls in sight, and stop in twenty minutes.
+ *
+ * Kept small and unlabelled on purpose — the panel is a panel, not a settings
+ * page, and each of these is one press.
+ */
+function Extras({ video }: { video: boolean }) {
+  const [sleep, setSleep] = useState(0)
+  const [panel, setPanel] = useState(false)
+
+  const step = (minutes: number) => {
+    setSleep(minutes)
+    void window.browser.sleepTimer(minutes)
+  }
+
+  return (
+    <div className="mt-2 flex items-center gap-1">
+      <button
+        className="icon-btn h-8 w-auto px-2 text-2xs font-semibold"
+        title={t('Назад на 15 секунд')}
+        onClick={() => void window.browser.player('replay')}
+      >
+        ↺ 15
+      </button>
+      {video && (
+        <button
+          className="icon-btn h-8 w-8"
+          title={t('Снимок кадра')}
+          onClick={() => void window.browser.player('frame-now')}
+        >
+          <Camera width={14} height={14} />
+        </button>
+      )}
+      {video && (
+        <button
+          className="icon-btn h-8 w-auto px-2 text-2xs font-semibold"
+          title={t('Субтитры')}
+          onClick={() => void window.browser.player('subtitles')}
+        >
+          CC
+        </button>
+      )}
+      <button
+        className="icon-btn h-8 w-8"
+        title={t('Мини-плеер')}
+        style={{ color: panel ? 'var(--accent)' : undefined }}
+        onClick={() => {
+          setPanel(!panel)
+          void window.browser.player('panel')
+        }}
+      >
+        <Pip width={14} height={14} />
+      </button>
+      <span className="flex-1" />
+      {/* Nothing, fifteen, thirty, sixty — the four answers anybody gives. */}
+      <button
+        className="icon-btn h-8 w-auto px-2 text-2xs font-semibold tabular-nums"
+        title={t('Таймер сна')}
+        style={{ color: sleep > 0 ? 'var(--accent)' : undefined }}
+        onClick={() => step(sleep === 0 ? 15 : sleep === 15 ? 30 : sleep === 30 ? 60 : 0)}
+      >
+        <Sleep width={13} height={13} />
+        {sleep > 0 ? ` ${sleep}` : ''}
+      </button>
     </div>
   )
 }

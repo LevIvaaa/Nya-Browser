@@ -34,6 +34,7 @@ import { ocrAvailable, readPicture } from './ocr'
 import { usage } from './usage'
 import { drafts } from './drafts'
 import { pageText } from './pagetext'
+import { playback } from './playback'
 import { apps, inScope, readManifest } from './apps'
 import { allowCertificateOnce, installCertificateTrust, refusedCertificate } from './trust'
 import { groupContextMenu, pageContextMenu, tabContextMenu, uiContextMenu } from './menus'
@@ -589,6 +590,10 @@ export class BrowserWindow {
   private groupSeq = 0
   private closedStack: PersistedTab[] = []
   private layoutRect: ContentLayout = { x: 0, y: 96, width: 0, height: 0, visible: true }
+  /** minutes left on the sleep timer, or zero */
+  private sleepMinutes = 0
+  /** one tab finishing starts the next */
+  private queueOn = false
   /** thumbnails of tabs, kept for a few seconds each */
   private previews = new Map<number, { at: number; data: string }>()
   /** app.getAppMetrics is not cheap; this is the last answer and when it came */
@@ -885,6 +890,7 @@ export class BrowserWindow {
       usage.load(dir)
       drafts.load(dir)
       pageText.load(dir)
+      playback.load(dir)
     }
     // Held shut on purpose when the setting says to ask: the OS keychain would
     // otherwise open the vault before anyone had been asked anything.
@@ -1410,6 +1416,8 @@ export class BrowserWindow {
       // The page reads QR codes itself and needs the two words for its buttons
       // in the language the browser is wearing.
       wc.send('qr:words', { open: t('Открыть'), copy: t('Копировать') })
+      // How this site's video and audio are set, before anything plays.
+      this.sendMediaLook(tab)
       // A site marked "always read this one" opens its sheet by itself.
       this.maybeAutoRead(tab)
       this.maybeAutoTranslate(tab)
@@ -3601,6 +3609,121 @@ export class BrowserWindow {
         ? `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(url)}`
         : `https://yandex.ru/images/search?rpt=imageview&url=${encodeURIComponent(url)}`
     this.newTab(where)
+  }
+
+  /**
+   * Everything this site's media is set to, handed to the page.
+   *
+   * Sent on every load rather than asked for, because the page has to know
+   * before the first frame plays: a site set to one and a half speed that
+   * starts at normal and jumps a second later is worse than one that does not
+   * remember at all.
+   */
+  sendMediaLook(tab: Tab) {
+    const wc = tab.wc
+    if (!wc || wc.isDestroyed()) return
+    let host = ''
+    try {
+      host = new URL(tab.url).hostname.replace(/^www\./, '')
+    } catch {
+      return
+    }
+    const media = host ? sites.get(host).media ?? {} : {}
+    wc.send('media:words', {
+      replay: t('Назад на 15 секунд'),
+      frame: t('Снимок кадра'),
+      sleep: t('Таймер сна'),
+      off: t('Выключить'),
+      minutes: t('мин'),
+      speed: t('Скорость'),
+      chapters: t('Главы')
+    })
+    wc.send('media:look', {
+      rate: media.rate ?? 1,
+      volume: 1,
+      ceiling: media.ceiling ?? 1,
+      level: media.level === true,
+      voice: media.voice === true,
+      subtitles: media.subtitles === true,
+      skipSilence: media.skipSilence === true
+    })
+  }
+
+  /** One of the player's own commands, into whichever tab is playing. */
+  playerCommand(what: 'panel' | 'replay' | 'frame-now' | 'subtitles' | 'chapters', to?: number) {
+    const playing = this.playingTabs()[0]
+    const tab = playing ? this.tabs.find((t) => t.id === playing) : this.getActive()
+    const wc = tab?.wc
+    if (!wc || wc.isDestroyed()) return false
+    wc.send(`media:${what}`, to)
+    return true
+  }
+
+  /** Stop whatever is playing in so many minutes; zero calls it off. */
+  setSleepTimer(minutes: number) {
+    for (const tab of this.tabs) {
+      const wc = tab.wc
+      if (wc && !wc.isDestroyed()) wc.send('media:sleep', minutes)
+    }
+    this.sleepMinutes = minutes
+    this.send('state:sleep-timer', minutes)
+  }
+
+  /**
+   * Which tabs are making a sound, newest first.
+   *
+   * The frame-level report is what the browser already keeps for the media
+   * panel; a tab that has a report and says it is playing is a tab that is
+   * playing, whichever frame inside it is doing it.
+   */
+  private playingTabs(): number[] {
+    const out: number[] = []
+    for (const [, row] of this.frameMedia) {
+      if (row.media?.playing && !out.includes(row.tabId)) out.push(row.tabId)
+    }
+    return out
+  }
+
+  /**
+   * One tab's media ended; if a queue is on, the next tab with something to
+   * play takes over.
+   *
+   * The queue is the thing a row of open tabs already is: four talks, four
+   * tabs, and no reason a person should have to click into each one when the
+   * last finishes.
+   */
+  playNextInQueue(webContentsId: number) {
+    if (!this.queueOn) return
+    const from = this.tabs.findIndex((tab) => tab.wc?.id === webContentsId)
+    if (from < 0) return
+    const after = [...this.tabs.slice(from + 1), ...this.tabs.slice(0, from)]
+    for (const tab of after) {
+      const wc = tab.wc
+      if (!wc || wc.isDestroyed()) continue
+      const row = [...this.frameMedia.values()].find((one) => one.tabId === tab.id)
+      if (!row?.media) continue
+      wc.send('media:command', { do: 'play' })
+      this.switchTab(tab.id)
+      return
+    }
+  }
+
+  /** Whether one tab finishing should start the next. */
+  setQueue(on: boolean) {
+    this.queueOn = on
+    this.send('state:queue', on)
+  }
+
+  /** A frame taken out of a video, offered as a file. */
+  keepFrame(data: string) {
+    if (!data.startsWith('data:image/')) return this.toast(t('Не удалось снять кадр'))
+    this.send('state:shot', data)
+    this.setOverlayMode('shot')
+  }
+
+  /** The chapters a video declares, for the panel to list. */
+  showChapters(list: Array<{ at: number; title: string }>) {
+    this.send('state:chapters', list)
   }
 
   /** Shows what each translated paragraph said before, on hover. */

@@ -422,6 +422,14 @@ const api = {
   /** Shows what each translated paragraph said before, on hover. */
   compareTranslation: (on: boolean): Promise<void> =>
     ipcRenderer.invoke('translate:compare', on),
+  /* ---- media ---- */
+  /** One of the player's own commands, into whichever tab is playing. */
+  player: (what: 'panel' | 'replay' | 'frame-now' | 'subtitles' | 'chapters', to?: number): Promise<boolean> =>
+    ipcRenderer.invoke('media:player', what, to),
+  /** Stop whatever is playing in so many minutes; zero calls it off. */
+  sleepTimer: (minutes: number): Promise<void> => ipcRenderer.invoke('media:sleep', minutes),
+  /** One tab finishing starts the next. */
+  mediaQueue: (on: boolean): Promise<void> => ipcRenderer.invoke('media:queue', on),
   /** Pages whose text contains this, for the history search. */
   searchPageText: (query: string): Promise<TextHit[]> =>
     ipcRenderer.invoke('history:search-text', query),

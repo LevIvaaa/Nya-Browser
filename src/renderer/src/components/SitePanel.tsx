@@ -1,7 +1,7 @@
 import { t } from '../i18n'
 import { useEffect, useState } from 'react'
 import type { PermissionKey, PermissionPolicy, SiteInfo, SiteRules } from '../../../shared/types'
-import { Lock, Scroll, Shield, Translate, Unlock } from './Icons'
+import { Lock, Scroll, Shield, Translate, Unlock, Volume } from './Icons'
 import { cx } from './ui'
 
 /** The permissions worth a row, in the order they are usually thought about. */
@@ -159,6 +159,63 @@ export default function SitePanel({ onClose }: { onClose: () => void }) {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* ---------------------------------------------- how this site sounds */}
+        <div className="border-t px-4 py-3" style={{ borderColor: 'var(--line)' }}>
+          <div className="flex items-center gap-2.5">
+            <Volume width={15} height={15} style={{ color: 'var(--faint)' }} />
+            <span className="min-w-0 flex-1 text-sm text-ink">{t('Видео и звук')}</span>
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <span className="w-[92px] shrink-0 text-2xs text-faint">{t('Скорость')}</span>
+            <input
+              type="range"
+              min={0.5}
+              max={2.5}
+              step={0.25}
+              value={info.rules.media?.rate ?? 1}
+              onChange={(event) => void set({ media: { rate: Number(event.target.value) } })}
+              className="flex-1"
+              style={{ accentColor: 'var(--accent)' }}
+            />
+            <span className="w-9 shrink-0 text-right text-2xs tabular-nums text-dim">
+              {String(info.rules.media?.rate ?? 1).replace('.', ',')}×
+            </span>
+          </div>
+          <div className="mt-1 flex items-center gap-2">
+            <span className="w-[92px] shrink-0 text-2xs text-faint">{t('Потолок громкости')}</span>
+            <input
+              type="range"
+              min={0.1}
+              max={1}
+              step={0.05}
+              value={info.rules.media?.ceiling ?? 1}
+              onChange={(event) => void set({ media: { ceiling: Number(event.target.value) } })}
+              className="flex-1"
+              style={{ accentColor: 'var(--accent)' }}
+            />
+            <span className="w-9 shrink-0 text-right text-2xs tabular-nums text-dim">
+              {Math.round((info.rules.media?.ceiling ?? 1) * 100)}%
+            </span>
+          </div>
+          {(
+            [
+              ['level', t('Выравнивать громкость')],
+              ['voice', t('Усилить голос')],
+              ['subtitles', t('Субтитры сразу')],
+              ['skipSilence', t('Пропускать тишину')]
+            ] as Array<['level' | 'voice' | 'subtitles' | 'skipSilence', string]>
+          ).map(([key, label]) => (
+            <label key={key} className="mt-1.5 flex cursor-pointer items-center gap-2.5">
+              <input
+                type="checkbox"
+                checked={info.rules.media?.[key] === true}
+                onChange={(event) => void set({ media: { [key]: event.target.checked || undefined } })}
+              />
+              <span className="min-w-0 flex-1 text-2xs text-ink">{label}</span>
+            </label>
+          ))}
         </div>
 
         {/* ------------------------------------------------------- the zoom */}
