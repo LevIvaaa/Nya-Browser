@@ -8,7 +8,7 @@ import type {
   TabSpace,
   TabState
 } from '../../../shared/types'
-import { CardKey, ChevronDown, ChevronLeft, ChevronRight, Clock, Cross, Download, Gear, Globe, HalfLeft, HalfRight, Pin, Plus, Sleep, Star, Volume, VolumeOff } from './Icons'
+import { ChevronDown, ChevronLeft, ChevronRight, Clock, Cross, Download, Gear, Globe, HalfLeft, HalfRight, Pin, Plus, Sleep, Star, Volume, VolumeOff, Wallet } from './Icons'
 import { cx } from './ui'
 
 /** The same icons these pages carry in the toolbar and in the menu. */
@@ -17,7 +17,7 @@ const INTERNAL_ICONS: Record<InternalPage, typeof Gear> = {
   history: Clock,
   downloads: Download,
   bookmarks: Star,
-  passwords: CardKey
+  passwords: Wallet
 }
 
 /**

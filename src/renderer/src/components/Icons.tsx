@@ -563,21 +563,13 @@ export const HalfRight = (p: P) => (
  * A key alone said «passwords» and nothing about what else is kept there;
  * a card alone says nothing about the lock.
  */
-export const CardKey = (p: P) => (
+export const Wallet = (p: P) => (
   <svg {...svg(p, 1.5)}>
-    {/* A key and a pair of cards, arranged the way that picture arranges them
-        — the key across the left, the cards fanned to the right — with every
-        stroke clear of every other, because at sixteen pixels a crossing is
-        a smudge. */}
-    <g transform="rotate(-22 6.4 11)">
-      <rect x="4.1" y="2.2" width="4.6" height="4.4" rx="1.6" />
-      <rect x="5.6" y="3.5" width="1.6" height="1.8" rx="0.5" />
-      <path d="M6.4 6.6v12.8" />
-      <path d="M6.4 14.8h2M6.4 17h1.6" />
-    </g>
-    <path d="M15 9.8h5.6a1.8 1.8 0 0 1 1.8 1.8v1.2" />
-    <rect x="12.8" y="12.6" width="9.6" height="6.6" rx="1.8" />
-    <rect x="14.4" y="14.4" width="2.3" height="1.8" rx="0.5" />
-    <path d="M19.4 14.8a2.2 2.2 0 0 1 0 2.2" />
+    {/* Where a person actually keeps these things: a wallet with the cards
+        showing over its edge and the catch on the front. */}
+    <path d="M7.4 5.4 18 3.2l1.2 4.2" />
+    <path d="M4.6 8.2 16 5.8" />
+    <rect x="2.4" y="8.2" width="17.6" height="11.4" rx="2.4" />
+    <path d="M15.4 12.6h4.6v3.4h-4.6a1.7 1.7 0 0 1 0-3.4z" />
   </svg>
 )
