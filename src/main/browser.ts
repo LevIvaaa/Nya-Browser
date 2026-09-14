@@ -1294,6 +1294,9 @@ export class BrowserWindow {
     })
     wc.on('did-finish-load', () => {
       if (tab.id === this.activeId) void this.lookForApp(tab)
+      // The page reads QR codes itself and needs the two words for its buttons
+      // in the language the browser is wearing.
+      wc.send('qr:words', { open: t('Открыть'), copy: t('Копировать') })
       // A restored tab opens where it was left. Once only: after that the
       // page is the reader's again.
       if (tab.restoreScroll > 0) {
@@ -2442,6 +2445,11 @@ export class BrowserWindow {
     if (!tab || tab.internal !== null || tab.sleeping) return
     const host = hostOfUrl(tab.url)
     if (host) usage.add(host, 15)
+  }
+
+  /** A word to the person, from anywhere in the main process. */
+  toast(text: string) {
+    this.send('toast', text)
   }
 
   /** Where a page says it is being read, kept for the next start. */

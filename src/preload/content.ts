@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import jsQR from 'jsqr'
 import { Readability, isProbablyReaderable } from '@mozilla/readability'
 
 /**
@@ -1106,6 +1107,215 @@ if (isTop && httpOrigin) {
   // browser that says when the choosing is off.
   ipcRenderer.on('capture:cancel', stop)
   window.addEventListener('pagehide', stop)
+}
+
+/* ==========================================================================
+   QR-код на странице
+   ========================================================================== */
+
+/**
+ * A QR code on a page is a dead end: it is meant for a phone camera, and there
+ * is no camera here. So the browser reads it.
+ *
+ * Pictures that could be a code — square, big enough — are looked at once the
+ * page has settled, and a found code lights up where it is and says what it
+ * holds, with a way to copy it or go there. Nothing is sent anywhere: the
+ * reading happens on this machine, in this page.
+ */
+{
+  const seen = new WeakSet<HTMLImageElement | HTMLCanvasElement>()
+  let bubble: HTMLElement | null = null
+  let ring: HTMLElement | null = null
+
+  const clear = () => {
+    bubble?.remove()
+    ring?.remove()
+    bubble = null
+    ring = null
+  }
+
+  /** The image, as pixels, even when the site's server refuses us its canvas. */
+  const pixels = async (node: HTMLImageElement | HTMLCanvasElement): Promise<ImageData | null> => {
+    const width = node instanceof HTMLImageElement ? node.naturalWidth : node.width
+    const height = node instanceof HTMLImageElement ? node.naturalHeight : node.height
+    if (width < 48 || height < 48 || width > 4000 || height > 4000) return null
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+    if (!ctx) return null
+    try {
+      ctx.drawImage(node, 0, 0, width, height)
+      return ctx.getImageData(0, 0, width, height)
+    } catch {
+      // A picture from another site taints the canvas. The browser itself can
+      // fetch it — it is not bound by the page's origin — and hand back bytes.
+      if (!(node instanceof HTMLImageElement) || !node.currentSrc) return null
+      try {
+        const data: ArrayBuffer | null = await ipcRenderer.invoke('qr:bytes', node.currentSrc)
+        if (!data) return null
+        const blob = new Blob([data])
+        const url = URL.createObjectURL(blob)
+        const copy = new Image()
+        await new Promise((done, fail) => {
+          copy.onload = done
+          copy.onerror = fail
+          copy.src = url
+        })
+        canvas.width = copy.naturalWidth
+        canvas.height = copy.naturalHeight
+        ctx.drawImage(copy, 0, 0)
+        const out = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        URL.revokeObjectURL(url)
+        return out
+      } catch {
+        return null
+      }
+    }
+  }
+
+  const show = (node: Element, text: string) => {
+    clear()
+    const rect = node.getBoundingClientRect()
+    const link = /^(https?:\/\/|www\.)/i.test(text)
+
+    // The code itself, outlined where it sits.
+    const halo = document.createElement('nya-qr-ring')
+    halo.setAttribute(
+      'style',
+      'all: initial; position: fixed; z-index: 2147483644; pointer-events: none;' +
+        ' left: ' + Math.round(rect.left - 4) + 'px; top: ' + Math.round(rect.top - 4) + 'px;' +
+        ' width: ' + Math.round(rect.width + 8) + 'px; height: ' + Math.round(rect.height + 8) + 'px'
+    )
+    const halowrap = halo.attachShadow({ mode: 'open' })
+    const halostyle = document.createElement('style')
+    halostyle.textContent =
+      '@keyframes nya-qr-pulse { 0% { box-shadow: 0 0 0 0 rgba(124,108,255,.55) }' +
+      ' 70% { box-shadow: 0 0 0 10px rgba(124,108,255,0) }' +
+      ' 100% { box-shadow: 0 0 0 0 rgba(124,108,255,0) } }' +
+      '.r { position: absolute; inset: 0; border: 2px solid #9b8fff; border-radius: 10px;' +
+      ' animation: nya-qr-pulse 1.8s cubic-bezier(.22,1,.36,1) 2 }'
+    const r = document.createElement('div')
+    r.className = 'r'
+    halowrap.append(halostyle, r)
+    document.documentElement.appendChild(halo)
+    ring = halo
+
+    // What it says, under it.
+    const host = document.createElement('nya-qr')
+    const width = Math.min(340, Math.max(240, window.innerWidth - 32))
+    const left = Math.min(Math.max(8, rect.left + rect.width / 2 - width / 2), window.innerWidth - width - 8)
+    const below = rect.bottom + 12
+    const top = below + 92 > window.innerHeight ? Math.max(8, rect.top - 96) : below
+    host.setAttribute(
+      'style',
+      'all: initial; position: fixed; z-index: 2147483645; left: ' + left + 'px; top: ' + top + 'px; width: ' + width + 'px'
+    )
+    const shadow = host.attachShadow({ mode: 'open' })
+    const style = document.createElement('style')
+    style.textContent = [
+      '@keyframes nya-qr-in { from { opacity: 0; transform: translateY(-6px) }',
+      '  to { opacity: 1; transform: translateY(0) } }',
+      '.box { animation: nya-qr-in .22s cubic-bezier(.22,1,.36,1) both;',
+      '  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: #f2f3f7;',
+      '  background: rgba(22,23,30,.96); border: 1px solid rgba(255,255,255,.12); border-radius: 12px;',
+      '  padding: 10px 12px; box-shadow: 0 18px 44px -16px rgba(0,0,0,.7) }',
+      '.text { display: block; word-break: break-all; user-select: text; -webkit-user-select: text;',
+      '  max-height: 84px; overflow: auto }',
+      '.row { display: flex; gap: 8px; margin-top: 10px }',
+      '.btn { font: 600 12px system-ui, sans-serif; color: #c4bcff; background: rgba(124,108,255,.18);',
+      '  border: 0; border-radius: 8px; padding: 6px 10px; cursor: pointer }',
+      '.btn.plain { color: rgba(242,243,247,.72); background: rgba(255,255,255,.08) }'
+    ].join(' ')
+    const box = document.createElement('div')
+    box.className = 'box'
+    const line = document.createElement('span')
+    line.className = 'text'
+    line.textContent = text
+    const row = document.createElement('div')
+    row.className = 'row'
+    if (link) {
+      const go = document.createElement('button')
+      go.className = 'btn'
+      go.textContent = words.open
+      go.addEventListener('click', () => {
+        ipcRenderer.send('qr:open', text)
+        clear()
+      })
+      row.append(go)
+    }
+    const copy = document.createElement('button')
+    copy.className = 'btn plain'
+    copy.textContent = words.copy
+    copy.addEventListener('click', () => {
+      ipcRenderer.send('qr:copy', text)
+      clear()
+    })
+    row.append(copy)
+    box.append(line, row)
+    shadow.append(style, box)
+    document.documentElement.appendChild(host)
+    bubble = host
+  }
+
+  // The words come from the browser, which is the side that knows the language.
+  const words: { open: string; copy: string } = { open: 'Открыть', copy: 'Копировать' }
+
+  const read = async (node: HTMLImageElement | HTMLCanvasElement, loud: boolean) => {
+    if (!loud && seen.has(node)) return false
+    seen.add(node)
+    const data = await pixels(node)
+    if (!data) return false
+    const found = jsQR(data.data, data.width, data.height, { inversionAttempts: 'dontInvert' })
+    if (!found || !found.data) return false
+    show(node, found.data)
+    return true
+  }
+
+  /** Square enough to be a code, big enough to be worth looking at. */
+  const candidate = (image: HTMLImageElement) => {
+    const w = image.clientWidth
+    const h = image.clientHeight
+    if (w < 64 || h < 64) return false
+    const ratio = w / h
+    return ratio > 0.8 && ratio < 1.25
+  }
+
+  const sweep = async () => {
+    const images = Array.from(document.images).filter(candidate).slice(0, 8)
+    for (const image of images) {
+      if (!image.complete) continue
+      if (await read(image, false)) return
+    }
+  }
+
+  // Asked for by name, from the picture's own menu: then even a wide banner
+  // is worth a look, because somebody thinks there is a code in it.
+  ipcRenderer.on('qr:scan', async (_event, payload: { src?: string; open?: string; copy?: string }) => {
+    if (payload?.open) words.open = payload.open
+    if (payload?.copy) words.copy = payload.copy
+    const src = String(payload?.src ?? '')
+    const image =
+      Array.from(document.images).find((i) => i.currentSrc === src || i.src === src) ?? null
+    if (image && (await read(image, true))) return
+    ipcRenderer.send('qr:none')
+  })
+
+  ipcRenderer.on('qr:words', (_event, payload: { open?: string; copy?: string }) => {
+    if (payload?.open) words.open = payload.open
+    if (payload?.copy) words.copy = payload.copy
+  })
+
+  // Once, after the page has settled: a sweep on every mutation would be a
+  // scan of the whole web.
+  window.addEventListener('load', () => {
+    setTimeout(() => void sweep(), 1200)
+  })
+  document.addEventListener('mousedown', (event) => {
+    if (bubble && !event.composedPath().includes(bubble)) clear()
+  }, true)
+  window.addEventListener('scroll', clear, true)
+  window.addEventListener('pagehide', clear)
 }
 
 /* ==========================================================================
