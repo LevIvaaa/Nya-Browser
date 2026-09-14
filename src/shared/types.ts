@@ -655,6 +655,18 @@ export interface DownloadItem {
   speed: number
 }
 
+/** What the vault thinks of one saved password. See main/vault.ts. */
+export interface PasswordAudit {
+  id: string
+  origin: string
+  username: string
+  verdict: 'weak' | 'fair' | 'good'
+  /** the same password is saved somewhere else too */
+  reused: boolean
+  /** saved more than a year ago and never changed since */
+  old: boolean
+}
+
 /** What a backup carried, counted. See main/backup.ts. */
 export interface BackupCounts {
   passwords: number

@@ -1,16 +1,21 @@
 import { t } from '../i18n'
 import { useEffect, useMemo, useState } from 'react'
 import type { Credential, VaultState } from '../../../preload/index'
-import type { AddressMeta, CardMeta } from '../../../shared/types'
+import type { AddressMeta, CardMeta, PasswordAudit } from '../../../shared/types'
 import { AddressesTab, CardsTab } from './VaultCards'
+import { Badges, BinTab, CodeBlock, Generator } from './VaultExtras'
 import { cx } from '../components/ui'
-import { ChevronRight, Copy, Cross, Eye, EyeOff, Key, Lock, LockOpen, Plus, Search, Shield, Wand } from '../components/Icons'
+import { ChevronRight, Copy, Cross, Download, Eye, EyeOff, Install, Key, Lock, LockOpen, Plus, Search, Shield, ShieldCheck, Wand } from '../components/Icons'
 import { EmptyState, Modal, Pill, TextField, formatDate } from '../components/ui'
 
 const normalizeHost = (host: string) => host.toLowerCase().replace(/^www\./, '')
 
-/** The three things a shop asks for, in the order it asks for them. */
-type Section = 'passwords' | 'cards' | 'addresses'
+/** The three things a shop asks for, in the order it asks for them —
+    and the bin, where the ones deleted by mistake wait. */
+type Section = 'passwords' | 'cards' | 'addresses' | 'bin'
+
+/** What the list is narrowed to after a check has run. */
+type Filter = 'all' | 'weak' | 'reused' | 'stolen'
 
 export default function PasswordsPage() {
   const [state, setState] = useState<VaultState | null>(null)
@@ -27,12 +32,37 @@ export default function PasswordsPage() {
   const [masterOpen, setMasterOpen] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [error, setError] = useState('')
+  const [binned, setBinned] = useState<Credential[]>([])
+  const [audit, setAudit] = useState<Record<string, PasswordAudit>>({})
+  const [stolen, setStolen] = useState<string[]>([])
+  const [checking, setChecking] = useState(false)
+  const [checked, setChecked] = useState(false)
+  const [filter, setFilter] = useState<Filter>('all')
+  const [genOpen, setGenOpen] = useState(false)
+  const [note, setNote] = useState('')
 
   const refresh = async () => {
     setState(await window.browser.vaultState())
     setItems(await window.browser.vaultList())
     setCards(await window.browser.vaultCards())
     setAddresses(await window.browser.vaultAddresses())
+    setBinned(await window.browser.vaultBinned())
+  }
+
+  /**
+   * The check, in two parts: the verdicts, which never leave this computer,
+   * and the leak lookup, which sends five characters of a hash and nothing
+   * else. Both are asked for by a button — neither happens on its own.
+   */
+  const check = async () => {
+    setChecking(true)
+    setError('')
+    setNote('')
+    const rows = await window.browser.vaultAudit()
+    setAudit(Object.fromEntries(rows.map((row) => [row.id, row])))
+    setStolen(await window.browser.vaultStolen())
+    setChecked(true)
+    setChecking(false)
   }
   useEffect(() => {
     void refresh()
@@ -62,11 +92,30 @@ export default function PasswordsPage() {
     }
   }, [items])
 
+  const stolenSet = useMemo(() => new Set(stolen), [stolen])
+  const counts = useMemo(
+    () => ({
+      all: items.length,
+      weak: items.filter((item) => audit[item.id]?.verdict === 'weak').length,
+      reused: items.filter((item) => audit[item.id]?.reused).length,
+      stolen: items.filter((item) => stolenSet.has(item.id)).length
+    }),
+    [items, audit, stolenSet]
+  )
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return items
-    return items.filter((item) => item.origin.includes(q) || item.username.toLowerCase().includes(q))
-  }, [items, query])
+    let list = items
+    if (q) {
+      list = list.filter(
+        (item) => item.origin.includes(q) || item.username.toLowerCase().includes(q)
+      )
+    }
+    if (filter === 'weak') list = list.filter((item) => audit[item.id]?.verdict === 'weak')
+    if (filter === 'reused') list = list.filter((item) => audit[item.id]?.reused)
+    if (filter === 'stolen') list = list.filter((item) => stolenSet.has(item.id))
+    return list
+  }, [items, query, filter, audit, stolenSet])
 
   const locked = state?.locked ?? true
 
@@ -107,7 +156,8 @@ export default function PasswordsPage() {
             [
               ['passwords', t('Пароли'), items.length],
               ['cards', t('Карты'), cards.length],
-              ['addresses', t('Адреса'), addresses.length]
+              ['addresses', t('Адреса'), addresses.length],
+              ['bin', t('Корзина'), binned.length]
             ] as Array<[Section, string, number]>
           ).map(([id, name, count]) => (
             <button
@@ -175,10 +225,95 @@ export default function PasswordsPage() {
           </button>
         </div>
 
+        {/* Everything that acts on the whole list rather than on one row.
+            The check and the generator on the left, the two doors on the
+            right — a CSV is how passwords move between browsers, and both
+            directions ask before they touch a file. */}
+        {section === 'passwords' && items.length > 0 && (
+          <div className="animate-fade-up mb-4 flex flex-wrap items-center gap-2">
+            <button className="btn" disabled={locked || checking} onClick={check}>
+              <ShieldCheck width={15} height={15} />
+              {t('Проверить пароли')}
+            </button>
+            <button className="btn" onClick={() => setGenOpen(true)}>
+              <Wand width={15} height={15} />
+              {t('Генератор паролей')}
+            </button>
+            <span className="mr-auto" />
+            <button
+              className="btn"
+              disabled={locked}
+              onClick={async () => {
+                setNote('')
+                await window.browser.vaultExportCsv()
+              }}
+              title={t('Пароли из CSV')}
+            >
+              <Download width={15} height={15} />
+              {t('Экспортировать')}
+            </button>
+            <button
+              className="btn"
+              disabled={locked}
+              onClick={async () => {
+                const added = await window.browser.vaultImportCsv()
+                setNote(added > 0 ? t('Добавлено записей: {n}', { n: added }) : t('Ничего не найдено'))
+                if (added > 0) void refresh()
+              }}
+              title={t('Их шифрует другой браузер — принесите файл CSV из него')}
+            >
+              <Install width={15} height={15} />
+              {t('Импортировать')}
+            </button>
+          </div>
+        )}
+
+        {/* After a check: what it found, as something to click rather than
+            something to read. Nothing is shown before the check runs, because
+            an empty row of chips reads as a clean bill of health. */}
+        {section === 'passwords' && checked && (
+          <div className="animate-fade-up mb-4 flex flex-wrap items-center gap-1.5">
+            {(
+              [
+                ['all', t('Все'), counts.all, 'var(--text-dim)'],
+                ['stolen', t('В утечке'), counts.stolen, 'var(--bad)'],
+                ['weak', t('Слабый'), counts.weak, 'var(--warn)'],
+                ['reused', t('Повторяется'), counts.reused, 'var(--warn)']
+              ] as Array<[Filter, string, number, string]>
+            )
+              .filter(([id, , count]) => id === 'all' || count > 0)
+              .map(([id, name, count, colour]) => (
+                <button
+                  key={id}
+                  className="flex h-[28px] items-center gap-1.5 rounded-pill px-3 text-sm"
+                  style={{
+                    color: filter === id ? '#fff' : colour,
+                    background:
+                      filter === id
+                        ? 'var(--accent)'
+                        : `color-mix(in srgb, ${colour} 12%, transparent)`,
+                    transition: 'background var(--t-fast) linear, color var(--t-fast) linear'
+                  }}
+                  onClick={() => setFilter(filter === id ? 'all' : id)}
+                >
+                  {name}
+                  <span className="text-2xs tabular-nums opacity-70">{count}</span>
+                </button>
+              ))}
+            {counts.stolen + counts.weak + counts.reused === 0 && (
+              <span className="ml-1 text-sm" style={{ color: 'var(--good)' }}>
+                {t('Проверка не нашла проблем')}
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Keyed by section, so changing tabs is the new list arriving and
             not the old one being overwritten in place. */}
         <div key={section} className="animate-swap">
-        {section === 'cards' ? (
+        {section === 'bin' ? (
+          <BinTab items={binned} locked={locked} onChanged={() => void refresh()} />
+        ) : section === 'cards' ? (
           <CardsTab
             cards={cards}
             locked={locked}
@@ -223,6 +358,7 @@ export default function PasswordsPage() {
                         {item.username || t('без имени')}
                       </span>
                     </span>
+                    <Badges audit={audit[item.id]} stolen={stolenSet.has(item.id)} />
                     <ChevronRight
                       width={14}
                       height={14}
@@ -264,6 +400,11 @@ export default function PasswordsPage() {
                         }}
                         revealed={Boolean(revealed[item.id])}
                       />
+                      <CodeBlock
+                        id={item.id}
+                        has={Boolean(item.code)}
+                        onChanged={() => void refresh()}
+                      />
                       <div className="flex items-center gap-3 pt-1">
                         <span className="mr-auto text-2xs text-faint">
                           добавлен {formatDate(item.created)}
@@ -296,6 +437,7 @@ export default function PasswordsPage() {
             {t('Пароли шифруются по отдельности (AES-256-GCM); сайт и имя пользователя входят в аутентифицируемые данные, поэтому запись нельзя подставить другому сайту.')}
           </p>
         )}
+        {note && <p className="mt-2 text-sm" style={{ color: 'var(--good)' }}>{note}</p>}
         {error && <p className="mt-2 text-sm" style={{ color: 'var(--warn)' }}>{error}</p>}
       </div>
 
@@ -318,6 +460,7 @@ export default function PasswordsPage() {
           }}
         />
       )}
+      {genOpen && <Generator onClose={() => setGenOpen(false)} />}
       {addOpen && (
         <AddDialog
           onClose={() => setAddOpen(false)}
@@ -420,7 +563,7 @@ function Line({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="w-[70px] shrink-0 text-2xs uppercase tracking-wider text-faint">{label}</span>
+      <span className="w-[104px] shrink-0 text-2xs uppercase tracking-wider text-faint">{label}</span>
       <span
         className={`min-w-0 flex-1 truncate rounded-[8px] px-2.5 py-1.5 text-sm ${mono ? 'font-mono' : ''}`}
         style={{ background: 'var(--field-idle)' }}
