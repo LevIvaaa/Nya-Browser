@@ -4,8 +4,8 @@ import type { Credential } from '../../../preload/index'
 import type { PasswordAudit } from '../../../shared/types'
 import { DEFAULT_SHAPE, judge, makePassword } from '../../../shared/password'
 import type { PasswordShape } from '../../../shared/password'
-import { Copy, Cross, Refresh, Trash, Wand } from '../components/Icons'
-import { EmptyState, Modal, Pill, Slider, Toggle, formatDate } from '../components/ui'
+import { Copy, Cross, Download, Note, Plus, Refresh, Trash, Wand } from '../components/Icons'
+import { EmptyState, Modal, Pill, Slider, Toggle, formatBytes, formatDate } from '../components/ui'
 
 /**
  * What the vault page grew for 1.2: a verdict on every password, the one-time
@@ -62,7 +62,7 @@ export function CodeBlock({
   if (!has) {
     return (
       <div className="flex items-center gap-2">
-        <span className="w-[104px] shrink-0 text-2xs uppercase tracking-wider text-faint">
+        <span className="w-[124px] shrink-0 text-2xs uppercase tracking-wider text-faint">
           {t('Одноразовый код')}
         </span>
         <input
@@ -93,7 +93,7 @@ export function CodeBlock({
 
   return (
     <div className="flex items-center gap-2">
-      <span className="w-[104px] shrink-0 text-2xs uppercase tracking-wider text-faint">
+      <span className="w-[124px] shrink-0 text-2xs uppercase tracking-wider text-faint">
         {t('Одноразовый код')}
       </span>
       <span
@@ -138,6 +138,111 @@ export function CodeBlock({
       >
         <Cross width={14} height={14} />
       </button>
+    </div>
+  )
+}
+
+/**
+ * The line beside a password that is not a password: the recovery code, the
+ * answer to "your first school", which of three accounts this one is. It saves
+ * when the field is left, because a Save button for one line is a Save button
+ * people forget to press.
+ */
+export function NoteBlock({ id, note, onSaved }: { id: string; note: string; onSaved: () => void }) {
+  const [text, setText] = useState(note)
+  useEffect(() => setText(note), [note, id])
+  return (
+    <div className="flex items-start gap-2">
+      <span className="w-[124px] shrink-0 pt-1.5 text-2xs uppercase tracking-wider text-faint">
+        {t('Заметка')}
+      </span>
+      <textarea
+        value={text}
+        rows={text.length > 60 ? 3 : 1}
+        onChange={(event) => setText(event.target.value)}
+        onBlur={async () => {
+          if (text === note) return
+          await window.browser.vaultSetNote(id, text)
+          onSaved()
+        }}
+        placeholder="—"
+        className="field focus-ring min-w-0 flex-1 resize-none py-1.5 text-sm"
+        style={{ height: 'auto', minHeight: 32 }}
+      />
+    </div>
+  )
+}
+
+/**
+ * One file kept with the entry — the sheet of recovery codes a bank prints
+ * once. It is sealed by the same key as the password and never lands on disk
+ * in the clear; taking it out is a save dialog, which is a deliberate act.
+ */
+export function FileBlock({
+  id,
+  file,
+  onChanged
+}: {
+  id: string
+  file?: { name: string; size: number }
+  onChanged: () => void
+}) {
+  const [busy, setBusy] = useState(false)
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-[124px] shrink-0 text-2xs uppercase tracking-wider text-faint">
+        {t('Вложение')}
+      </span>
+      {file ? (
+        <>
+          <span
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-sm"
+            style={{ background: 'var(--field-idle)' }}
+          >
+            <Note width={13} height={13} className="shrink-0 text-faint" />
+            <span className="truncate">{file.name}</span>
+            <span className="ml-auto shrink-0 text-2xs tabular-nums text-faint">
+              {formatBytes(file.size)}
+            </span>
+          </span>
+          <button
+            className="icon-btn shrink-0"
+            title={t('Сохранить файл')}
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true)
+              await window.browser.vaultSaveAttachment(id)
+              setBusy(false)
+            }}
+          >
+            <Download width={14} height={14} />
+          </button>
+          <button
+            className="icon-btn shrink-0"
+            title={t('Удалить')}
+            onClick={async () => {
+              await window.browser.vaultDetach(id)
+              onChanged()
+            }}
+          >
+            <Cross width={14} height={14} />
+          </button>
+        </>
+      ) : (
+        <button
+          className="btn h-[30px] px-3 text-sm"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true)
+            const ok = await window.browser.vaultAttach(id)
+            setBusy(false)
+            if (ok) onChanged()
+          }}
+        >
+          <Plus width={13} height={13} />
+          {t('Прикрепить файл')}
+        </button>
+      )}
     </div>
   )
 }

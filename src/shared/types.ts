@@ -477,6 +477,13 @@ export interface Settings {
   doNotDisturb: boolean
   /** Nothing plays until a person has touched the page. */
   blockAutoplay: boolean
+  /**
+   * Windows Hello before a card number goes into a page — every time, not
+   * once per session. A saved card is the one thing in the vault that can be
+   * spent, and the person at the keyboard is the thing worth checking.
+   * Ignored where Hello is not set up.
+   */
+  cardHello: boolean
 
   // ---- shortcuts
   /**

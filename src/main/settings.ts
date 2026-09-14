@@ -152,6 +152,7 @@ export const DEFAULT_SETTINGS: Settings = {
 
   doNotDisturb: false,
   blockAutoplay: false,
+  cardHello: true,
 
   shortcuts: {},
 
@@ -398,6 +399,7 @@ export function sanitize(input: Partial<Settings>): Settings {
 
     doNotDisturb: bool(input.doNotDisturb, d.doNotDisturb),
     blockAutoplay: bool(input.blockAutoplay, d.blockAutoplay),
+    cardHello: bool(input.cardHello, d.cardHello),
 
     shortcuts: sanitizeShortcuts(input.shortcuts),
 

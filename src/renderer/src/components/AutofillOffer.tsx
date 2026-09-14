@@ -1,6 +1,7 @@
 import { t } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
-import { CardIcon, Key, Lock, MapPin, User } from './Icons'
+import { Alert, CardIcon, Clock, Key, Lock, MapPin, Refresh, Search, User, Wand } from './Icons'
+import { makePassword } from '../../../shared/password'
 import type { AutofillOffer } from '../../../preload/index'
 
 /**
@@ -25,10 +26,175 @@ export default function AutofillCard({
   onClose: () => void
 }) {
   if (!offer) return null
-  return offer.locked ? (
-    <VaultNotice host={offer.host} onClose={onClose} />
-  ) : (
-    <Entries offer={offer} onClose={onClose} />
+  if (offer.locked) return <VaultNotice host={offer.host} onClose={onClose} />
+  if (offer.kind === 'new-password') return <NewPassword offer={offer} onClose={onClose} />
+  return <Entries offer={offer} onClose={onClose} />
+}
+
+/** The shell every offer is drawn in: one card, over the page, under the field. */
+function Card({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="animate-pop absolute inset-[20px] flex flex-col overflow-hidden rounded-card"
+      style={{
+        background: 'var(--elevated)',
+        border: '1px solid var(--line)',
+        boxShadow: 'var(--shadow-xl)',
+        backdropFilter: 'blur(30px) saturate(180%)'
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+/**
+ * Where this form is really sending what is typed into it.
+ *
+ * Only drawn when that is not the site in the address bar — which is rare, and
+ * is exactly the shape of a form dropped onto a page to collect passwords.
+ */
+function PostsTo({ host }: { host: string }) {
+  return (
+    <div
+      className="flex shrink-0 items-center gap-2 px-3 py-2 text-2xs"
+      style={{
+        color: 'var(--warn)',
+        background: 'color-mix(in srgb, var(--warn) 12%, transparent)'
+      }}
+    >
+      <Alert width={12} height={12} className="shrink-0" />
+      <span className="truncate">{t('Форма отправит данные на {host}', { host })}</span>
+    </div>
+  )
+}
+
+/**
+ * A password made here, for a form asking for a new one.
+ *
+ * This is the one moment a generator is worth offering unprompted: the box
+ * says "new password", and whatever is typed into it now is what the account
+ * will be protected by for years. It is filled into every password box on the
+ * form, and saved by the ordinary offer when the form is submitted.
+ */
+function NewPassword({ offer, onClose }: { offer: AutofillOffer; onClose: () => void }) {
+  const [password, setPassword] = useState(() => makePassword())
+  return (
+    <Card>
+      <div className="flex h-[30px] shrink-0 items-center gap-1.5 px-3 text-2xs text-faint">
+        <Wand width={11} height={11} />
+        <span className="truncate">{t('Новый пароль')}</span>
+      </div>
+      {offer.postsTo && <PostsTo host={offer.postsTo} />}
+      <div className="flex min-h-0 flex-1 flex-col gap-2 px-3 pb-3">
+        <div
+          className="flex items-center gap-2 rounded-[10px] px-2.5 py-2"
+          style={{ background: 'var(--field-idle)' }}
+        >
+          <span className="min-w-0 flex-1 break-all font-mono text-[13px] leading-snug text-ink">
+            {password}
+          </span>
+          <button
+            className="icon-btn shrink-0"
+            title={t('Сгенерировать')}
+            onClick={() => setPassword(makePassword())}
+          >
+            <Refresh width={13} height={13} />
+          </button>
+        </div>
+        <button
+          className="btn btn-primary mt-auto h-[32px] justify-center"
+          onClick={async () => {
+            await window.browser.fillNewPassword(password)
+            onClose()
+          }}
+        >
+          {t('Вставить')}
+        </button>
+      </div>
+    </Card>
+  )
+}
+
+/**
+ * The whole vault, from a login box.
+ *
+ * A password saved under a name this site is not called by — a work account on
+ * another subdomain, one login shared by two sites — was invisible here, and
+ * the only way to it was the vault page and the clipboard. Typing a few
+ * letters finds it; picking it fills this form, once, because a person said so.
+ */
+function SearchAll({ onClose }: { onClose: () => void }) {
+  const [query, setQuery] = useState('')
+  const [found, setFound] = useState<Array<{ id: string; origin: string; username: string }>>([])
+  const field = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    field.current?.focus()
+  }, [])
+  useEffect(() => {
+    let alive = true
+    void window.browser.vaultSearch(query).then((rows) => {
+      if (alive) setFound(rows)
+    })
+    return () => {
+      alive = false
+    }
+  }, [query])
+
+  return (
+    <Card>
+      <div className="flex shrink-0 items-center gap-2 px-3 pt-3">
+        <Search width={13} height={13} className="shrink-0 text-faint" />
+        <input
+          ref={field}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') void window.browser.closeOffer()
+          }}
+          placeholder={t('Поиск по сайтам')}
+          className="field h-[32px] min-w-0 flex-1 text-sm"
+        />
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-1.5">
+        {found.length === 0 ? (
+          <p className="px-2 pt-6 text-center text-2xs text-faint">
+            {query ? t('Ничего не найдено') : t('Поиск по сайтам')}
+          </p>
+        ) : (
+          found.map((entry) => (
+            <button
+              key={entry.id}
+              className="flex h-11 w-full items-center gap-2.5 rounded-[10px] px-2 text-left transition-colors duration-100 hover:bg-[var(--surface-hover)]"
+              onClick={async () => {
+                await window.browser.vaultFillFound(entry.id)
+                onClose()
+              }}
+            >
+              <span
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-pill"
+                style={{ background: 'var(--field-idle)', color: 'var(--text-dim)' }}
+              >
+                <Key width={13} height={13} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm text-ink">{entry.origin}</span>
+                <span className="block truncate text-2xs text-faint">
+                  {entry.username || t('без имени')}
+                </span>
+              </span>
+            </button>
+          ))
+        )}
+      </div>
+      <button
+        className="btn m-2 mt-0 h-[30px] shrink-0 justify-center text-sm"
+        onClick={() => void window.browser.closeOffer()}
+      >
+        {t('Отмена')}
+      </button>
+    </Card>
   )
 }
 
@@ -160,13 +326,25 @@ export const expiry = (card: { month: number; year: number }) =>
   `${String(card.month).padStart(2, '0')}/${String(card.year).slice(2)}`
 
 function Entries({ offer, onClose }: { offer: AutofillOffer; onClose: () => void }) {
+  const [searching, setSearching] = useState(false)
+  if (searching) return <SearchAll onClose={onClose} />
+
   const heading =
     offer.kind === 'card'
       ? t('Сохранённые карты')
       : offer.kind === 'address'
         ? t('Сохранённые адреса')
-        : t('Сохранённые пароли')
-  const Mark = offer.kind === 'card' ? CardIcon : offer.kind === 'address' ? MapPin : Key
+        : offer.kind === 'code'
+          ? t('Одноразовый код')
+          : t('Сохранённые пароли')
+  const Mark =
+    offer.kind === 'card'
+      ? CardIcon
+      : offer.kind === 'address'
+        ? MapPin
+        : offer.kind === 'code'
+          ? Clock
+          : Key
 
   if (offer.kind === 'card' || offer.kind === 'address') {
     const rows =
@@ -186,15 +364,7 @@ function Entries({ offer, onClose }: { offer: AutofillOffer; onClose: () => void
             fill: () => window.browser.vaultFillAddress(address.id)
           }))
     return (
-      <div
-        className="animate-pop absolute inset-[20px] flex flex-col overflow-hidden rounded-card"
-        style={{
-          background: 'var(--elevated)',
-          border: '1px solid var(--line)',
-          boxShadow: 'var(--shadow-xl)',
-          backdropFilter: 'blur(30px) saturate(180%)'
-        }}
-      >
+      <Card>
         <div className="flex h-[30px] shrink-0 items-center gap-1.5 px-3 text-2xs text-faint">
           <Mark width={11} height={11} />
           <span className="truncate">{heading}</span>
@@ -228,31 +398,25 @@ function Entries({ offer, onClose }: { offer: AutofillOffer; onClose: () => void
             </button>
           ))}
         </div>
-      </div>
+      </Card>
     )
   }
 
   return (
-    <div
-      className="animate-pop absolute inset-[20px] flex flex-col overflow-hidden rounded-card"
-      style={{
-        background: 'var(--elevated)',
-        border: '1px solid var(--line)',
-        boxShadow: 'var(--shadow-xl)',
-        backdropFilter: 'blur(30px) saturate(180%)'
-      }}
-    >
+    <Card>
       <div className="flex h-[30px] shrink-0 items-center gap-1.5 px-3 text-2xs text-faint">
-        <Key width={11} height={11} />
-        <span className="truncate">{t('Сохранённые пароли')}</span>
+        <Mark width={11} height={11} />
+        <span className="truncate">{heading}</span>
       </div>
+      {offer.postsTo && <PostsTo host={offer.postsTo} />}
       <div className="min-h-0 flex-1 overflow-y-auto pb-1.5">
         {offer.entries.map((entry) => (
           <button
             key={entry.id}
             className="flex h-11 w-full items-center gap-2.5 px-3 text-left transition-colors duration-100 hover:bg-[var(--surface-hover)]"
             onClick={async () => {
-              await window.browser.vaultFill(entry.id)
+              if (offer.kind === 'code') await window.browser.vaultFillCode(entry.id)
+              else await window.browser.vaultFill(entry.id)
               onClose()
             }}
           >
@@ -260,7 +424,7 @@ function Entries({ offer, onClose }: { offer: AutofillOffer; onClose: () => void
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-pill"
               style={{ background: 'var(--field-idle)', color: 'var(--text-dim)' }}
             >
-              <User width={13} height={13} />
+              <Mark width={13} height={13} />
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm text-ink">
@@ -272,10 +436,36 @@ function Entries({ offer, onClose }: { offer: AutofillOffer; onClose: () => void
                 <span className="block truncate text-2xs text-faint">{entry.origin}</span>
               )}
             </span>
+            {/* Not a warning and not in the way: a year-old password is worth
+                changing, and this is the moment it is being used. */}
+            {entry.old && offer.kind === 'login' && (
+              <span
+                className="shrink-0 rounded-pill px-1.5 py-[2px] text-[9px] font-semibold uppercase tracking-wide"
+                style={{
+                  color: 'var(--text-dim)',
+                  background: 'color-mix(in srgb, var(--text-dim) 14%, transparent)'
+                }}
+              >
+                {t('Старый')}
+              </span>
+            )}
           </button>
         ))}
       </div>
-    </div>
+      {offer.kind === 'login' && (
+        <button
+          className="flex h-[38px] shrink-0 items-center gap-2 px-3 text-2xs text-dim transition-colors duration-100 hover:bg-[var(--surface-hover)] hover:text-ink"
+          style={{ borderTop: '1px solid var(--line)' }}
+          onClick={async () => {
+            setSearching(true)
+            await window.browser.offerSearch()
+          }}
+        >
+          <Search width={12} height={12} className="shrink-0" />
+          {t('Найти в хранилище')}
+        </button>
+      )}
+    </Card>
   )
 }
 

@@ -462,8 +462,19 @@ if (isTop && httpOrigin) {
     return rect.width > 20 && rect.height > 8
   }
 
-  const passwordFields = () =>
-    Array.from(document.querySelectorAll<HTMLInputElement>(PASSWORD)).filter(visible)
+  /**
+   * The password boxes on the page, or — when a field says which form it
+   * belongs to — the ones on that form.
+   *
+   * The scope matters on a page with more than one form. Looking at the whole
+   * document meant the sign-in box at the top decided what every other form on
+   * the page was, and a second login form further down got no offer at all.
+   */
+  const passwordFields = (near?: Element | null) => {
+    const form = (near as HTMLInputElement | null)?.form
+    const scope: ParentNode = form ?? document
+    return Array.from(scope.querySelectorAll<HTMLInputElement>(PASSWORD)).filter(visible)
+  }
 
   /** The text field a login form uses for the account name. */
   function usernameFieldFor(password: HTMLInputElement): HTMLInputElement | null {
@@ -661,7 +672,7 @@ if (isTop && httpOrigin) {
   function loginField(node: EventTarget | null): HTMLInputElement | null {
     if (!(node instanceof HTMLInputElement)) return null
     if (node.matches(PASSWORD)) return node
-    const password = passwordFields()[0]
+    const password = passwordFields(node)[0]
     if (password) return usernameFieldFor(password) === node ? node : null
     // A sign-in that asks for the address first and the password on the next
     // screen — which is how Google does it — has no password field to work
@@ -676,16 +687,93 @@ if (isTop && httpOrigin) {
     return USERNAME_HINTS.test(hay) ? node : null
   }
 
+  /** Words a box asking for a one-time code is labelled with. */
+  const CODE_HINTS =
+    /one-?time|onetime|otp|2fa|totp|verification|verify|auth.?code|security.?code|код|одноразов|подтвержд/i
+
+  /**
+   * A box waiting for the six digits from an authenticator app.
+   *
+   * Most of these say so outright — `autocomplete="one-time-code"` is what
+   * both Apple and Google ask sites to use, and the ones that care do. The
+   * rest are recognised by shape: a short numeric box labelled with one of the
+   * words above. A card's security code is deliberately excluded; it looks the
+   * same and means something else entirely.
+   */
+  function codeInput(node: EventTarget | null): HTMLInputElement | null {
+    if (!(node instanceof HTMLInputElement)) return null
+    if (!visible(node)) return null
+    if (node.matches(PASSWORD)) return null
+    const auto = (node.autocomplete || '').toLowerCase()
+    if (auto.includes('one-time-code')) return node
+    if (purposeOf(node) === 'cc-csc') return null
+    const type = (node.type || 'text').toLowerCase()
+    if (!['text', 'tel', 'number', ''].includes(type)) return null
+    const hay = `${node.name} ${node.id} ${node.placeholder} ${node.getAttribute('aria-label') ?? ''} ${node.getAttribute('inputmode') ?? ''}`
+    if (!CODE_HINTS.test(hay)) return null
+    // A long free-text box labelled "code" is a coupon, not a second factor.
+    const max = node.maxLength
+    return max <= 0 || max <= 10 ? node : null
+  }
+
+  /**
+   * A password box being asked to hold a new password rather than an old one:
+   * a sign-up, or the second half of a change-password form. Both are the
+   * moment to offer a generated one.
+   */
+  function newPasswordField(field: HTMLInputElement): boolean {
+    const auto = (field.autocomplete || '').toLowerCase()
+    if (auto.includes('new-password')) return true
+    if (auto.includes('current-password')) return false
+    // Two password boxes on one form is the shape of every "type it twice".
+    const scope: ParentNode = field.form ?? document
+    const boxes = Array.from(scope.querySelectorAll(PASSWORD)).filter((el) =>
+      visible(el as HTMLElement)
+    )
+    return boxes.length >= 2
+  }
+
+  /**
+   * Where this form actually sends what is typed into it.
+   *
+   * Almost always the page's own site, and then this says nothing. When it is
+   * not — a login box on one site posting to another — that is worth showing
+   * before a password goes into it, because the address bar does not say it
+   * and nothing else will.
+   */
+  function postsTo(field: HTMLElement): string {
+    const form = (field as HTMLInputElement).form
+    const action = form?.getAttribute('action')
+    if (!action) return ''
+    try {
+      const where = new URL(action, location.href)
+      if (!/^https?:/.test(where.protocol)) return ''
+      const here = location.host.replace(/^www\./, '')
+      const there = where.host.replace(/^www\./, '')
+      if (!there || there === here) return ''
+      // Same site, different name: mail.example.com posting to example.com is
+      // ordinary and saying so would only teach people to ignore the warning.
+      const tail = (h: string) => h.split('.').slice(-2).join('.')
+      return tail(there) === tail(here) ? '' : there
+    } catch {
+      return ''
+    }
+  }
+
   /**
    * Where the field is, in the page's own coordinates. The browser adds the
    * position of the page inside the window; it cannot know the scroll or the
    * layout, and this side cannot know where the page is drawn.
    */
-  function report(field: HTMLElement, kind: 'login' | 'card' | 'address' = 'login') {
+  function report(
+    field: HTMLElement,
+    kind: 'login' | 'card' | 'address' | 'code' | 'new-password' = 'login'
+  ) {
     const rect = field.getBoundingClientRect()
     ipcRenderer.send('autofill:field', {
       host: location.host,
       kind,
+      postsTo: kind === 'login' || kind === 'new-password' ? postsTo(field) : '',
       x: Math.round(rect.left),
       y: Math.round(rect.top),
       width: Math.round(rect.width),
@@ -698,7 +786,7 @@ if (isTop && httpOrigin) {
   /** The field the offer is currently anchored to, if any. */
   let anchored: HTMLElement | null = null
   /** and what it was asking for */
-  let anchoredKind: 'login' | 'card' | 'address' = 'login'
+  let anchoredKind: 'login' | 'card' | 'address' | 'code' | 'new-password' = 'login'
 
   const follow = () => {
     if (!anchored) return
@@ -719,8 +807,13 @@ if (isTop && httpOrigin) {
     ipcRenderer.send('autofill:form', { host: location.host })
   }
 
-  const reportSubmission = () => {
-    const password = passwordFields()[0]
+  /**
+   * A form was sent. `near` is whatever the browser was told about it — the
+   * element submitted, or the button pressed — so that on a page with several
+   * forms the right one is read.
+   */
+  const reportSubmission = (near?: Element | null) => {
+    const password = passwordFields(near)[0] ?? passwordFields()[0]
     if (!password || !password.value) return
     const username = usernameFieldFor(password)
     ipcRenderer.send('autofill:submitted', {
@@ -733,7 +826,7 @@ if (isTop && httpOrigin) {
   // Fill on demand — only the main process can trigger this.
   ipcRenderer.on('autofill:fill', (_event, data: { username: string; password: string; host: string }) => {
     if (!data || data.host !== location.host) return
-    const password = passwordFields()[0]
+    const password = passwordFields(anchored as Element | null)[0] ?? passwordFields()[0]
     if (!password) return
     const username = usernameFieldFor(password)
     if (username && data.username) setValue(username, data.username)
@@ -772,6 +865,41 @@ if (isTop && httpOrigin) {
     }
   )
 
+  /**
+   * Six digits into whatever shape the form asks for them in: one box, or six
+   * boxes of one character each, which is how most of these are drawn now.
+   */
+  ipcRenderer.on('autofill:fill-code', (_event, data: { host: string; digits: string }) => {
+    if (!data || data.host !== location.host || !anchored) return
+    const field = anchored as HTMLInputElement
+    const scope: ParentNode = field.form ?? document
+    const boxes = Array.from(scope.querySelectorAll('input')).filter(
+      (el) => visible(el) && el.maxLength === 1 && !el.disabled && !el.readOnly
+    )
+    if (boxes.length >= data.digits.length && boxes.includes(field)) {
+      const from = boxes.indexOf(field)
+      data.digits.split('').forEach((digit, i) => {
+        const box = boxes[from + i]
+        if (box) setValue(box, digit)
+      })
+      boxes[from + data.digits.length - 1]?.focus()
+      return
+    }
+    setValue(field, data.digits)
+    field.focus()
+  })
+
+  /** The same password into every box on the form that asks for one. */
+  ipcRenderer.on('autofill:fill-new', (_event, data: { host: string; password: string }) => {
+    if (!data || data.host !== location.host) return
+    const scope: ParentNode = (anchored as HTMLInputElement | null)?.form ?? document
+    const boxes = Array.from(scope.querySelectorAll(PASSWORD)).filter((el) =>
+      visible(el as HTMLElement)
+    ) as HTMLInputElement[]
+    for (const box of boxes) setValue(box, data.password)
+    boxes[0]?.focus()
+  })
+
   ipcRenderer.on(
     'autofill:fill-address',
     (_event, data: { host: string; fields: Record<string, string> }) => {
@@ -804,11 +932,17 @@ if (isTop && httpOrigin) {
     // only if the page reloaded is the one people described as appearing
     // "every other time".
     const open = (event: Event) => {
+      const code = codeInput(event.target)
+      if (code) {
+        anchored = code
+        anchoredKind = 'code'
+        return report(code, 'code')
+      }
       const field = loginField(event.target)
       if (field) {
         anchored = field
-        anchoredKind = 'login'
-        return report(field, 'login')
+        anchoredKind = field.matches(PASSWORD) && newPasswordField(field) ? 'new-password' : 'login'
+        return report(field, anchoredKind)
       }
       // A card or a delivery form: the same offer, from the same vault.
       const kind = fieldKind(event.target)
@@ -822,7 +956,7 @@ if (isTop && httpOrigin) {
     document.addEventListener(
       'focusout',
       (event) => {
-        if (!loginField(event.target) && !fieldKind(event.target)) return
+        if (!loginField(event.target) && !fieldKind(event.target) && !codeInput(event.target)) return
         anchored = null
         hide()
       },
@@ -844,21 +978,27 @@ if (isTop && httpOrigin) {
     const observer = new MutationObserver(() => announce())
     observer.observe(document.documentElement, { childList: true, subtree: true })
 
-    document.addEventListener('submit', reportSubmission, true)
+    document.addEventListener(
+      'submit',
+      (event) => reportSubmission(event.target as Element | null),
+      true
+    )
     document.addEventListener(
       'click',
       (event) => {
         const target = event.target as HTMLElement | null
         if (!target) return
         const button = target.closest('button, input[type="submit"], [role="button"]')
-        if (button) setTimeout(reportSubmission, 0)
+        if (button) setTimeout(() => reportSubmission(button), 0)
       },
       true
     )
     document.addEventListener(
       'keydown',
       (event) => {
-        if (event.key === 'Enter') setTimeout(reportSubmission, 0)
+        if (event.key !== 'Enter') return
+        const target = event.target as Element | null
+        setTimeout(() => reportSubmission(target), 0)
       },
       true
     )
@@ -868,6 +1008,203 @@ if (isTop && httpOrigin) {
     document.addEventListener('DOMContentLoaded', start, { once: true })
   } else {
     start()
+  }
+}
+
+/* ==========================================================================
+ * What was typed and never sent
+ *
+ * Twenty minutes into a comment, a support ticket or an application form, the
+ * session expires, the tab crashes, or a stray Backspace goes back a page.
+ * Every browser loses that and nobody is surprised any more.
+ *
+ * So the ordinary text boxes on a page are watched — and only those. A
+ * password box is never read here; neither is a card number, a security code
+ * or a one-time code. The rest is handed to the browser under this address,
+ * kept for a day, and offered back once, in a bubble that has to be clicked.
+ * ====================================================================== */
+{
+  /** Never kept, whatever it is labelled: this is about comments, not secrets. */
+  const NEVER = /pass|secret|cvc|csc|cvv|card|one-?time|otp|token|пароль|карт|код|секрет/i
+  /** Below this the "draft" is a search box, and offering it back is noise. */
+  const WORTH = 30
+
+  const words = {
+    title: 'Здесь остался незаконченный текст',
+    restore: 'Восстановить',
+    dismiss: 'Не нужно'
+  }
+  ipcRenderer.on('draft:words', (_event, next: Partial<typeof words>) => {
+    if (next && typeof next === 'object') Object.assign(words, next)
+  })
+
+  const seen = () => location.href
+
+  /** Boxes worth remembering: ordinary text, typed by a person, not a secret. */
+  function boxes(): Array<HTMLInputElement | HTMLTextAreaElement> {
+    const all = Array.from(
+      document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea')
+    )
+    return all.filter((el) => {
+      if (el.disabled || el.readOnly) return false
+      const rect = el.getBoundingClientRect()
+      if (rect.width < 24 || rect.height < 12) return false
+      if (el instanceof HTMLTextAreaElement) return true
+      const type = (el.type || 'text').toLowerCase()
+      if (!['text', 'email', 'tel', 'url', 'search', 'number', ''].includes(type)) return false
+      const auto = (el.autocomplete || '').toLowerCase()
+      if (auto.startsWith('cc-') || auto.includes('one-time-code')) return false
+      const hay = `${el.name} ${el.id} ${el.getAttribute('aria-label') ?? ''} ${el.placeholder}`
+      return !NEVER.test(hay)
+    })
+  }
+
+  /**
+   * A name for a box that survives a reload. The page's own name or id where
+   * there is one — those are stable — and otherwise its place in the document,
+   * which is stable enough for a form that has not changed since.
+   */
+  function keyOf(el: Element, index: number): string {
+    const named = el as HTMLInputElement
+    const tag = el.tagName.toLowerCase()
+    if (named.name) return `${tag}|n:${named.name}`
+    if (named.id) return `${tag}|i:${named.id}`
+    return `${tag}|p:${index}`
+  }
+
+  /**
+   * Put text back the way a person would: through the property setter the page
+   * framework has wrapped, so React and the rest see the change. Textareas and
+   * inputs keep their value on different prototypes.
+   */
+  function put(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
+    const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement : HTMLInputElement
+    const descriptor = Object.getOwnPropertyDescriptor(proto.prototype, 'value')
+    descriptor?.set?.call(el, value)
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+    el.dispatchEvent(new Event('change', { bubbles: true }))
+  }
+
+  let timer: ReturnType<typeof setTimeout> | null = null
+
+  const collect = () => {
+    const fields: Record<string, string> = {}
+    let total = 0
+    boxes().forEach((el, index) => {
+      const value = el.value
+      if (!value || value.length > 20000) return
+      fields[keyOf(el, index)] = value
+      total += value.length
+    })
+    return { fields, total }
+  }
+
+  const keep = () => {
+    const { fields, total } = collect()
+    // A page with nothing in it clears what was kept: emptying a form on
+    // purpose should not leave the old text waiting to come back.
+    if (total > 0 && total < WORTH) return
+    ipcRenderer.send('draft:keep', { url: seen(), fields })
+  }
+
+  const schedule = () => {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(keep, 900)
+  }
+
+  /* ------------------------------------------------------------ the offer */
+  let bubble: HTMLElement | null = null
+  const clear = () => {
+    bubble?.remove()
+    bubble = null
+  }
+
+  function offer(fields: Record<string, string>) {
+    clear()
+    const host = document.createElement('nya-draft')
+    host.setAttribute(
+      'style',
+      'all: initial; position: fixed; z-index: 2147483645; right: 16px; bottom: 16px; width: 300px'
+    )
+    const shadow = host.attachShadow({ mode: 'open' })
+    const style = document.createElement('style')
+    style.textContent = [
+      '@keyframes nya-draft-in { from { opacity: 0; transform: translateY(8px) }',
+      '  to { opacity: 1; transform: translateY(0) } }',
+      '.box { animation: nya-draft-in .22s cubic-bezier(.22,1,.36,1) both;',
+      '  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: #f2f3f7;',
+      '  background: rgba(22,23,30,.96); border: 1px solid rgba(255,255,255,.12); border-radius: 12px;',
+      '  padding: 11px 13px; box-shadow: 0 18px 44px -16px rgba(0,0,0,.7) }',
+      '.row { display: flex; gap: 8px; margin-top: 10px }',
+      '.btn { font: 600 12px system-ui, sans-serif; color: #c4bcff; background: rgba(124,108,255,.18);',
+      '  border: 0; border-radius: 8px; padding: 6px 10px; cursor: pointer }',
+      '.btn.plain { color: rgba(242,243,247,.72); background: rgba(255,255,255,.08) }'
+    ].join(' ')
+    const box = document.createElement('div')
+    box.className = 'box'
+    const line = document.createElement('span')
+    line.textContent = words.title
+    const row = document.createElement('div')
+    row.className = 'row'
+    const yes = document.createElement('button')
+    yes.className = 'btn'
+    yes.textContent = words.restore
+    yes.addEventListener('click', () => {
+      boxes().forEach((el, index) => {
+        const value = fields[keyOf(el, index)]
+        if (typeof value === 'string' && !el.value) put(el, value)
+      })
+      ipcRenderer.send('draft:drop', seen())
+      clear()
+    })
+    const no = document.createElement('button')
+    no.className = 'btn plain'
+    no.textContent = words.dismiss
+    no.addEventListener('click', () => {
+      ipcRenderer.send('draft:drop', seen())
+      clear()
+    })
+    row.append(yes, no)
+    box.append(line, row)
+    shadow.append(style, box)
+    document.documentElement.appendChild(host)
+    bubble = host
+  }
+
+  ipcRenderer.on('draft:have', (_event, data: { url: string; fields: Record<string, string> }) => {
+    if (!data || data.url !== seen()) return
+    // Only where the form is empty. A page that restored its own draft — which
+    // some editors do — must not be asked about it again.
+    const filled = boxes().some((el) => el.value.trim().length > 0)
+    if (filled) return
+    const worth = Object.values(data.fields ?? {}).join('').length
+    if (worth < WORTH) return
+    offer(data.fields)
+  })
+
+  const startDrafts = () => {
+    if (location.protocol !== 'http:' && location.protocol !== 'https:') return
+    ipcRenderer.send('draft:ask', seen())
+    document.addEventListener('input', schedule, true)
+    // Sent is finished with: what the form did with it is the form's business.
+    document.addEventListener(
+      'submit',
+      () => {
+        if (timer) clearTimeout(timer)
+        ipcRenderer.send('draft:drop', seen())
+        clear()
+      },
+      true
+    )
+    // Leaving with the text still in the boxes is exactly the case this is for.
+    window.addEventListener('pagehide', keep)
+    window.addEventListener('beforeunload', keep)
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startDrafts, { once: true })
+  } else {
+    startDrafts()
   }
 }
 

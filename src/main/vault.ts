@@ -31,6 +31,8 @@ export interface Credential {
   note?: string
   /** true when a one-time code lives with this entry */
   code?: boolean
+  /** the attached file, described but not carried */
+  file?: { name: string; size: number }
   /** when it was thrown away; absent while it is in use */
   binned?: number
 }
@@ -45,6 +47,8 @@ interface VaultEntry extends Credential {
   secret: Sealed
   /** the TOTP secret, sealed like the password */
   totp?: Sealed
+  /** the attached file, sealed like everything else here */
+  blob?: Sealed
 }
 
 interface CardEntry extends CardMeta {
@@ -383,7 +387,7 @@ class Vault {
     return this.store
       .get()
       .entries.filter((e) => !e.binned)
-      .map(({ secret: _secret, totp: _totp, ...meta }) => meta)
+      .map(({ secret: _secret, totp: _totp, blob: _blob, ...meta }) => meta)
       .sort((a, b) => b.used - a.used)
   }
 
@@ -392,7 +396,7 @@ class Vault {
     return this.store
       .get()
       .entries.filter((e) => e.binned)
-      .map(({ secret: _secret, totp: _totp, ...meta }) => meta)
+      .map(({ secret: _secret, totp: _totp, blob: _blob, ...meta }) => meta)
       .sort((a, b) => (b.binned ?? 0) - (a.binned ?? 0))
   }
 
@@ -626,6 +630,100 @@ class Vault {
       }
     }
     return added
+  }
+
+  /**
+   * The note beside a password: a recovery code, the answer to a security
+   * question, which of three accounts this is. Sealed like the password,
+   * because that is what people put in it.
+   */
+  setNote(id: string, text: string): boolean {
+    if (this.locked) return false
+    const file = this.store.get()
+    if (!file.entries.some((e) => e.id === id)) return false
+    const note = text.trim().slice(0, 4000)
+    this.store.replace({
+      ...file,
+      entries: file.entries.map((e) => (e.id === id ? { ...e, note: note || undefined } : e))
+    })
+    this.store.flush()
+    return true
+  }
+
+  /**
+   * One file kept with an entry — the recovery-codes PDF a bank hands out, a
+   * screenshot of a licence key. Half a megabyte is the cap: the whole vault
+   * is read and rewritten as one file, so a large attachment would make every
+   * save slow for the sake of one entry.
+   */
+  attach(id: string, name: string, dataUrl: string): boolean {
+    if (this.locked || !this.key) return false
+    const file = this.store.get()
+    const entry = file.entries.find((e) => e.id === id)
+    if (!entry) return false
+    if (!/^data:[\w.+-]*\/?[\w.+-]*;base64,/.test(dataUrl)) return false
+    const size = Math.round((dataUrl.length - dataUrl.indexOf(',') - 1) * 0.75)
+    if (size > 512 * 1024) return false
+    const clean = name.replace(/[\\/:*?"<>|]/g, '_').slice(0, 120) || 'file'
+    this.store.replace({
+      ...file,
+      entries: file.entries.map((e) =>
+        e.id === id
+          ? { ...e, file: { name: clean, size }, blob: seal(this.key as Buffer, dataUrl, `blob|${id}`) }
+          : e
+      )
+    })
+    this.store.flush()
+    return true
+  }
+
+  /** The attached file itself, as the data URL it went in as. */
+  attachment(id: string): string | null {
+    if (this.locked || !this.key) return null
+    const entry = this.store.get().entries.find((e) => e.id === id)
+    if (!entry?.blob) return null
+    try {
+      return open(this.key, entry.blob, `blob|${id}`)
+    } catch {
+      return null
+    }
+  }
+
+  /** Takes the file away again. */
+  detach(id: string): boolean {
+    if (this.locked) return false
+    const file = this.store.get()
+    if (!file.entries.some((e) => e.id === id && e.file)) return false
+    this.store.replace({
+      ...file,
+      entries: file.entries.map((e) =>
+        e.id === id ? { ...e, file: undefined, blob: undefined } : e
+      )
+    })
+    this.store.flush()
+    return true
+  }
+
+  /**
+   * Everything that matches a few typed letters, anywhere in the vault.
+   *
+   * This is what the offer over a login form uses when the password for this
+   * site was saved under another name — a work account on a different
+   * subdomain, a login shared with a sister site. It searches what is already
+   * public inside the profile (hosts, usernames, labels) and never the
+   * passwords.
+   */
+  search(query: string, limit = 20): Credential[] {
+    const q = query.trim().toLowerCase()
+    if (!q) return []
+    return this.list()
+      .filter(
+        (e) =>
+          e.origin.toLowerCase().includes(q) ||
+          e.username.toLowerCase().includes(q) ||
+          (e.note ?? '').toLowerCase().includes(q)
+      )
+      .slice(0, limit)
   }
 
   /** Reveals one password. Callers must have a user action behind them. */

@@ -50,6 +50,8 @@ export interface Credential {
   note?: string
   /** true when a one-time code lives with this entry */
   code?: boolean
+  /** the attached file, described but not carried */
+  file?: { name: string; size: number }
   /** when it was thrown away; absent while it is in use */
   binned?: number
 }
@@ -76,10 +78,23 @@ export interface AutofillOffer {
   host: string
   locked: boolean
   /** what the field was asking for */
-  kind: 'login' | 'card' | 'address'
-  entries: Array<{ id: string; username: string; origin: string }>
+  kind: 'login' | 'card' | 'address' | 'code' | 'new-password'
+  entries: Array<{
+    id: string
+    username: string
+    origin: string
+    /** saved more than a year ago and never changed since */
+    old?: boolean
+    /** a one-time code lives with this entry */
+    code?: boolean
+  }>
   cards: CardMeta[]
   addresses: AddressMeta[]
+  /**
+   * The site this form posts to, when it is not the site the page is on.
+   * Empty in the ordinary case; a warning when it is not.
+   */
+  postsTo?: string
 }
 
 export interface SavePasswordOffer {
@@ -302,6 +317,12 @@ const api = {
   vaultHelloEnable: (on: boolean): Promise<boolean> => ipcRenderer.invoke('vault:hello-enable', on),
   vaultLock: () => ipcRenderer.invoke('vault:lock'),
   vaultDismissNotice: (): Promise<void> => ipcRenderer.invoke('vault:dismiss-notice'),
+  /** Turns the offer into a search over the whole vault, keyboard and all. */
+  offerSearch: (): Promise<void> => ipcRenderer.invoke('autofill:search'),
+  closeOffer: (): Promise<void> => ipcRenderer.invoke('autofill:close'),
+  /** Puts a freshly made password into every password box on the form. */
+  fillNewPassword: (password: string): Promise<boolean> =>
+    ipcRenderer.invoke('autofill:new-password', password),
   vaultSave: (input: { origin: string; username: string; password: string; note?: string }): Promise<boolean> =>
     ipcRenderer.invoke('vault:save', input),
   vaultReveal: (id: string): Promise<string | null> => ipcRenderer.invoke('vault:reveal', id),
@@ -319,6 +340,18 @@ const api = {
   /** One-time codes, kept beside the password they belong to. */
   vaultSetCode: (id: string, secret: string): Promise<boolean> =>
     ipcRenderer.invoke('vault:set-code', id, secret),
+  vaultSetNote: (id: string, text: string): Promise<boolean> =>
+    ipcRenderer.invoke('vault:set-note', id, text),
+  /** Anything in the vault that matches a few typed letters. */
+  vaultSearch: (query: string): Promise<Credential[]> => ipcRenderer.invoke('vault:search', query),
+  vaultAttach: (id: string): Promise<boolean> => ipcRenderer.invoke('vault:attach', id),
+  vaultSaveAttachment: (id: string): Promise<boolean> =>
+    ipcRenderer.invoke('vault:save-attachment', id),
+  vaultDetach: (id: string): Promise<boolean> => ipcRenderer.invoke('vault:detach', id),
+  /** Puts the six digits of a one-time code into the page. */
+  vaultFillCode: (id: string): Promise<boolean> => ipcRenderer.invoke('vault:fill-code', id),
+  /** Fills a credential found by searching, which may belong to another host. */
+  vaultFillFound: (id: string): Promise<boolean> => ipcRenderer.invoke('vault:fill-found', id),
   vaultCode: (id: string): Promise<{ digits: string; left: number } | null> =>
     ipcRenderer.invoke('vault:code', id),
   vaultExportCsv: (): Promise<boolean> => ipcRenderer.invoke('vault:export-csv'),

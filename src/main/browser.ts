@@ -30,6 +30,7 @@ import { translateBatch } from './translate'
 import { WALLPAPER_EXTENSIONS, registerProtocols } from './protocol'
 import { sites } from './sites'
 import { usage } from './usage'
+import { drafts } from './drafts'
 import { apps, inScope, readManifest } from './apps'
 import { allowCertificateOnce, installCertificateTrust, refusedCertificate } from './trust'
 import { groupContextMenu, pageContextMenu, tabContextMenu, uiContextMenu } from './menus'
@@ -551,7 +552,7 @@ export class BrowserWindow {
     webContentsId: number
     host: string
     /** what that field was asking for: a password, a card, an address */
-    kind: 'login' | 'card' | 'address'
+    kind: 'login' | 'card' | 'address' | 'code' | 'new-password'
     x: number
     y: number
     width: number
@@ -800,7 +801,12 @@ export class BrowserWindow {
     bookmarks.load(dir)
     sites.load(dir)
     // Time spent is per profile, like everything else a person does here.
-    if (!this.incognito) usage.load(dir)
+    // So is what was half-typed into a form — and neither is kept at all in a
+    // private window, where the whole point is that nothing is written down.
+    if (!this.incognito) {
+      usage.load(dir)
+      drafts.load(dir)
+    }
     // Held shut on purpose when the setting says to ask: the OS keychain would
     // otherwise open the vault before anyone had been asked anything.
     vault.load(dir, settings.get().passwordsAskOnStart)
@@ -1297,6 +1303,13 @@ export class BrowserWindow {
       // The page reads QR codes itself and needs the two words for its buttons
       // in the language the browser is wearing.
       wc.send('qr:words', { open: t('Открыть'), copy: t('Копировать') })
+      // The same for the offer to put back what was typed into a form here and
+      // never sent.
+      wc.send('draft:words', {
+        title: t('Здесь остался незаконченный текст'),
+        restore: t('Восстановить'),
+        dismiss: t('Не нужно')
+      })
       // A restored tab opens where it was left. Once only: after that the
       // page is the reader's again.
       if (tab.restoreScroll > 0) {
@@ -3799,8 +3812,9 @@ export class BrowserWindow {
   handleAutofillField(
     webContentsId: number,
     host: string,
-    kind: 'login' | 'card' | 'address',
-    rect: { x: number; y: number; width: number; height: number }
+    kind: 'login' | 'card' | 'address' | 'code' | 'new-password',
+    rect: { x: number; y: number; width: number; height: number },
+    postsTo = ''
   ) {
     const tab = this.tabs.find((t) => t.wc?.id === webContentsId)
     if (!tab || tab.id !== this.activeId) return
@@ -3810,10 +3824,20 @@ export class BrowserWindow {
     }
     // A password belongs to a host; a card and an address belong to the
     // person, and are the same wherever they are buying.
-    const matches = kind === 'login' ? vault.forOrigin(host) : []
+    const forHost = kind === 'login' || kind === 'code' ? vault.forOrigin(host) : []
+    // A box asking for six digits is only worth an offer where there is a
+    // code to put in it.
+    const matches = kind === 'code' ? forHost.filter((e) => e.code) : forHost
     const cards = kind === 'card' && !vault.locked ? vault.cards() : []
     const addresses = kind === 'address' && !vault.locked ? vault.addresses() : []
-    const count = kind === 'login' ? matches.length : kind === 'card' ? cards.length : addresses.length
+    const count =
+      kind === 'card'
+        ? cards.length
+        : kind === 'address'
+          ? addresses.length
+          : kind === 'new-password'
+            ? 1
+            : matches.length
     // Nothing to offer, and — with the vault shut — nothing worth asking
     // to open it for unless this site has a password saved.
     if (count === 0 && !(vault.locked && kind === 'login' && vault.count > 0)) {
@@ -3829,7 +3853,14 @@ export class BrowserWindow {
       // lost focus, the card closes, the keyboard goes back, and round.
       if (this.overlayMode === 'autofill' && this.noticeUp) return
       this.noticeUp = true
-      this.send('state:autofill', { host, kind, locked: true, entries: [], cards: [], addresses: [] })
+      this.send('state:autofill', {
+        host,
+        kind,
+        locked: true,
+        entries: [],
+        cards: [],
+        addresses: []
+      })
       return this.setOverlayMode('autofill', {
         bounds: this.noticeBounds(380, 210),
         // The master password is typed into this card, so it takes the keyboard.
@@ -3837,18 +3868,29 @@ export class BrowserWindow {
       })
     }
 
+    const year = Date.now() - 365 * 24 * 60 * 60 * 1000
     this.send('state:autofill', {
       host,
       kind,
       locked: false,
       // `origin` travels so the offer can say where a credential came from when
       // it was not saved on this exact address.
-      entries: matches.map(({ id, username, origin }) => ({ id, username, origin })),
+      entries: matches.map(({ id, username, origin, created, code }) => ({
+        id,
+        username,
+        origin,
+        code,
+        // Said in the offer rather than in a notification: the moment somebody
+        // is signing in is the one moment a reminder to change the password is
+        // about something they are already doing.
+        old: created < year
+      })),
       cards,
-      addresses
+      addresses,
+      postsTo
     })
     this.setOverlayMode('autofill', {
-      bounds: this.offerBounds(rect, count),
+      bounds: this.offerBounds(rect, count, kind, Boolean(postsTo)),
       focus: false
     })
   }
@@ -3871,14 +3913,24 @@ export class BrowserWindow {
    */
   private offerBounds(
     rect: { x: number; y: number; width: number; height: number },
-    count: number
+    count: number,
+    kind: 'login' | 'card' | 'address' | 'code' | 'new-password' = 'login',
+    warned = false
   ) {
     const margin = BrowserWindow.OFFER_MARGIN
     const inner = this.contentBox()
     const width = Math.round(Math.max(260, Math.min(420, rect.width)))
     // Six rows before it starts scrolling: four was a keyhole for anyone with
     // a handful of cards or accounts on one site.
-    const height = 12 + Math.min(count, 6) * 44 + 30
+    const height =
+      kind === 'new-password'
+        ? 150 + (warned ? 34 : 0)
+        : 12 +
+          Math.min(count, 6) * 44 +
+          30 +
+          (warned ? 34 : 0) +
+          // The way to the rest of the vault, under the accounts for this site.
+          (kind === 'login' ? 38 : 0)
     const bounds = this.win.getBounds()
     let x = Math.round(inner.x + rect.x)
     let y = Math.round(inner.y + rect.y + rect.height + 4)
@@ -3920,6 +3972,40 @@ export class BrowserWindow {
     this.field = null
     this.noticeUp = false
     if (this.overlayMode === 'autofill') this.setOverlayMode(null)
+  }
+
+  /**
+   * The offer becomes a search over the whole vault. That needs the keyboard,
+   * which the small card under the field deliberately never takes — so it
+   * moves to the corner and takes it, the way the locked-vault notice does.
+   */
+  openOfferSearch() {
+    if (!this.field || vault.locked) return
+    this.noticeUp = true
+    this.setOverlayMode('autofill', { bounds: this.noticeBounds(400, 360), focus: true })
+  }
+
+  /** Shuts the offer without remembering anything about the site. */
+  closeOfferNow() {
+    this.closeOffer()
+  }
+
+  /**
+   * A password made in the offer, put into every password box on the form.
+   * A change-password form has two or three of them and expects the same
+   * value in each; a sign-up has one.
+   */
+  fillNewPassword(password: string): boolean {
+    const wc = this.getActive()?.wc
+    if (!wc || wc.isDestroyed() || !password) return false
+    let host = ''
+    try {
+      host = new URL(wc.getURL()).host
+    } catch {
+      return false
+    }
+    wc.send('autofill:fill-new', { host, password })
+    return true
   }
 
   /** "Not now" on the locked notice: not for this site, not this time. */
@@ -4031,7 +4117,27 @@ export class BrowserWindow {
     return true
   }
 
-  fillCredential(id: string): boolean {
+  /**
+   * The six digits for this entry, put into the box that asked for them.
+   * Nothing is kept: the code is read, sent, and gone in thirty seconds.
+   */
+  fillCode(id: string): boolean {
+    const wc = this.getActive()?.wc
+    if (!wc || wc.isDestroyed() || vault.locked) return false
+    const code = vault.code(id)
+    if (!code) return false
+    let host = ''
+    try {
+      host = new URL(wc.getURL()).host
+    } catch {
+      return false
+    }
+    wc.send('autofill:fill-code', { host, digits: code.digits })
+    vault.touch(id)
+    return true
+  }
+
+  fillCredential(id: string, anywhere = false): boolean {
     const tab = this.getActive()
     const wc = tab?.wc
     if (!wc || wc.isDestroyed() || vault.locked) return false
@@ -4046,7 +4152,12 @@ export class BrowserWindow {
     // A credential is only handed to a host it belongs to: the one it was
     // saved for, or another name on the same site. vault.matches decides, and
     // tests/vault.mjs is where the edges of that are pinned down.
-    if (!vault.matches(host, entry)) return false
+    //
+    // `anywhere` is the one exception, and it is not a weakening of that rule
+    // but a different act: somebody searched the whole vault from this form
+    // and picked this entry by name. The browser is not deciding what belongs
+    // here — a person is, for one field, once.
+    if (!anywhere && !vault.matches(host, entry)) return false
     const password = vault.reveal(id)
     if (!password) return false
     wc.send('autofill:fill', { host, username: entry.username, password })
@@ -4310,6 +4421,9 @@ export class BrowserWindow {
   async clearData() {
     await clearBrowsingData(this.ses)
     history.clear()
+    // Half-typed forms are site data like any other: "clear site data" has to
+    // mean it, or the word is worth nothing.
+    drafts.clear()
     this.send('toast', t('Данные сайтов удалены'))
     this.broadcast()
   }

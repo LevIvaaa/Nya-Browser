@@ -945,6 +945,17 @@ export default function SettingsPage({
                   />
                 </Row>
               )}
+              {helloAvailable && (
+                <Row
+                  title={t('Подтверждать подстановку карты')}
+                  hint={t('Windows Hello каждый раз, когда номер карты уходит на страницу')}
+                >
+                  <Toggle
+                    checked={settings.cardHello}
+                    onChange={(cardHello) => onPatch({ cardHello })}
+                  />
+                </Row>
+              )}
             </Section>
 
             {/* Passwords from a file used to be filed under "System", three
