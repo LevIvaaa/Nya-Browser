@@ -17,6 +17,7 @@ import type {
   UpdateState,
   UsageSummary,
   BackupCounts,
+  PasswordAudit,
   WidevineState,
   HistoryEntry,
   PermissionRequest,
@@ -47,6 +48,10 @@ export interface Credential {
   created: number
   used: number
   note?: string
+  /** true when a one-time code lives with this entry */
+  code?: boolean
+  /** when it was thrown away; absent while it is in use */
+  binned?: number
 }
 
 export interface Bookmark {
@@ -304,6 +309,20 @@ const api = {
   vaultCopy: (id: string): Promise<boolean> => ipcRenderer.invoke('vault:copy', id),
   copyText: (text: string): Promise<boolean> => ipcRenderer.invoke('clipboard:write', text),
   vaultRemove: (id: string): Promise<boolean> => ipcRenderer.invoke('vault:remove', id),
+  /** The bin: what was thrown away, putting one back, and emptying it. */
+  vaultBinned: (): Promise<Credential[]> => ipcRenderer.invoke('vault:binned'),
+  vaultRestore: (id: string): Promise<boolean> => ipcRenderer.invoke('vault:restore', id),
+  vaultEmptyBin: (): Promise<number> => ipcRenderer.invoke('vault:empty-bin'),
+  /** Verdicts on the saved passwords; the passwords themselves never leave. */
+  vaultAudit: (): Promise<PasswordAudit[]> => ipcRenderer.invoke('vault:audit'),
+  vaultStolen: (): Promise<string[]> => ipcRenderer.invoke('vault:stolen'),
+  /** One-time codes, kept beside the password they belong to. */
+  vaultSetCode: (id: string, secret: string): Promise<boolean> =>
+    ipcRenderer.invoke('vault:set-code', id, secret),
+  vaultCode: (id: string): Promise<{ digits: string; left: number } | null> =>
+    ipcRenderer.invoke('vault:code', id),
+  vaultExportCsv: (): Promise<boolean> => ipcRenderer.invoke('vault:export-csv'),
+  vaultImportCsv: (): Promise<number> => ipcRenderer.invoke('vault:import-csv'),
 
   /* ---- cards and addresses ---- */
   vaultCards: (): Promise<CardMeta[]> => ipcRenderer.invoke('vault:cards'),

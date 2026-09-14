@@ -317,6 +317,9 @@ if (!app.requestSingleInstanceLock()) {
     hardenApp(app)
     hardenSession(session.defaultSession)
     nativeTheme.themeSource = settings.get().theme
+    // A bin nobody empties is a place passwords live forever. Anything that has
+    // waited out its thirty days goes now, before the first window opens.
+    vault.emptyBin()
     // Awaited on purpose, and cheap: loadFilters resolves as soon as the
     // engine is armed from the on-disk cache and refreshes stale lists in the
     // background. This is what makes the first request of the first tab
@@ -973,6 +976,48 @@ function registerIpc() {
   ipcMain.handle('vault:remove', (event, id: unknown) => vault.remove(str(id, 64)))
 
   /* ---- cards and addresses, kept by the same key as the passwords ---- */
+  ipcMain.handle('vault:binned', () => vault.binned())
+  ipcMain.handle('vault:restore', (event, id: unknown) => vault.restore(str(id, 64)))
+  ipcMain.handle('vault:empty-bin', () => vault.emptyBin(true))
+  ipcMain.handle('vault:audit', () => vault.audit())
+  ipcMain.handle('vault:stolen', () => vault.stolen())
+  ipcMain.handle('vault:set-code', (event, id: unknown, secret: unknown) =>
+    vault.setCode(str(id, 64), str(secret, 400))
+  )
+  ipcMain.handle('vault:code', (event, id: unknown) => vault.code(str(id, 64)))
+  /**
+   * The vault, as text, into a file the person picks — and back. This is the
+   * one door out, so it is a dialog every time and never a silent write.
+   */
+  ipcMain.handle('vault:export-csv', async () => {
+    const text = vault.exportCsv()
+    if (text === null) return false
+    const where = await dialog.showSaveDialog({
+      title: t('Пароли в CSV'),
+      defaultPath: join(app.getPath('downloads'), 'nya-passwords.csv'),
+      filters: [{ name: 'CSV', extensions: ['csv'] }]
+    })
+    if (where.canceled || !where.filePath) return false
+    try {
+      writeFileSync(where.filePath, text, 'utf8')
+      return true
+    } catch {
+      return false
+    }
+  })
+  ipcMain.handle('vault:import-csv', async () => {
+    const picked = await dialog.showOpenDialog({
+      title: t('Пароли в CSV'),
+      properties: ['openFile'],
+      filters: [{ name: 'CSV', extensions: ['csv'] }]
+    })
+    if (picked.canceled || !picked.filePaths[0]) return 0
+    try {
+      return vault.importCsv(readFileSync(picked.filePaths[0], 'utf8'))
+    } catch {
+      return 0
+    }
+  })
   ipcMain.handle('vault:cards', () => vault.cards())
   ipcMain.handle('vault:save-card', (event, input: unknown) => {
     const data = (input ?? {}) as {

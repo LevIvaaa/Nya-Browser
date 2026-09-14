@@ -1,6 +1,7 @@
 import { safeStorage } from 'electron'
 import {
   createCipheriv,
+  createHash,
   createDecipheriv,
   randomBytes,
   randomUUID,
@@ -8,7 +9,10 @@ import {
   timingSafeEqual
 } from 'crypto'
 import { JsonStore, track } from './store'
-import type { AddressFields, AddressMeta, CardMeta } from '../shared/types'
+import type { AddressFields, AddressMeta, CardMeta, PasswordAudit } from '../shared/types'
+import { judge } from '../shared/password'
+import { codeFor, secretOf } from './totp'
+import { stolenWithPrefix } from './breach'
 
 export type { AddressFields, AddressMeta, CardMeta }
 
@@ -25,6 +29,10 @@ export interface Credential {
   created: number
   used: number
   note?: string
+  /** true when a one-time code lives with this entry */
+  code?: boolean
+  /** when it was thrown away; absent while it is in use */
+  binned?: number
 }
 
 interface Sealed {
@@ -35,6 +43,8 @@ interface Sealed {
 
 interface VaultEntry extends Credential {
   secret: Sealed
+  /** the TOTP secret, sealed like the password */
+  totp?: Sealed
 }
 
 interface CardEntry extends CardMeta {
@@ -372,8 +382,18 @@ class Vault {
   list(): Credential[] {
     return this.store
       .get()
-      .entries.map(({ secret: _secret, ...meta }) => meta)
+      .entries.filter((e) => !e.binned)
+      .map(({ secret: _secret, totp: _totp, ...meta }) => meta)
       .sort((a, b) => b.used - a.used)
+  }
+
+  /** What was thrown away and is still recoverable. */
+  binned(): Credential[] {
+    return this.store
+      .get()
+      .entries.filter((e) => e.binned)
+      .map(({ secret: _secret, totp: _totp, ...meta }) => meta)
+      .sort((a, b) => (b.binned ?? 0) - (a.binned ?? 0))
   }
 
   /**
@@ -433,6 +453,181 @@ class Vault {
     return true
   }
 
+  /**
+   * The one-time code secret, kept beside the password it belongs to. An empty
+   * string takes it away again.
+   */
+  setCode(id: string, input: string): boolean {
+    if (this.locked || !this.key) return false
+    const file = this.store.get()
+    const entry = file.entries.find((e) => e.id === id)
+    if (!entry) return false
+    const secret = input.trim() ? secretOf(input) : ''
+    if (input.trim() && !secret) return false
+    const entries = file.entries.map((e) =>
+      e.id === id
+        ? {
+            ...e,
+            code: Boolean(secret),
+            totp: secret ? seal(this.key as Buffer, secret, `totp|${id}`) : undefined
+          }
+        : e
+    )
+    this.store.replace({ ...file, entries })
+    this.store.flush()
+    return true
+  }
+
+  /** The six digits for right now, and the seconds they have left. */
+  code(id: string): { digits: string; left: number } | null {
+    if (this.locked || !this.key) return null
+    const entry = this.store.get().entries.find((e) => e.id === id)
+    if (!entry?.totp) return null
+    try {
+      return codeFor(open(this.key, entry.totp, `totp|${id}`))
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Which saved passwords are worth changing: the weak ones, the ones used in
+   * more than one place, and the ones that have not been changed in a year.
+   *
+   * Reading every password to judge it is exactly what this vault exists to
+   * prevent, so it happens here, in the main process, and only the verdicts
+   * leave — never the passwords.
+   */
+  audit(): PasswordAudit[] {
+    if (this.locked || !this.key) return []
+    const year = Date.now() - 365 * 24 * 60 * 60 * 1000
+    const seen = new Map<string, number>()
+    const read: Array<{ entry: VaultEntry; password: string }> = []
+    for (const entry of this.store.get().entries) {
+      if (entry.binned) continue
+      try {
+        const password = open(this.key, entry.secret, `${entry.origin}|${entry.username}`)
+        read.push({ entry, password })
+        seen.set(password, (seen.get(password) ?? 0) + 1)
+      } catch {
+        /* an entry sealed by a key that is gone cannot be judged */
+      }
+    }
+    return read.map(({ entry, password }) => ({
+      id: entry.id,
+      origin: entry.origin,
+      username: entry.username,
+      verdict: judge(password),
+      reused: (seen.get(password) ?? 1) > 1,
+      old: entry.created < year
+    }))
+  }
+
+  /**
+   * Which of the saved passwords are already in somebody's list of stolen
+   * ones. Only five characters of each hash leave this machine; see breach.ts
+   * for why that is enough to ask and not enough to tell.
+   */
+  async stolen(): Promise<string[]> {
+    if (this.locked || !this.key) return []
+    const byPrefix = new Map<string, Array<{ id: string; suffix: string }>>()
+    for (const entry of this.store.get().entries) {
+      if (entry.binned) continue
+      let password = ''
+      try {
+        password = open(this.key, entry.secret, `${entry.origin}|${entry.username}`)
+      } catch {
+        continue
+      }
+      const hash = createHash('sha1').update(password, 'utf8').digest('hex').toUpperCase()
+      const prefix = hash.slice(0, 5)
+      const list = byPrefix.get(prefix) ?? []
+      list.push({ id: entry.id, suffix: hash.slice(5) })
+      byPrefix.set(prefix, list)
+    }
+    const found: string[] = []
+    for (const [prefix, wanted] of byPrefix) {
+      const stolen = await stolenWithPrefix(prefix)
+      for (const item of wanted) if (stolen.has(item.suffix)) found.push(item.id)
+    }
+    return found
+  }
+
+  /**
+   * Every password as text, for moving into another manager. The one moment
+   * this vault gives everything up at once, so it is only ever reached from a
+   * button somebody pressed.
+   */
+  exportCsv(): string | null {
+    if (this.locked || !this.key) return null
+    const rows = [['url', 'username', 'password', 'note']]
+    for (const entry of this.store.get().entries) {
+      if (entry.binned) continue
+      let password = ''
+      try {
+        password = open(this.key, entry.secret, `${entry.origin}|${entry.username}`)
+      } catch {
+        continue
+      }
+      rows.push([`https://${entry.origin}`, entry.username, password, entry.note ?? ''])
+    }
+    return rows
+      .map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(','))
+      .join('\n')
+  }
+
+  /** The same shape back in: what Chrome, Bitwarden and the rest write out. */
+  importCsv(text: string): number {
+    if (this.locked || !this.key) return 0
+    const lines = text.split(/\r?\n/).filter((line) => line.trim())
+    if (lines.length < 2) return 0
+    const cells = (line: string): string[] => {
+      const out: string[] = []
+      let cell = ''
+      let quoted = false
+      for (let i = 0; i < line.length; i += 1) {
+        const ch = line[i]
+        if (quoted) {
+          if (ch === '"' && line[i + 1] === '"') {
+            cell += '"'
+            i += 1
+          } else if (ch === '"') quoted = false
+          else cell += ch
+        } else if (ch === '"') quoted = true
+        else if (ch === ',') {
+          out.push(cell)
+          cell = ''
+        } else cell += ch
+      }
+      out.push(cell)
+      return out
+    }
+    const head = cells(lines[0]).map((h) => h.trim().toLowerCase())
+    const at = (names: string[]) => head.findIndex((h) => names.includes(h))
+    const urlAt = at(['url', 'login_uri', 'website', 'site', 'origin'])
+    const userAt = at(['username', 'login_username', 'user', 'login', 'email'])
+    const passAt = at(['password', 'login_password', 'pass'])
+    const noteAt = at(['note', 'notes', 'comment'])
+    if (urlAt < 0 || passAt < 0) return 0
+    let added = 0
+    for (const line of lines.slice(1)) {
+      const row = cells(line)
+      const raw = (row[urlAt] ?? '').trim()
+      const password = (row[passAt] ?? '').trim()
+      if (!raw || !password) continue
+      let host = raw
+      try {
+        host = new URL(/^https?:/i.test(raw) ? raw : `https://${raw}`).hostname
+      } catch {
+        continue
+      }
+      if (this.save(host, (row[userAt] ?? '').trim(), password, (row[noteAt] ?? '').trim() || undefined)) {
+        added += 1
+      }
+    }
+    return added
+  }
+
   /** Reveals one password. Callers must have a user action behind them. */
   reveal(id: string): string | null {
     if (this.locked || !this.key) return null
@@ -452,11 +647,44 @@ class Vault {
     // proving they were allowed to see one.
     if (this.locked) return false
     const file = this.store.get()
-    const entries = file.entries.filter((e) => e.id !== id)
-    if (entries.length === file.entries.length) return false
+    const found = file.entries.find((e) => e.id === id)
+    if (!found) return false
+    // Thrown away, not gone: a password deleted by mistake is not recoverable
+    // from anywhere else, so it waits thirty days first.
+    const entries = file.entries.map((e) => (e.id === id ? { ...e, binned: Date.now() } : e))
     this.store.replace({ ...file, entries })
     this.store.flush()
     return true
+  }
+
+  /** Back out of the bin. */
+  restore(id: string): boolean {
+    if (this.locked) return false
+    const file = this.store.get()
+    const found = file.entries.find((e) => e.id === id && e.binned)
+    if (!found) return false
+    const entries = file.entries.map((e) =>
+      e.id === id ? { ...e, binned: undefined, used: Date.now() } : e
+    )
+    this.store.replace({ ...file, entries })
+    this.store.flush()
+    return true
+  }
+
+  /**
+   * Empties the bin: everything in it, or only what has waited long enough.
+   * Called on load, so a forgotten bin does not keep passwords forever.
+   */
+  emptyBin(all = false): number {
+    const file = this.store.get()
+    const edge = Date.now() - 30 * 24 * 60 * 60 * 1000
+    const entries = file.entries.filter((e) => !e.binned || (!all && e.binned > edge))
+    const gone = file.entries.length - entries.length
+    if (gone > 0) {
+      this.store.replace({ ...file, entries })
+      this.store.flush()
+    }
+    return gone
   }
 
   touch(id: string) {
