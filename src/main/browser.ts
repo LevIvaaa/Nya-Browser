@@ -2422,7 +2422,7 @@ export class BrowserWindow {
     }
     try {
       const image = kind === 'full' ? await this.wholePage(wc) : await wc.capturePage()
-      return this.keepPicture(image)
+      return this.editPicture(image)
     } catch {
       this.send('toast', t('Не удалось сохранить снимок'))
       return false
@@ -2897,14 +2897,14 @@ export class BrowserWindow {
     // Nothing drawn: the visible part, which is what a click without a drag
     // asks for.
     try {
-      if (rect.width < 4 || rect.height < 4) return this.keepPicture(await wc.capturePage())
+      if (rect.width < 4 || rect.height < 4) return this.editPicture(await wc.capturePage())
       const image = await wc.capturePage({
         x: Math.round(rect.x),
         y: Math.round(rect.y),
         width: Math.round(rect.width),
         height: Math.round(rect.height)
       })
-      return this.keepPicture(image)
+      return this.editPicture(image)
     } catch {
       this.send('toast', t('Не удалось сохранить снимок'))
       return false
@@ -2956,6 +2956,43 @@ export class BrowserWindow {
   }
 
   /** Writes the picture where downloads go, and puts it on the clipboard. */
+  /**
+   * The picture, handed to the person before it is kept.
+   *
+   * A screenshot is taken to point at something and to hide the rest, and
+   * neither can be done once it is already a file. So it stops in the editor
+   * first; keeping it is a button there.
+   */
+  private editPicture(image: Electron.NativeImage) {
+    if (image.isEmpty()) return false
+    this.setOverlayMode('shot', { focus: true })
+    this.overlay.webContents.send('shot:open', image.toDataURL())
+    return true
+  }
+
+  /** What the editor's "save" does: the file, and the clipboard, as before. */
+  keepDataUrl(data: string): boolean {
+    try {
+      const image = nativeImage.createFromDataURL(data)
+      return this.keepPicture(image)
+    } catch {
+      this.send('toast', t('Не удалось сохранить снимок'))
+      return false
+    }
+  }
+
+  copyDataUrl(data: string): boolean {
+    try {
+      const image = nativeImage.createFromDataURL(data)
+      if (image.isEmpty()) return false
+      clipboard.writeImage(image)
+      this.send('toast', t('Скопировано'))
+      return true
+    } catch {
+      return false
+    }
+  }
+
   private keepPicture(image: Electron.NativeImage) {
     if (image.isEmpty()) return false
     const png = image.toPNG()

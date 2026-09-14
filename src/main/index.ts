@@ -646,6 +646,12 @@ function registerIpc() {
     if (!command) return false
     return current(event).mediaCommand(num(tabId), command, to === undefined ? undefined : num(to))
   })
+  ipcMain.handle('shot:keep', (event, data: unknown) =>
+    current(event).keepDataUrl(String(data ?? '').slice(0, 40_000_000))
+  )
+  ipcMain.handle('shot:copy', (event, data: unknown) =>
+    current(event).copyDataUrl(String(data ?? '').slice(0, 40_000_000))
+  )
   ipcMain.handle('shortcuts:capture', (event, on: unknown) => {
     current(event).setCapturingShortcut(on === true)
   })

@@ -202,6 +202,10 @@ const api = {
    * listening for one. Without it, binding Ctrl+T would open a tab.
    */
   captureShortcut: (on: boolean): Promise<void> => ipcRenderer.invoke('shortcuts:capture', on),
+  /** The screenshot, on its way to the editor and back. */
+  onShot: (cb: (data: string) => void) => on<string>('shot:open', cb),
+  keepShot: (data: string): Promise<boolean> => ipcRenderer.invoke('shot:keep', data),
+  copyShot: (data: string): Promise<boolean> => ipcRenderer.invoke('shot:copy', data),
   addToHome: (): Promise<boolean> => ipcRenderer.invoke('nav:add-to-home'),
 
   /* ---- find ---- */

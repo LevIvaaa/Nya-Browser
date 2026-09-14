@@ -10,6 +10,7 @@ import MediaPanel from './components/MediaPanel'
 import PageMenu from './components/PageMenu'
 import PrintSheet from './components/PrintSheet'
 import SavePassword from './components/SavePassword'
+import ShotEditor from './components/ShotEditor'
 import TabsPanel from './components/TabsPanel'
 import SitePanel from './components/SitePanel'
 import UpdateCard from './components/UpdateCard'
@@ -67,6 +68,11 @@ export default function OverlayApp() {
 
   const close = () => void window.browser.setOverlay(null)
 
+  // The picture arrives on its own channel, because it is far too big to sit
+  // in the name of a mode.
+  const [shot, setShot] = useState('')
+  useEffect(() => window.browser.onShot(setShot), [])
+
   if (!mode || !settings) return null
 
   return (
@@ -93,6 +99,15 @@ export default function OverlayApp() {
           x={Number(mode.slice('page-menu:'.length)) || 0}
           onClose={close}
           onFind={() => void window.browser.uiAction('find')}
+        />
+      )}
+      {mode === 'shot' && shot && (
+        <ShotEditor
+          image={shot}
+          onClose={() => {
+            setShot('')
+            close()
+          }}
         />
       )}
       {mode === 'install-app' && <InstallApp candidate={appCandidate} onClose={close} />}
