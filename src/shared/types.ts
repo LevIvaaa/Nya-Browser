@@ -493,6 +493,19 @@ export interface Settings {
    */
   shortcuts: Record<string, string>
 
+  /**
+   * Which tab to go to when the one you are looking at closes. The default is
+   * the one that opened it, because the reason a tab exists is usually the
+   * page you were reading when you opened it.
+   */
+  afterClose: 'opener' | 'right' | 'left' | 'recent'
+  /** the window stays above the others */
+  alwaysOnTop: boolean
+  /** a right-button drag on the page is a gesture */
+  mouseGestures: boolean
+  /** hovering a tab for a moment shows what is on it */
+  tabPreview: boolean
+
   // ---- downloads
   downloadDir: string
   askWhereToSave: boolean
@@ -545,6 +558,7 @@ export type InternalPage =
   | 'downloads'
   | 'bookmarks'
   | 'passwords'
+  | 'tasks'
 
 export interface TabState {
   id: number
@@ -583,6 +597,25 @@ export interface TabState {
   audible: boolean
   zoom: number
   error: TabError | null
+  /**
+   * The tab this one was opened from, when it was opened from one. It is what
+   * makes a strip of twenty tabs readable as the handful of things they
+   * actually are, and it decides where you land when this tab closes.
+   */
+  openerId: number | null
+  /** how deep in that chain, for the list to indent by */
+  depth: number
+  /**
+   * The number the page puts in front of its own title — unread messages,
+   * waiting builds, whatever it is counting. Zero when there is none.
+   */
+  badge: number
+  /** something changed here while you were somewhere else */
+  attention: boolean
+  /** put aside deliberately, to come back to */
+  unread: boolean
+  /** roughly how much memory this tab's process is using, in megabytes */
+  memory: number
 }
 
 export interface TabError {

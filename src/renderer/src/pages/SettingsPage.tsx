@@ -479,6 +479,45 @@ export default function SettingsPage({
                 <Row title={t('Подтверждать закрытие нескольких вкладок')}>
                   <Toggle checked={settings.confirmCloseMultiple} onChange={(value) => onPatch({ confirmCloseMultiple: value })} />
                 </Row>
+                <Row
+                  title={t('Показывать вкладку при наведении')}
+                  hint={t('Картинка страницы, если задержать курсор')}
+                >
+                  <Toggle checked={settings.tabPreview} onChange={(value) => onPatch({ tabPreview: value })} />
+                </Row>
+                <Row
+                  title={t('Куда переходить после закрытия')}
+                  hint={t('По умолчанию — к вкладке, из которой эта была открыта')}
+                >
+                  <Select
+                    value={settings.afterClose}
+                    onChange={(afterClose) => onPatch({ afterClose })}
+                    options={[
+                      { value: 'opener', label: t('К родительской') },
+                      { value: 'right', label: t('К правой') },
+                      { value: 'left', label: t('К левой') },
+                      { value: 'recent', label: t('К последней открытой') }
+                    ]}
+                  />
+                </Row>
+                <Row
+                  title={t('Жесты мышью')}
+                  hint={t('Правая кнопка и движение по странице')}
+                >
+                  <Toggle
+                    checked={settings.mouseGestures}
+                    onChange={(mouseGestures) => onPatch({ mouseGestures })}
+                  />
+                </Row>
+                <Row title={t('Окно поверх всех')}>
+                  <Toggle
+                    checked={settings.alwaysOnTop}
+                    onChange={(on) => {
+                      onPatch({ alwaysOnTop: on })
+                      void window.browser.alwaysOnTop(on)
+                    }}
+                  />
+                </Row>
               </Section>
             </>
           )}

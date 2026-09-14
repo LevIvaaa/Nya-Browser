@@ -135,6 +135,26 @@ export interface ClosedTab {
   url: string
   title: string
   favicon: string | null
+  /** set when this entry stands for a whole group rather than one tab */
+  group?: { name: string; color: string; tabs: Array<{ url: string; title: string }> }
+}
+
+/** What one tab is costing, for the page that lists them. */
+export interface TabCost {
+  id: number
+  title: string
+  origin: string
+  /** megabytes in the process this tab lives in; tabs can share one */
+  memory: number
+  audible: boolean
+  sleeping: boolean
+}
+
+/** One step in a tab's own back-and-forward list. */
+export interface HistoryStep {
+  offset: number
+  title: string
+  url: string
 }
 
 const on = <T>(channel: string, cb: (payload: T) => void) => {
@@ -353,6 +373,29 @@ const api = {
   /** One-time codes, kept beside the password they belong to. */
   vaultSetCode: (id: string, secret: string): Promise<boolean> =>
     ipcRenderer.invoke('vault:set-code', id, secret),
+  /* ---- tabs ---- */
+  /** Sends this tab out into a window of its own. */
+  detachTab: (id: number): Promise<void> => ipcRenderer.invoke('tab:detach', id),
+  /** Moves a tab from another window into this one. */
+  moveTabHere: (fromWindow: number, id: number): Promise<boolean> =>
+    ipcRenderer.invoke('tab:move-window', fromWindow, id),
+  windowId: (): Promise<number> => ipcRenderer.invoke('window:id'),
+  markUnread: (id: number, on: boolean): Promise<void> => ipcRenderer.invoke('tab:unread', id, on),
+  tabCosts: (): Promise<TabCost[]> => ipcRenderer.invoke('tab:costs'),
+  /** Puts a handful of gathered tabs into one new group. */
+  groupTabs: (ids: number[]): Promise<void> => ipcRenderer.invoke('tab:group-many', ids),
+  /** A shortcut on the desktop that opens this page. */
+  tabShortcut: (id: number): Promise<boolean> => ipcRenderer.invoke('tab:shortcut', id),
+  /** This tab's own back-and-forward list, for a long press on Back. */
+  tabHistory: (id: number): Promise<HistoryStep[]> => ipcRenderer.invoke('tab:history', id),
+  goToOffset: (id: number, offset: number): Promise<void> =>
+    ipcRenderer.invoke('tab:go', id, offset),
+  /** A picture of what a tab is showing, for the preview under the cursor. */
+  tabPreview: (id: number): Promise<string> => ipcRenderer.invoke('tab:preview', id),
+  /** Ctrl+Tab: the tab looked at before this one. */
+  recentTab: (back: boolean): Promise<void> => ipcRenderer.invoke('tab:recent', back),
+  alwaysOnTop: (on: boolean): Promise<void> => ipcRenderer.invoke('window:on-top', on),
+
   /* ---- downloads ---- */
   pauseAllDownloads: (resume: boolean): Promise<void> =>
     ipcRenderer.invoke('downloads:pause-all', resume),

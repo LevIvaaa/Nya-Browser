@@ -256,8 +256,23 @@ export function tabContextMenu(browser: BrowserWindow, tabId: number) {
           : [])
       ]
     },
+    {
+      label: t('В отдельное окно'),
+      enabled: many && tab.hasContent,
+      click: () => browser.detachTab(tabId)
+    },
+    {
+      label: t('Отметить непрочитанной'),
+      enabled: tabId !== browser.activeId && tab.hasContent,
+      click: () => browser.markUnread(tabId, true)
+    },
     { type: 'separator' },
     { label: t('В закладки'), enabled: tab.hasContent, click: () => browser.bookmarkTab(tabId) },
+    {
+      label: t('Ярлык на рабочем столе'),
+      enabled: tab.hasContent,
+      click: () => browser.tabShortcut(tabId)
+    },
     { type: 'separator' },
     { label: t('Закрыть'), click: () => browser.closeTab(tabId) },
     { label: t('Закрыть остальные'), enabled: many, click: () => browser.closeOthers(tabId) },

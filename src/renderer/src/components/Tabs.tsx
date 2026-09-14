@@ -8,7 +8,7 @@ import type {
   TabSpace,
   TabState
 } from '../../../shared/types'
-import { ChevronDown, ChevronLeft, ChevronRight, Clock, Cross, Download, Gear, Globe, HalfLeft, HalfRight, Pin, Plus, Sleep, Star, Volume, VolumeOff, Wallet } from './Icons'
+import { ChevronDown, ChevronLeft, ChevronRight, Clock, Cross, Download, Gear, Globe, HalfLeft, HalfRight, Pin, Plus, Sleep, Star, Volume, VolumeOff, Wallet, Zap } from './Icons'
 import { cx } from './ui'
 
 /** The same icons these pages carry in the toolbar and in the menu. */
@@ -17,7 +17,8 @@ const INTERNAL_ICONS: Record<InternalPage, typeof Gear> = {
   history: Clock,
   downloads: Download,
   bookmarks: Star,
-  passwords: Wallet
+  passwords: Wallet,
+  tasks: Zap
 }
 
 /**
@@ -106,6 +107,9 @@ interface ItemProps {
   first?: boolean
   last?: boolean
   dropIndex: number | null
+  /** gathered up with others, waiting for something to be done to all of them */
+  picked?: boolean
+  onPick: (id: number) => void
   onDragStart: (id: number) => void
   onDragOver: (index: number) => void
   onDrop: () => void
@@ -123,11 +127,16 @@ function TabItem({
   first,
   last,
   dropIndex,
+  picked,
+  onPick,
   onDragStart,
   onDragOver,
   onDrop
 }: ItemProps) {
   const [hover, setHover] = useState(false)
+  /** where the pointer is, once it has stayed long enough to mean it */
+  const [peek, setPeek] = useState<{ x: number; y: number } | null>(null)
+  const peekTimer = useRef<number | null>(null)
   const height = tabHeight(settings)
   /**
    * Two tabs shown as one window took the room of two tabs, and the strip has
@@ -147,6 +156,17 @@ function TabItem({
       draggable
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = 'move'
+        // Named so another window can recognise it. A drag that ends outside
+        // this strip is a tab moving house, and the window it left has to be
+        // findable from wherever it lands.
+        event.dataTransfer.setData('application/x-nya-tab', String(tab.id))
+        void window.browser.windowId().then((id) => {
+          try {
+            event.dataTransfer.setData('application/x-nya-window', String(id))
+          } catch {
+            /* the drag has already started; the strip's own reorder still works */
+          }
+        })
         onDragStart(tab.id)
       }}
       onDragOver={(event) => {
@@ -155,9 +175,30 @@ function TabItem({
       }}
       onDrop={(event) => {
         event.preventDefault()
+        // A tab from another window: it moves here rather than reordering
+        // anything, and the strip's own drop has nothing to do.
+        const fromWindow = Number(event.dataTransfer.getData('application/x-nya-window') || '0')
+        const carried = Number(event.dataTransfer.getData('application/x-nya-tab') || '0')
+        if (fromWindow && carried) {
+          void window.browser.windowId().then((here) => {
+            if (fromWindow !== here) void window.browser.moveTabHere(fromWindow, carried)
+            else onDrop()
+          })
+          return
+        }
         onDrop()
       }}
-      onClick={() => window.browser.switchTab(tab.id)}
+      onClick={(event) => {
+        if (peekTimer.current) window.clearTimeout(peekTimer.current)
+        setPeek(null)
+        // Ctrl-click gathers tabs instead of going to them, which is what
+        // makes "close these four" possible at all.
+        if (event.ctrlKey || event.metaKey) {
+          event.preventDefault()
+          return onPick(tab.id)
+        }
+        window.browser.switchTab(tab.id)
+      }}
       onAuxClick={(event) => {
         if (event.button === 1 && settings.middleClickClose) window.browser.closeTab(tab.id)
       }}
@@ -165,8 +206,22 @@ function TabItem({
         event.preventDefault()
         void window.browser.tabMenu(tab.id)
       }}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      onMouseEnter={(event) => {
+        setHover(true)
+        if (!settings.tabPreview || tab.active) return
+        const box = (event.currentTarget as HTMLElement).getBoundingClientRect()
+        if (peekTimer.current) window.clearTimeout(peekTimer.current)
+        peekTimer.current = window.setTimeout(
+          () => setPeek({ x: box.left + box.width / 2, y: box.bottom }),
+          420
+        )
+      }}
+      onMouseLeave={() => {
+        setHover(false)
+        if (peekTimer.current) window.clearTimeout(peekTimer.current)
+        peekTimer.current = null
+        setPeek(null)
+      }}
       title={vertical ? undefined : `${title}${tab.origin ? ` — ${tab.origin}` : ''}`}
       data-active-tab={tab.active ? '' : undefined}
       data-tab-id={tab.id}
@@ -229,7 +284,14 @@ function TabItem({
               : 'transparent',
         boxShadow: tab.active && !group ? 'var(--shadow-sm)' : undefined,
         opacity: asleep(tab) ? 0.62 : 1,
-        outline: dropIndex === index ? '2px solid var(--accent)' : 'none',
+        // A tab that started counting while you were elsewhere says so twice
+        // and then stops: a mark that never goes away is a mark nobody reads.
+        animation: tab.attention && !tab.active ? 'nya-tab-attention 1.1s ease-in-out 2' : undefined,
+        outline: picked
+          ? '2px solid var(--accent)'
+          : dropIndex === index
+            ? '2px solid var(--accent)'
+            : 'none',
         outlineOffset: -2,
         transition:
           'background var(--t-base) var(--ease-out), box-shadow var(--t-base) var(--ease-out), opacity var(--t-base) linear, max-width var(--t-slow) var(--ease-out), min-width var(--t-slow) var(--ease-out)'
@@ -259,7 +321,31 @@ function TabItem({
         />
       )}
 
+      {/* How deep in the chain of "opened from" this tab sits. A quiet step
+          in, not a tree with lines: the strip has to stay a strip. */}
+      {tab.depth > 0 && !tab.pinned && (
+        <span
+          className="pointer-events-none shrink-0"
+          style={{ width: Math.min(tab.depth, 4) * (vertical ? 12 : 6) }}
+        />
+      )}
+
       <Favicon tab={tab} />
+
+      {/* The count the page keeps in its own title, on its icon. */}
+      {tab.badge > 0 && (
+        <span
+          className="pointer-events-none absolute flex h-[14px] min-w-[14px] items-center justify-center rounded-pill px-[3px] text-[9px] font-bold text-white"
+          style={{
+            left: (tab.pinned && !vertical ? 20 : 20) + Math.min(tab.depth, 4) * (vertical ? 12 : 6),
+            top: 3,
+            background: 'var(--bad)',
+            boxShadow: '0 0 0 2px var(--surface-solid)'
+          }}
+        >
+          {tab.badge > 99 ? '99+' : tab.badge}
+        </span>
+      )}
 
       {/* Which half of the window this one fills. The pair reads as a pair
           because the same mark is on both, filled on opposite sides. */}
@@ -275,10 +361,22 @@ function TabItem({
 
       {!(tab.pinned && !vertical) && !folded && (
         <span
-          className={cx('min-w-0 flex-1 truncate text-sm', tab.active ? 'font-medium text-ink' : 'text-dim')}
+          className={cx(
+            'min-w-0 flex-1 truncate text-sm',
+            tab.active ? 'font-medium text-ink' : tab.unread ? 'font-medium text-ink' : 'text-dim'
+          )}
         >
           {title}
         </span>
+      )}
+
+      {/* Put aside on purpose: a dot, the way an unread message is marked. */}
+      {tab.unread && !tab.active && (
+        <span
+          className="pointer-events-none shrink-0 rounded-pill"
+          style={{ width: 6, height: 6, background: 'var(--accent)' }}
+          title={t('Отметить непрочитанной')}
+        />
       )}
 
       {asleep(tab) && <Sleep width={12} height={12} className="shrink-0 text-faint" />}
@@ -314,6 +412,151 @@ function TabItem({
         }}
       >
         <Cross width={12} height={12} />
+      </button>
+
+      {peek && !leaving && <Preview id={tab.id} x={peek.x} y={peek.y} title={title} />}
+    </div>
+  )
+}
+
+/**
+ * A picture of what a tab is showing, under the cursor.
+ *
+ * Twenty tabs called "Документ" are twenty identical tabs, and the only thing
+ * that tells them apart is what they look like. The picture is asked for when
+ * the pointer has stayed still for a moment — not on every pass across the
+ * strip — and the browser keeps it for a few seconds so going back and forth
+ * along a row costs one capture per tab.
+ */
+function Preview({ id, x, y, title }: { id: number; x: number; y: number; title: string }) {
+  const [shot, setShot] = useState('')
+  useEffect(() => {
+    let alive = true
+    void window.browser.tabPreview(id).then((data) => {
+      if (alive) setShot(data)
+    })
+    return () => {
+      alive = false
+    }
+  }, [id])
+
+  const width = 268
+  const left = Math.max(8, Math.min(x - width / 2, window.innerWidth - width - 8))
+  return (
+    <div
+      className="animate-fade pointer-events-none fixed z-[90] overflow-hidden rounded-[12px]"
+      style={{
+        left,
+        top: y + 6,
+        width,
+        background: 'var(--elevated)',
+        border: '1px solid var(--line)',
+        boxShadow: 'var(--shadow-lg)',
+        backdropFilter: 'blur(20px) saturate(160%)'
+      }}
+    >
+      {shot ? (
+        <img src={shot} alt="" className="block w-full" style={{ aspectRatio: '16 / 10', objectFit: 'cover' }} />
+      ) : (
+        <div
+          className="flex items-center justify-center text-2xs text-faint"
+          style={{ height: 96, background: 'var(--field-idle)' }}
+        >
+          {t('Вкладка спит')}
+        </div>
+      )}
+      <div className="truncate px-2.5 py-1.5 text-2xs text-dim">{title}</div>
+    </div>
+  )
+}
+
+/**
+ * Several tabs at once.
+ *
+ * Ctrl-clicking a tab gathers it instead of going to it, and a bar appears
+ * saying how many are gathered and offering the three things anybody does with
+ * a handful of tabs: close them, put them in a group, or take them into a
+ * window of their own. Clicking an ungathered tab, or pressing Escape, lets
+ * them go — nothing stays selected across a change of mind.
+ */
+function usePicked(tabs: TabState[]) {
+  const [picked, setPicked] = useState<Set<number>>(() => new Set())
+
+  // A tab that has closed cannot still be picked.
+  useEffect(() => {
+    setPicked((prev) => {
+      if (prev.size === 0) return prev
+      const alive = new Set([...prev].filter((id) => tabs.some((tab) => tab.id === id)))
+      return alive.size === prev.size ? prev : alive
+    })
+  }, [tabs])
+
+  useEffect(() => {
+    if (picked.size === 0) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPicked(new Set())
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [picked.size])
+
+  const pick = (id: number) =>
+    setPicked((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  return { picked, pick, clear: () => setPicked(new Set()) }
+}
+
+/** The bar that appears while several tabs are gathered. */
+function PickedBar({ ids, onDone }: { ids: number[]; onDone: () => void }) {
+  if (ids.length === 0) return null
+  return (
+    <div
+      className="animate-slide-down no-drag fixed left-1/2 top-[46px] z-[80] flex -translate-x-1/2 items-center gap-2 rounded-pill py-1.5 pl-4 pr-2"
+      style={{
+        background: 'var(--elevated)',
+        border: '1px solid var(--line)',
+        boxShadow: 'var(--shadow-lg)',
+        backdropFilter: 'blur(24px) saturate(160%)'
+      }}
+    >
+      <span className="text-sm font-medium">
+        {t('Выбрано вкладок: {n}', { n: ids.length })}
+      </span>
+      <button
+        className="btn h-[26px] px-2.5 text-2xs"
+        onClick={() => {
+          void window.browser.groupTabs(ids)
+          onDone()
+        }}
+      >
+        {t('В группу')}
+      </button>
+      <button
+        className="btn h-[26px] px-2.5 text-2xs"
+        onClick={() => {
+          for (const id of ids) void window.browser.detachTab(id)
+          onDone()
+        }}
+      >
+        {t('В отдельное окно')}
+      </button>
+      <button
+        className="btn h-[26px] px-2.5 text-2xs"
+        style={{ color: 'var(--bad)' }}
+        onClick={() => {
+          for (const id of ids) window.browser.closeTab(id)
+          onDone()
+        }}
+      >
+        {t('Закрыть')}
+      </button>
+      <button className="icon-btn" aria-label={t('Отмена')} onClick={onDone}>
+        <Cross width={13} height={13} />
       </button>
     </div>
   )
@@ -651,6 +894,7 @@ export function TabStrip({
 }) {
   const halfOf = useSplitPair()
   const reorder = useReorder()
+  const { picked, pick, clear } = usePicked(tabs)
   const { drawn, leaving } = useFarewell(tabs)
   const rows = rowsOf(drawn, groups)
   // More tabs than the window is wide used to be drawn past its edge and cut
@@ -714,6 +958,7 @@ export function TabStrip({
       onDragEnd={reorder.onDragEnd}
       onDoubleClick={() => window.browser.maximize()}
     >
+      <PickedBar ids={[...picked]} onDone={clear} />
       {/* The group in force, and any pinned beside it — never more than a
           slice of the window, however many are pinned, because the tabs are
           what the strip is for. */}
@@ -771,6 +1016,8 @@ export function TabStrip({
               last={row.last}
               vertical={false}
               dropIndex={reorder.dropIndex}
+              picked={picked.has(row.tab.id)}
+              onPick={pick}
               onDragStart={reorder.onDragStart}
               onDragOver={reorder.onDragOver}
               onDrop={reorder.onDrop}
@@ -979,6 +1226,7 @@ export function TabRail({
 }) {
   const halfOf = useSplitPair()
   const reorder = useReorder()
+  const { picked, pick, clear } = usePicked(tabs)
   const { drawn, leaving } = useFarewell(tabs)
   const rows = rowsOf(drawn, groups)
   const column = useRef<HTMLDivElement>(null)
@@ -1021,6 +1269,8 @@ export function TabRail({
         </button>
       </div>
 
+      <PickedBar ids={[...picked]} onDone={clear} />
+
       <div
         ref={column}
         className="flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto overflow-x-hidden pr-0.5"
@@ -1050,6 +1300,8 @@ export function TabRail({
               last={row.last}
               vertical
               dropIndex={reorder.dropIndex}
+              picked={picked.has(row.tab.id)}
+              onPick={pick}
               onDragStart={reorder.onDragStart}
               onDragOver={reorder.onDragOver}
               onDrop={reorder.onDrop}

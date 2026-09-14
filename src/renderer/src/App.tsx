@@ -15,11 +15,12 @@ const HistoryPage = lazy(() => import('./pages/HistoryPage'))
 const DownloadsPage = lazy(() => import('./pages/DownloadsPage'))
 const BookmarksPage = lazy(() => import('./pages/BookmarksPage'))
 const PasswordsPage = lazy(() => import('./pages/PasswordsPage'))
+const TasksPage = lazy(() => import('./pages/TasksPage'))
 import ErrorPage from './pages/ErrorPage'
 import type { UpdateState } from '../../shared/types'
 import SplitDivider from './components/SplitDivider'
 
-type View = 'page' | 'settings' | 'history' | 'downloads' | 'bookmarks' | 'passwords'
+type View = 'page' | 'settings' | 'history' | 'downloads' | 'bookmarks' | 'passwords' | 'tasks'
 type Overlay = 'menu' | 'profiles' | 'update' | null
 
 export default function App() {
@@ -388,6 +389,7 @@ export default function App() {
                     <BookmarksPage items={bookmarks} onRefresh={refreshBookmarks} />
                   )}
                   {tab.internal === 'passwords' && <PasswordsPage />}
+                  {tab.internal === 'tasks' && <TasksPage />}
                   </Suspense>
                 </div>
               ))}

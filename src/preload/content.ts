@@ -1297,6 +1297,88 @@ if (isTop && httpOrigin) {
   })
 }
 
+/* ==========================================================================
+ * Mouse gestures
+ *
+ * Hold the right button and draw: left for back, right for forward, down for
+ * a new tab, up to reload, down-then-right to close the tab. It is off unless
+ * somebody turns it on, because a browser that reacts to a right-drag nobody
+ * meant is worse than one without gestures.
+ *
+ * The stroke is read as a sequence of directions rather than a shape: a line
+ * drawn by hand is never straight, and what people mean by "left" is "mostly
+ * left, eventually".
+ * ====================================================================== */
+{
+  /** How far the pointer has to travel before a wobble counts as a direction. */
+  const STEP = 30
+
+  let on = false
+  let drawing = false
+  let moved = false
+  let lastX = 0
+  let lastY = 0
+  let path = ''
+
+  ipcRenderer.on('gesture:on', (_event, value: boolean) => {
+    on = value === true
+  })
+
+  const finish = () => {
+    drawing = false
+    if (path) ipcRenderer.send('gesture:done', path)
+    path = ''
+  }
+
+  window.addEventListener(
+    'pointerdown',
+    (event) => {
+      if (!on || event.button !== 2) return
+      drawing = true
+      moved = false
+      path = ''
+      lastX = event.clientX
+      lastY = event.clientY
+    },
+    true
+  )
+
+  window.addEventListener(
+    'pointermove',
+    (event) => {
+      if (!drawing) return
+      const dx = event.clientX - lastX
+      const dy = event.clientY - lastY
+      if (Math.abs(dx) < STEP && Math.abs(dy) < STEP) return
+      const step = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'R' : 'L') : dy > 0 ? 'D' : 'U'
+      lastX = event.clientX
+      lastY = event.clientY
+      moved = true
+      // Four steps is more than any gesture here needs, and stops a scribble
+      // from becoming a string nothing matches.
+      if (path[path.length - 1] !== step && path.length < 4) path += step
+    },
+    true
+  )
+
+  window.addEventListener('pointerup', (event) => {
+    if (!drawing || event.button !== 2) return
+    finish()
+  }, true)
+
+  // A gesture must not also open the menu; a plain right-click still must.
+  window.addEventListener(
+    'contextmenu',
+    (event) => {
+      if (!on || !moved) return
+      moved = false
+      event.preventDefault()
+      event.stopPropagation()
+    },
+    true
+  )
+}
+
 /** The word for minutes, handed over by the browser in the reader's language. */
 let MINUTES = 'мин'
 const NEWLINE = String.fromCharCode(10)

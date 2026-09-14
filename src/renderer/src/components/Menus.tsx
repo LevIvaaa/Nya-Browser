@@ -1,23 +1,10 @@
 import { t } from '../i18n'
 import { useState } from 'react'
 import type { Profile, ProfilesState } from '../../../shared/types'
-import {
-  Clock,
-  Download,
-  Eraser,
-  Gear,
-  Incognito,
-  Wallet,
-  Keyboard,
-  Plus,
-  Printer,
-  Shield,
-  Star,
-  Users
-} from './Icons'
+import { Clock, Download, Eraser, Gear, Incognito, Keyboard, Plus, Printer, Shield, Star, Users, Wallet, Zap } from './Icons'
 import { Avatar, Modal, Popover, TextField } from './ui'
 
-type View = 'settings' | 'history' | 'passwords' | 'downloads' | 'bookmarks' | 'security'
+type View = 'settings' | 'history' | 'passwords' | 'downloads' | 'bookmarks' | 'security' | 'tasks'
 
 /* ------------------------------------------------------------- main menu */
 export function AppMenu({ onClose, onOpen }: { onClose: () => void; onOpen: (view: View) => void }) {
@@ -52,6 +39,7 @@ export function AppMenu({ onClose, onOpen }: { onClose: () => void; onOpen: (vie
         {item(<Download width={15} height={15} />, t('Загрузки'), 'Ctrl+J', () => onOpen('downloads'))}
         {item(<Wallet width={15} height={15} />, t('Пароли и карты'), '', () => onOpen('passwords'))}
         <div className="my-1.5" style={{ borderTop: '1px solid var(--line)' }} />
+        {item(<Zap width={15} height={15} />, t('Что тратит ресурсы'), '', () => onOpen('tasks'))}
         {item(<Shield width={15} height={15} />, t('Проверка безопасности'), '', () =>
           window.browser.newTab('nya://security')
         )}
