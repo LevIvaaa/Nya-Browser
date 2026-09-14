@@ -1,5 +1,5 @@
 import { t } from './i18n'
-import { app, clipboard, dialog, ipcMain, Menu, nativeTheme, session, shell, type MenuItemConstructorOptions } from 'electron'
+import { app, clipboard, dialog, ipcMain, Menu, nativeTheme, net, session, shell, type MenuItemConstructorOptions } from 'electron'
 import { join } from 'path'
 import { execFile, execFileSync } from 'child_process'
 import { BrowserWindow } from './browser'
@@ -1042,6 +1042,37 @@ function registerIpc() {
   ipcMain.handle('vault:cipher-sample', (event) => vault.cipherSample())
 
   /* ---- downloads ---- */
+  /**
+   * The bytes of a picture, for reading a QR code out of it. A page cannot
+   * read a picture from another site — its canvas is tainted — and the browser
+   * is not bound by that, so it fetches and hands the bytes back.
+   */
+  ipcMain.handle('qr:bytes', async (event, src: unknown) => {
+    const url = String(src ?? '')
+    if (!/^https?:/i.test(url)) return null
+    try {
+      const response = await net.fetch(url)
+      if (!response.ok) return null
+      const type = response.headers.get('content-type') ?? ''
+      if (!/^image\//i.test(type)) return null
+      const buffer = await response.arrayBuffer()
+      // Anything bigger than eight megabytes is not a QR code.
+      return buffer.byteLength <= 8_000_000 ? buffer : null
+    } catch {
+      return null
+    }
+  })
+  ipcMain.on('qr:open', (event, text: unknown) => {
+    const raw = String(text ?? '').slice(0, 2048)
+    const url = /^https?:\/\//i.test(raw) ? raw : /^www\./i.test(raw) ? `https://${raw}` : ''
+    if (url) current(event).newTab(url)
+  })
+  ipcMain.on('qr:copy', (event, text: unknown) => {
+    clipboard.writeText(String(text ?? '').slice(0, 4096))
+  })
+  ipcMain.on('qr:none', (event) => {
+    current(event).toast(t('Ничего не найдено'))
+  })
   ipcMain.handle('usage:summary', () => usage.summary())
   ipcMain.handle('usage:clear', () => {
     usage.clear()

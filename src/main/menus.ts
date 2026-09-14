@@ -71,6 +71,11 @@ export function pageContextMenu(
       { label: t('Открыть картинку в новой вкладке'), click: () => browser.newTab(params.srcURL, true) },
       { label: t('Копировать адрес картинки'), click: () => clipboard.writeText(params.srcURL) },
       { label: t('Сохранить картинку'), click: () => wc.downloadURL(params.srcURL) },
+      {
+        label: t('Прочитать QR-код'),
+        click: () =>
+          wc.send('qr:scan', { src: params.srcURL, open: t('Открыть'), copy: t('Копировать') })
+      },
       { type: 'separator' }
     )
   }

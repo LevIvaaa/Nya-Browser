@@ -27,7 +27,7 @@ export default defineConfig({
   preload: {
     // The page-side script is sandboxed, so nothing it uses can stay
     // external: a require() there has nothing to require from.
-    plugins: [externalizeDepsPlugin({ exclude: ['@mozilla/readability'] })],
+    plugins: [externalizeDepsPlugin({ exclude: ['@mozilla/readability', 'jsqr'] })],
     build: {
       rollupOptions: {
         input: {
