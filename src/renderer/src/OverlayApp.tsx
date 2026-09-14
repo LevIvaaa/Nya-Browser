@@ -8,6 +8,7 @@ import AutofillCard from './components/AutofillOffer'
 import InstallApp from './components/InstallApp'
 import MediaPanel from './components/MediaPanel'
 import PageFiles from './components/PageFiles'
+import PictureText from './components/PictureText'
 import PageMenu from './components/PageMenu'
 import PrintSheet from './components/PrintSheet'
 import SavePassword from './components/SavePassword'
@@ -80,6 +81,10 @@ export default function OverlayApp() {
   const [files, setFiles] = useState<PageFile[]>([])
   useEffect(() => window.browser.onFiles(setFiles), [])
 
+  // The words read out of a picture arrive the same way.
+  const [pictureText, setPictureText] = useState('')
+  useEffect(() => window.browser.onPictureText((data) => setPictureText(data.text)), [])
+
   if (!mode || !settings) return null
 
   return (
@@ -88,6 +93,7 @@ export default function OverlayApp() {
       {mode === 'autofill' && <AutofillCard offer={autofill} onClose={close} />}
       {mode === 'print' && <PrintSheet onClose={close} />}
       {mode === 'files' && <PageFiles files={files} onClose={close} />}
+      {mode === 'picture-text' && <PictureText text={pictureText} onClose={close} />}
       {mode === 'save-password' && <SavePassword offer={savePassword} onClose={close} />}
       {mode.startsWith('tabs-panel:') && (
         <TabsPanel

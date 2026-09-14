@@ -13,7 +13,7 @@ import {
   type Session,
   type WebContents
 } from 'electron'
-import { copyFileSync, existsSync, readFileSync, renameSync, writeFileSync } from 'fs'
+import { copyFileSync, existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'fs'
 import { basename, extname, join } from 'path'
 import { randomUUID } from 'crypto'
 import { URL } from 'url'
@@ -30,8 +30,10 @@ import { translateBatch } from './translate'
 import { WALLPAPER_EXTENSIONS, registerProtocols } from './protocol'
 import { sites } from './sites'
 import { badgeOf } from '../shared/badge'
+import { ocrAvailable, readPicture } from './ocr'
 import { usage } from './usage'
 import { drafts } from './drafts'
+import { pageText } from './pagetext'
 import { apps, inScope, readManifest } from './apps'
 import { allowCertificateOnce, installCertificateTrust, refusedCertificate } from './trust'
 import { groupContextMenu, pageContextMenu, tabContextMenu, uiContextMenu } from './menus'
@@ -397,6 +399,26 @@ class Tab {
       unread: this.unread,
       memory
     }
+  }
+}
+
+/** Everything the reading sheet says, in the language the browser wears. */
+function readerWords() {
+  return {
+    minutes: t('мин'),
+    contents: t('Оглавление'),
+    aloud: t('Озвучить'),
+    stop: t('Остановить'),
+    summary: t('Коротко'),
+    pdf: t('В PDF'),
+    settings: t('Вид'),
+    close: t('Закрыть'),
+    textOnly: t('Только текст'),
+    size: t('Размер'),
+    width: t('Ширина'),
+    spacing: t('Интервал'),
+    serif: t('С засечками'),
+    theme: t('Тема')
   }
 }
 
@@ -862,6 +884,7 @@ export class BrowserWindow {
     if (!this.incognito) {
       usage.load(dir)
       drafts.load(dir)
+      pageText.load(dir)
     }
     // Held shut on purpose when the setting says to ask: the OS keychain would
     // otherwise open the vault before anyone had been asked anything.
@@ -1387,6 +1410,16 @@ export class BrowserWindow {
       // The page reads QR codes itself and needs the two words for its buttons
       // in the language the browser is wearing.
       wc.send('qr:words', { open: t('Открыть'), copy: t('Копировать') })
+      // A site marked "always read this one" opens its sheet by itself.
+      this.maybeAutoRead(tab)
+      this.maybeAutoTranslate(tab)
+      // And what the page said, for the history search — never in a private
+      // window, and never when history is turned off.
+      if (!this.incognito && settings.get().saveHistory) {
+        setTimeout(() => {
+          if (!wc.isDestroyed()) wc.send('page:read-text')
+        }, 1200)
+      }
       // The same for the offer to put back what was typed into a form here and
       // never sent.
       wc.send('draft:words', {
@@ -1715,6 +1748,8 @@ export class BrowserWindow {
         return this.recentTab(false)
       case 'prev-tab':
         return this.recentTab(true)
+      case 'speak-selection':
+        return this.speakSelection()
       case 'next-tab-order':
         return this.cycleTab(1)
       case 'prev-tab-order':
@@ -3486,13 +3521,118 @@ export class BrowserWindow {
    */
   toggleReader() {
     this.withActive((wc) => {
-      wc.send('reader:words', { minutes: t('мин') })
-      wc.send('reader:toggle', {
-        dark: nativeTheme.shouldUseDarkColors,
-        size: 19,
-        serif: false
-      })
+      wc.send('reader:words', readerWords())
+      wc.send('reader:toggle', { ...settings.get().reader, dark: nativeTheme.shouldUseDarkColors })
     })
+  }
+
+  /**
+   * A site whose pages are always worth translating, translated.
+   *
+   * Said once, in the site panel, and then not asked again: a forum in a
+   * language you do not read is a forum you want in your own every time, and
+   * pressing the same button on every page is what makes people stop using
+   * the feature.
+   */
+  private maybeAutoTranslate(tab: Tab) {
+    const wc = tab.wc
+    if (!wc || wc.isDestroyed() || tab.translated) return
+    let host = ''
+    try {
+      host = new URL(tab.url).hostname.replace(/^www\./, '')
+    } catch {
+      return
+    }
+    if (!host || sites.get(host).translate !== 'always') return
+    wc.send('translate:start', { to: translateTarget() })
+  }
+
+  /**
+   * The words in a picture, put where words can be used.
+   *
+   * The picture is fetched through this profile's own session — so a picture
+   * that needs a cookie to be seen is seen — written to a temporary file for
+   * the system's engine to read, and deleted immediately. What comes back is
+   * shown in a card with a copy button and, when the words are in another
+   * language, a translation.
+   */
+  async readPicture(url: string) {
+    if (!/^https?:|^data:/i.test(url)) return
+    if (!ocrAvailable()) return this.toast(t('Распознавание текста недоступно'))
+    this.toast(t('Читаем картинку…'))
+    const file = join(app.getPath('temp'), `nya-ocr-${randomUUID()}.png`)
+    try {
+      let bytes: Buffer
+      if (url.startsWith('data:')) {
+        bytes = Buffer.from(url.slice(url.indexOf(',') + 1), 'base64')
+      } else {
+        const response = await this.ses.fetch(url)
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        bytes = Buffer.from(await response.arrayBuffer())
+      }
+      if (bytes.byteLength > 20 * 1024 * 1024) throw new Error('too large')
+      writeFileSync(file, bytes)
+      const found = await readPicture(file)
+      if (found.state === 'no-language') return this.toast(t('Распознавание текста недоступно'))
+      if (found.state !== 'ok' || !found.text) return this.toast(t('Текста на картинке не нашлось'))
+      this.send('state:picture-text', { text: found.text })
+      this.setOverlayMode('picture-text')
+    } catch (error) {
+      log('ocr', String(error))
+      this.toast(t('Не удалось прочитать картинку'))
+    } finally {
+      try {
+        unlinkSync(file)
+      } catch {
+        /* it was never written */
+      }
+    }
+  }
+
+  /** The same picture, looked for elsewhere. */
+  searchByImage(url: string) {
+    if (!/^https?:/i.test(url)) return
+    // Yandex and Google both take the picture's address in the query; which of
+    // them is used follows the search engine the browser is already set to,
+    // because that is the one whose results this person trusts.
+    const engine = settings.get().searchEngine
+    const where =
+      engine === 'google'
+        ? `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(url)}`
+        : `https://yandex.ru/images/search?rpt=imageview&url=${encodeURIComponent(url)}`
+    this.newTab(where)
+  }
+
+  /** Shows what each translated paragraph said before, on hover. */
+  compareTranslation(on: boolean) {
+    this.withActive((wc) => wc.send('translate:compare', on))
+  }
+
+  /** The selection, read out loud by the machine's own voice. */
+  speakSelection() {
+    this.withActive((wc) => wc.send('reader:speak-selection'))
+  }
+
+  /**
+   * A site that is always worth reading rather than looking at.
+   *
+   * Some places are a wall of banners around six paragraphs, every time. This
+   * remembers that, and opens the sheet by itself the moment such a page has
+   * finished loading — which is the difference between a feature people use
+   * twice and one they stop noticing because it is simply how that site opens.
+   */
+  private maybeAutoRead(tab: Tab) {
+    const wc = tab.wc
+    if (!wc || wc.isDestroyed() || tab.reading) return
+    let host = ''
+    try {
+      host = new URL(tab.url).hostname.replace(/^www\./, '')
+    } catch {
+      return
+    }
+    if (!host || !sites.get(host).reader) return
+    wc.send('reader:words', readerWords())
+    wc.send('reader:toggle', { ...settings.get().reader, dark: nativeTheme.shouldUseDarkColors })
   }
 
   /** What the page says came of it, and the one case worth a word. */
@@ -3648,7 +3788,11 @@ export class BrowserWindow {
   translatePage() {
     const tab = this.getActive()
     const wc = tab?.wc
-    if (!tab || !wc || wc.isDestroyed() || !/^https?:/i.test(tab.url)) return false
+    // The browser's own PDF viewer counts: its text layer is text like any
+    // other, and a document in a language you do not read is the case people
+    // ask about most.
+    if (!tab || !wc || wc.isDestroyed()) return false
+    if (!/^https?:/i.test(tab.url) && !pdfSource(wc.getURL())) return false
     if (tab.translated) {
       wc.send('translate:restore')
       tab.translated = false
@@ -4926,8 +5070,10 @@ export class BrowserWindow {
     await clearBrowsingData(this.ses)
     history.clear()
     // Half-typed forms are site data like any other: "clear site data" has to
-    // mean it, or the word is worth nothing.
+    // mean it, or the word is worth nothing. The same goes for the words the
+    // history search looks through.
     drafts.clear()
+    pageText.clear()
     this.send('toast', t('Данные сайтов удалены'))
     this.broadcast()
   }

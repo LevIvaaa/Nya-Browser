@@ -112,6 +112,13 @@ export interface SiteRules {
   zoom?: number
   /** 'off' turns the ad and tracker blocker off for this host */
   blocking?: 'off'
+  /** this site always opens in the reading sheet */
+  reader?: boolean
+  /**
+   * What to do about translation here without being asked: 'always' translates
+   * every page on this host, 'never' stops the browser offering.
+   */
+  translate?: 'always' | 'never'
 }
 
 /**
@@ -506,6 +513,10 @@ export interface Settings {
   /** hovering a tab for a moment shows what is on it */
   tabPreview: boolean
 
+  // ---- reading
+  /** How the reading sheet is set: everything a person changes while reading. */
+  reader: ReaderLook
+
   // ---- downloads
   downloadDir: string
   askWhereToSave: boolean
@@ -522,6 +533,28 @@ export interface Settings {
   downloadUnzip: boolean
   /** ask when a page starts a download nobody clicked for */
   downloadAsk: boolean
+}
+
+/**
+ * How the reading sheet looks.
+ *
+ * Every one of these is something people change once and then never think
+ * about again, which is exactly why they have to be there: a column too wide
+ * or a line too tight is the difference between reading the article and
+ * closing it.
+ */
+export interface ReaderLook {
+  /** 'system' follows the browser's own theme */
+  theme: 'system' | 'light' | 'sepia' | 'dark'
+  /** text size in pixels */
+  size: number
+  serif: boolean
+  /** how wide the column is, in ems of the text itself */
+  width: number
+  /** line height, as a multiple */
+  spacing: number
+  /** pictures, video and embeds left out — words only */
+  textOnly: boolean
 }
 
 export interface AvatarCrop {

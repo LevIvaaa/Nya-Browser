@@ -1,7 +1,7 @@
 import { t } from '../i18n'
 import { useEffect, useState } from 'react'
-import type { PermissionKey, PermissionPolicy, SiteInfo } from '../../../shared/types'
-import { Lock, Shield, Unlock } from './Icons'
+import type { PermissionKey, PermissionPolicy, SiteInfo, SiteRules } from '../../../shared/types'
+import { Lock, Scroll, Shield, Translate, Unlock } from './Icons'
 import { cx } from './ui'
 
 /** The permissions worth a row, in the order they are usually thought about. */
@@ -110,6 +110,55 @@ export default function SitePanel({ onClose }: { onClose: () => void }) {
               </span>
             )}
           </label>
+        </div>
+
+        {/* --------------------------------------------- always read this one */}
+        <div className="border-t px-4 py-3" style={{ borderColor: 'var(--line)' }}>
+          <label className="flex cursor-pointer items-center gap-2.5">
+            <input
+              type="checkbox"
+              checked={info.rules.reader === true}
+              onChange={(event) => void set({ reader: event.target.checked ? true : undefined })}
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm text-ink">{t('Всегда открывать в режиме чтения')}</span>
+              <span className="block text-2xs text-faint">
+                {t('Где текста меньше, чем всего остального')}
+              </span>
+            </span>
+            <Scroll width={15} height={15} style={{ color: 'var(--faint)' }} />
+          </label>
+        </div>
+
+        {/* -------------------------------------------- what to do about words */}
+        <div className="border-t px-4 py-3" style={{ borderColor: 'var(--line)' }}>
+          <div className="flex items-center gap-2.5">
+            <Translate width={15} height={15} style={{ color: 'var(--faint)' }} />
+            <span className="min-w-0 flex-1 text-sm text-ink">{t('Перевод этого сайта')}</span>
+          </div>
+          <div className="mt-2 flex gap-1.5">
+            {(
+              [
+                [undefined, t('Спрашивать')],
+                ['always', t('Всегда')],
+                ['never', t('Никогда')]
+              ] as Array<[SiteRules['translate'], string]>
+            ).map(([value, label]) => (
+              <button
+                key={label}
+                className="h-[26px] flex-1 rounded-[8px] text-2xs font-medium"
+                style={{
+                  color: info.rules.translate === value ? '#fff' : 'var(--text-dim)',
+                  background:
+                    info.rules.translate === value ? 'var(--accent)' : 'var(--field-idle)',
+                  transition: 'background var(--t-fast) linear, color var(--t-fast) linear'
+                }}
+                onClick={() => void set({ translate: value })}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* ------------------------------------------------------- the zoom */}

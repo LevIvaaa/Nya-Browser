@@ -26,6 +26,8 @@ export default function PageMenu({
 }) {
   // What is being typed into the zoom box, while it is being typed.
   const [typed, setTyped] = useState<string | null>(null)
+  // Whether the original is being shown under the cursor right now.
+  const [compare, setCompare] = useState(false)
   const width = 300
   const left = Math.max(8, Math.min(x - width + 28, window.innerWidth - width - 8))
   const usable = Boolean(tab?.hasContent) && /^https?:/i.test(tab?.url ?? '')
@@ -177,6 +179,16 @@ export default function PageMenu({
             () => void window.browser.harvestFiles(),
             usable
           )}
+          {/* Only while there is a translation to compare against. */}
+          {tab?.translated &&
+            item(
+              <Translate width={15} height={15} />,
+              compare ? t('Убрать сравнение') : t('Сравнить с оригиналом'),
+              () => {
+                setCompare(!compare)
+                void window.browser.compareTranslation(!compare)
+              }
+            )}
           {item(
             <Printer width={15} height={15} />,
             t('Печать'),
