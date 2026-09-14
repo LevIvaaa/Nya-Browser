@@ -141,6 +141,10 @@ interface PersistedTab {
   groupId?: number | null
   /** which big group it was in; absent in sessions written before they existed */
   space?: number
+  /** set when the tab held one of the browser's own pages instead of a site */
+  internal?: InternalPage | null
+  /** how far down the page had been read */
+  scroll?: number
 }
 
 /**
@@ -172,6 +176,14 @@ const INTERNAL_PAGES: Record<InternalPage, string> = {
 class Tab {
   readonly id: number
   view: WebContentsView | null = null
+  /**
+   * How far down this page was scrolled, as the page last said. Kept so a
+   * restored tab opens where it was left rather than at the top, which for a
+   * long article is the difference between continuing and starting again.
+   */
+  scroll = 0
+  /** Where to scroll once the restored page has finished loading, and then forgotten. */
+  restoreScroll = 0
   /** set for a tab that holds one of the browser's own pages */
   internal: InternalPage | null = null
   /** pinned tabs sit at the front of the strip, narrow and hard to lose */
@@ -1270,6 +1282,15 @@ export class BrowserWindow {
     })
     wc.on('did-finish-load', () => {
       if (tab.id === this.activeId) void this.lookForApp(tab)
+      // A restored tab opens where it was left. Once only: after that the
+      // page is the reader's again.
+      if (tab.restoreScroll > 0) {
+        const to = tab.restoreScroll
+        tab.restoreScroll = 0
+        void wc
+          .executeJavaScript(`window.scrollTo(0, ${Math.round(to)})`, false)
+          .catch(() => undefined)
+      }
     })
     wc.on('dom-ready', () => {
       void this.applyCosmetic(wc)
@@ -2391,6 +2412,12 @@ export class BrowserWindow {
       this.send('toast', t('Не удалось сохранить снимок'))
       return false
     }
+  }
+
+  /** Where a page says it is being read, kept for the next start. */
+  noteScroll(wcId: number, y: number) {
+    const tab = this.tabs.find((t) => t.wc?.id === wcId)
+    if (tab) tab.scroll = y
   }
 
   /** The same file, asked for again — from the list, without the page. */
@@ -4060,7 +4087,11 @@ export class BrowserWindow {
     if (this.incognito || this.offsetFromFirst) return
     if (!settings.get().restoreSession) return
     try {
-      const kept = this.tabs.filter((t) => t.hasContent && /^https?:/i.test(t.url))
+      // Our own pages count too: settings and history were open windows onto
+      // the browser, and losing them on restart is losing where you were.
+      const kept = this.tabs.filter(
+        (t) => t.internal !== null || (t.hasContent && /^https?:/i.test(t.url))
+      )
       const payload = {
         tabs: kept.map((t) => ({
           url: t.url,
@@ -4068,7 +4099,9 @@ export class BrowserWindow {
           favicon: t.favicon,
           pinned: t.pinned,
           groupId: t.groupId,
-          space: t.space
+          space: t.space,
+          internal: t.internal,
+          scroll: t.scroll > 0 ? Math.round(t.scroll) : undefined
         })),
         spaces: this.spaces,
         spaceId: this.spaceId,
@@ -4147,6 +4180,8 @@ export class BrowserWindow {
       tab.favicon = saved.favicon
       tab.url = saved.url
       tab.hasContent = true
+      tab.internal = saved.internal ?? null
+      tab.restoreScroll = Number(saved.scroll) > 0 ? Number(saved.scroll) : 0
       tab.pinned = saved.pinned === true
       tab.space = knownSpace.has(saved.space as number) ? (saved.space as number) : this.spaces[0].id
       tab.groupId =
@@ -4155,8 +4190,10 @@ export class BrowserWindow {
           : null
       this.tabs.push(tab)
 
-      // Only the tab you were last looking at spends a process on startup.
-      if (isActive || !lazy) {
+      // Only the tab you were last looking at spends a process on startup —
+      // and one of our own pages spends none at all, because the interface
+      // draws it itself.
+      if (tab.internal === null && (isActive || !lazy)) {
         tab.ensureView(this.wire)
         if (tab.view) this.win.contentView.addChildView(tab.view)
         this.raiseOverlay()
