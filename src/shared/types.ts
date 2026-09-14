@@ -655,6 +655,16 @@ export interface DownloadItem {
   speed: number
 }
 
+/** What a backup carried, counted. See main/backup.ts. */
+export interface BackupCounts {
+  passwords: number
+  cards: number
+  addresses: number
+  bookmarks: number
+  history: number
+  sites: number
+}
+
 /** How long the browser was looked at, and where. See main/usage.ts. */
 export interface UsageSpan {
   seconds: number
@@ -665,6 +675,8 @@ export interface UsageSummary {
   today: UsageSpan
   week: UsageSpan
   month: UsageSpan
+  /** The last thirty days, oldest first, for the chart. */
+  trend: Array<{ day: string; seconds: number }>
 }
 
 export interface PermissionRequest {

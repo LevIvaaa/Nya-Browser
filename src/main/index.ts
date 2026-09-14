@@ -1,6 +1,7 @@
 import { t } from './i18n'
 import { app, clipboard, dialog, ipcMain, Menu, nativeTheme, net, session, shell, type MenuItemConstructorOptions } from 'electron'
 import { join } from 'path'
+import { readFileSync, writeFileSync } from 'fs'
 import { execFile, execFileSync } from 'child_process'
 import { BrowserWindow } from './browser'
 import { DOH_TEMPLATES, settings } from './settings'
@@ -10,6 +11,7 @@ import { profiles, AVATAR_CHOICES, AVATAR_PICTURE_EXTENSIONS, COLOR_CHOICES } fr
 import { vault } from './vault'
 import { downloads } from './downloads'
 import { usage } from './usage'
+import { applyBackup, makeBackup, readBackup } from './backup'
 import { initLog, log } from './log'
 import { flushAll, installExitHooks } from './store'
 import { registerProtocols, registerSchemes } from './protocol'
@@ -1078,6 +1080,46 @@ function registerIpc() {
   })
   ipcMain.on('qr:none', (event) => {
     current(event).toast(t('Ничего не найдено'))
+  })
+  /**
+   * The whole profile, sealed with a password of the person's choosing, into a
+   * file they pick. Nothing leaves the machine unless they carry it.
+   */
+  ipcMain.handle('backup:make', async (event, password: unknown) => {
+    const made = makeBackup(String(password ?? ''))
+    if (!made) return null
+    const stamp = new Date().toISOString().slice(0, 10)
+    const where = await dialog.showSaveDialog({
+      title: t('Сохранить копию'),
+      defaultPath: join(app.getPath('downloads'), `nya-${stamp}.nyabackup`),
+      filters: [{ name: 'Nya', extensions: ['nyabackup'] }]
+    })
+    if (where.canceled || !where.filePath) return null
+    try {
+      writeFileSync(where.filePath, JSON.stringify(made.file), 'utf8')
+    } catch {
+      return null
+    }
+    return made.counts
+  })
+  ipcMain.handle('backup:restore', async (event, password: unknown) => {
+    const picked = await dialog.showOpenDialog({
+      title: t('Восстановить из копии'),
+      properties: ['openFile'],
+      filters: [{ name: 'Nya', extensions: ['nyabackup', 'json'] }]
+    })
+    if (picked.canceled || !picked.filePaths[0]) return null
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(readFileSync(picked.filePaths[0], 'utf8'))
+    } catch {
+      return null
+    }
+    const body = readBackup(parsed, String(password ?? ''))
+    if (!body) return null
+    const counts = applyBackup(body)
+    for (const win of windows) win.applySettings()
+    return counts
   })
   ipcMain.handle('usage:summary', () => usage.summary())
   ipcMain.handle('usage:clear', () => {

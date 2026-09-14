@@ -16,6 +16,7 @@ import type {
   InstalledExtension,
   UpdateState,
   UsageSummary,
+  BackupCounts,
   WidevineState,
   HistoryEntry,
   PermissionRequest,
@@ -339,6 +340,11 @@ const api = {
     ipcRenderer.invoke('vault:cipher-sample'),
 
   /* ---- downloads ---- */
+  /** The whole profile in one sealed file, and back again. */
+  makeBackup: (password: string): Promise<BackupCounts | null> =>
+    ipcRenderer.invoke('backup:make', password),
+  restoreBackup: (password: string): Promise<BackupCounts | null> =>
+    ipcRenderer.invoke('backup:restore', password),
   usage: (): Promise<UsageSummary> => ipcRenderer.invoke('usage:summary'),
   clearUsage: (): Promise<void> => ipcRenderer.invoke('usage:clear'),
   downloads: (): Promise<DownloadItem[]> => ipcRenderer.invoke('downloads:list'),
