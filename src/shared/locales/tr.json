@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "manifest.json içeren bir klasör, ya da .crx veya .zip dosyası — kendisi açılır",
   "Папка с данными": "Veri klasörü",
   "Пароли": "Şifreler",
+  "Пароли и карты": "Parolalar ve kartlar",
   "Пароли из CSV": "CSV'den şifreler",
   "Пароли не совпадают": "Parolalar uyuşmuyor",
   "Пароли под замком": "Parolalar kilitli",

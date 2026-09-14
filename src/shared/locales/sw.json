@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "Folda yenye manifest.json, au faili ya .crx au .zip — hujifungua yenyewe",
   "Папка с данными": "Folda ya data",
   "Пароли": "Manenosiri",
+  "Пароли и карты": "Nywila na kadi",
   "Пароли из CSV": "Manenosiri kutoka CSV",
   "Пароли не совпадают": "Manenosiri hayalingani",
   "Пароли под замком": "Manenosiri yamefungwa",

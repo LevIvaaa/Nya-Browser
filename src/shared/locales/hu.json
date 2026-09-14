@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "Mappa manifest.json fájllal, vagy .crx, illetve .zip fájl — magától kicsomagolódik",
   "Папка с данными": "Adatmappa",
   "Пароли": "Jelszavak",
+  "Пароли и карты": "Jelszavak és kártyák",
   "Пароли из CSV": "Jelszavak CSV-ből",
   "Пароли не совпадают": "A jelszavak nem egyeznek",
   "Пароли под замком": "A jelszavak zárolva vannak",

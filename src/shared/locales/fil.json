@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "Folder na may manifest.json, o file na .crx o .zip — kusa itong nagbubukas",
   "Папка с данными": "Folder ng datos",
   "Пароли": "Mga password",
+  "Пароли и карты": "Mga password at card",
   "Пароли из CSV": "Mga password mula sa CSV",
   "Пароли не совпадают": "Hindi magkatugma ang mga password",
   "Пароли под замком": "Naka-lock ang mga password",

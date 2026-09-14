@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "Priečinok s manifest.json, alebo súbor .crx či .zip — rozbalí sa sám",
   "Папка с данными": "Priečinok s údajmi",
   "Пароли": "Heslá",
+  "Пароли и карты": "Heslá a karty",
   "Пароли из CSV": "Heslá z CSV",
   "Пароли не совпадают": "Heslá sa nezhodujú",
   "Пароли под замком": "Heslá sú zamknuté",

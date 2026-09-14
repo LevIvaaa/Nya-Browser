@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "Mape ar manifest.json vai .crx vai .zip fails — izpakosies pats",
   "Папка с данными": "Datu mape",
   "Пароли": "Paroles",
+  "Пароли и карты": "Paroles un kartes",
   "Пароли из CSV": "Paroles no CSV",
   "Пароли не совпадают": "Paroles nesakrīt",
   "Пароли под замком": "Paroles ir aizslēgtas",

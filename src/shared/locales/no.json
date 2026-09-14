@@ -518,6 +518,7 @@
   "Папка с manifest.json, либо файл .crx или .zip — распакуется сам": "En mappe med manifest.json, eller en .crx- eller .zip-fil — den pakkes ut selv",
   "Папка с данными": "Datamappe",
   "Пароли": "Passord",
+  "Пароли и карты": "Passord og kort",
   "Пароли из CSV": "Passord fra CSV",
   "Пароли не совпадают": "Passordene er ikke like",
   "Пароли под замком": "Passordene er låst",
