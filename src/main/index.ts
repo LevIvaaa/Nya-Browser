@@ -1,6 +1,6 @@
 import { t } from './i18n'
 import { app, clipboard, dialog, ipcMain, Menu, nativeTheme, net, session, shell, type MenuItemConstructorOptions } from 'electron'
-import { join } from 'path'
+import { basename, join } from 'path'
 import { readFileSync, writeFileSync } from 'fs'
 import { execFile, execFileSync } from 'child_process'
 import { BrowserWindow } from './browser'
@@ -11,6 +11,7 @@ import { profiles, AVATAR_CHOICES, AVATAR_PICTURE_EXTENSIONS, COLOR_CHOICES } fr
 import { vault } from './vault'
 import { downloads } from './downloads'
 import { usage } from './usage'
+import { drafts } from './drafts'
 import { applyBackup, makeBackup, readBackup } from './backup'
 import { initLog, log } from './log'
 import { flushAll, installExitHooks } from './store'
@@ -952,6 +953,11 @@ function registerIpc() {
     return opened
   })
   ipcMain.handle('vault:dismiss-notice', (event) => current(event).dismissVaultNotice())
+  ipcMain.handle('autofill:search', (event) => current(event).openOfferSearch())
+  ipcMain.handle('autofill:close', (event) => current(event).closeOfferNow())
+  ipcMain.handle('autofill:new-password', (event, password: unknown) =>
+    current(event).fillNewPassword(str(password, 200))
+  )
   ipcMain.handle('vault:lock', (event) => vault.lock())
   ipcMain.handle('vault:save', (event, input: unknown) => {
     const data = (input ?? {}) as { origin?: string; username?: string; password?: string; note?: string }
@@ -985,6 +991,50 @@ function registerIpc() {
     vault.setCode(str(id, 64), str(secret, 400))
   )
   ipcMain.handle('vault:code', (event, id: unknown) => vault.code(str(id, 64)))
+  ipcMain.handle('vault:set-note', (event, id: unknown, text: unknown) =>
+    vault.setNote(str(id, 64), str(text, 4000))
+  )
+  ipcMain.handle('vault:search', (event, query: unknown) => vault.search(str(query, 100)))
+  /**
+   * A file kept with an entry. It comes in through a dialog and goes out
+   * through one — the vault never reads or writes a path the page chose.
+   */
+  ipcMain.handle('vault:attach', async (event, id: unknown) => {
+    const where = await dialog.showOpenDialog({
+      title: t('Вложение'),
+      properties: ['openFile']
+    })
+    if (where.canceled || !where.filePaths[0]) return false
+    try {
+      const bytes = readFileSync(where.filePaths[0])
+      if (bytes.byteLength > 512 * 1024) return false
+      const name = basename(where.filePaths[0])
+      return vault.attach(str(id, 64), name, `data:application/octet-stream;base64,${bytes.toString('base64')}`)
+    } catch {
+      return false
+    }
+  })
+  ipcMain.handle('vault:save-attachment', async (event, id: unknown) => {
+    const entry = vault.list().find((e) => e.id === str(id, 64))
+    const data = vault.attachment(str(id, 64))
+    if (!entry?.file || !data) return false
+    const where = await dialog.showSaveDialog({
+      title: t('Вложение'),
+      defaultPath: join(app.getPath('downloads'), entry.file.name)
+    })
+    if (where.canceled || !where.filePath) return false
+    try {
+      writeFileSync(where.filePath, Buffer.from(data.slice(data.indexOf(',') + 1), 'base64'))
+      return true
+    } catch {
+      return false
+    }
+  })
+  ipcMain.handle('vault:detach', (event, id: unknown) => vault.detach(str(id, 64)))
+  ipcMain.handle('vault:fill-code', (event, id: unknown) => current(event).fillCode(str(id, 64)))
+  ipcMain.handle('vault:fill-found', (event, id: unknown) =>
+    current(event).fillCredential(str(id, 64), true)
+  )
   /**
    * The vault, as text, into a file the person picks — and back. This is the
    * one door out, so it is a dialog every time and never a silent write.
@@ -1071,7 +1121,21 @@ function registerIpc() {
   })
   ipcMain.handle('vault:reveal-address', (event, id: unknown) => vault.revealAddress(str(id, 64)))
   ipcMain.handle('vault:remove-address', (event, id: unknown) => vault.removeAddress(str(id, 64)))
-  ipcMain.handle('vault:fill-card', (event, id: unknown) => current(event).fillCard(str(id, 64)))
+  /**
+   * A card into a page, with Windows Hello in front of it.
+   *
+   * This is the one fill that is asked about every single time. A password
+   * filled by mistake can be changed; a card number is money, and the prompt
+   * costs a second. Where Hello is not set up there is nothing to ask, and the
+   * card fills as before.
+   */
+  ipcMain.handle('vault:fill-card', async (event, id: unknown) => {
+    const window = current(event)
+    if (settings.get().cardHello && (await helloAvailable())) {
+      if (!(await helloVerify(t('Подставить данные карты')))) return false
+    }
+    return window.fillCard(str(id, 64))
+  })
   ipcMain.handle('vault:fill-address', (event, id: unknown) =>
     current(event).fillAddress(str(id, 64))
   )
@@ -1167,6 +1231,26 @@ function registerIpc() {
     return counts
   })
   ipcMain.handle('usage:summary', () => usage.summary())
+  /**
+   * What a page is holding in its form right now, and what it was holding
+   * last time. Nothing here is asked for by the page: the browser offers it
+   * back, once, and the page has to be told to take it.
+   */
+  ipcMain.on('draft:keep', (event, payload: unknown) => {
+    const data = (payload ?? {}) as { url?: unknown; fields?: unknown }
+    const fields = (data.fields ?? {}) as Record<string, unknown>
+    const clean: Record<string, string> = {}
+    for (const [key, value] of Object.entries(fields)) {
+      if (typeof value === 'string' && value) clean[key] = value
+    }
+    drafts.keep(str(data.url, 2000), clean)
+  })
+  ipcMain.on('draft:ask', (event, url: unknown) => {
+    const fields = drafts.find(str(url, 2000))
+    if (fields) event.sender.send('draft:have', { url: str(url, 2000), fields })
+  })
+  ipcMain.on('draft:drop', (event, url: unknown) => drafts.drop(str(url, 2000)))
+
   ipcMain.handle('usage:clear', () => {
     usage.clear()
   })
@@ -1311,20 +1395,29 @@ function registerIpc() {
     const data = (payload ?? {}) as {
       host?: string
       kind?: unknown
+      postsTo?: unknown
       x?: unknown
       y?: unknown
       width?: unknown
       height?: unknown
     }
     const px = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
-    const kind =
-      data.kind === 'card' || data.kind === 'address' ? data.kind : ('login' as const)
-    current(event).handleAutofillField(event.sender.id, str(data.host, 200), kind, {
-      x: px(data.x),
-      y: px(data.y),
-      width: px(data.width),
-      height: px(data.height)
-    })
+    const kinds = ['card', 'address', 'code', 'new-password'] as const
+    const kind = (kinds as readonly unknown[]).includes(data.kind)
+      ? (data.kind as (typeof kinds)[number])
+      : ('login' as const)
+    current(event).handleAutofillField(
+      event.sender.id,
+      str(data.host, 200),
+      kind,
+      {
+        x: px(data.x),
+        y: px(data.y),
+        width: px(data.width),
+        height: px(data.height)
+      },
+      str(data.postsTo, 200)
+    )
   })
   ipcMain.on('autofill:leave', (event) => {
     current(event).hideAutofill(event.sender.id)

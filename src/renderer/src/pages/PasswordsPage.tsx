@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Credential, VaultState } from '../../../preload/index'
 import type { AddressMeta, CardMeta, PasswordAudit } from '../../../shared/types'
 import { AddressesTab, CardsTab } from './VaultCards'
-import { Badges, BinTab, CodeBlock, Generator } from './VaultExtras'
+import { Badges, BinTab, CodeBlock, FileBlock, Generator, NoteBlock } from './VaultExtras'
 import { cx } from '../components/ui'
 import { ChevronRight, Copy, Cross, Download, Eye, EyeOff, Install, Key, Lock, LockOpen, Plus, Search, Shield, ShieldCheck, Wand } from '../components/Icons'
 import { EmptyState, Modal, Pill, TextField, formatDate } from '../components/ui'
@@ -405,6 +405,12 @@ export default function PasswordsPage() {
                         has={Boolean(item.code)}
                         onChanged={() => void refresh()}
                       />
+                      <NoteBlock
+                        id={item.id}
+                        note={item.note ?? ''}
+                        onSaved={() => void refresh()}
+                      />
+                      <FileBlock id={item.id} file={item.file} onChanged={() => void refresh()} />
                       <div className="flex items-center gap-3 pt-1">
                         <span className="mr-auto text-2xs text-faint">
                           добавлен {formatDate(item.created)}
@@ -563,7 +569,7 @@ function Line({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="w-[104px] shrink-0 text-2xs uppercase tracking-wider text-faint">{label}</span>
+      <span className="w-[124px] shrink-0 text-2xs uppercase tracking-wider text-faint">{label}</span>
       <span
         className={`min-w-0 flex-1 truncate rounded-[8px] px-2.5 py-1.5 text-sm ${mono ? 'font-mono' : ''}`}
         style={{ background: 'var(--field-idle)' }}
