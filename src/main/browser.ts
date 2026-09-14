@@ -1595,6 +1595,17 @@ export class BrowserWindow {
         return this.win.setFullScreen(!this.win.isFullScreen())
       case 'devtools':
         return this.openDevTools()
+      case 'translate-selection': {
+        // The selection lives in the page, so the page is asked for it.
+        const tab = this.getActive()
+        const wc = tab?.wc
+        if (!wc || wc.isDestroyed()) return
+        void wc
+          .executeJavaScript('String(window.getSelection() ?? "")', true)
+          .then((text: string) => this.translateSelection(wc, text))
+          .catch(() => undefined)
+        return
+      }
       case 'capture-area':
         void this.capture('area')
         return
@@ -2366,6 +2377,27 @@ export class BrowserWindow {
     } catch {
       this.send('toast', t('Не удалось сохранить снимок'))
       return false
+    }
+  }
+
+  /**
+   * The selected sentence, in the language the browser speaks.
+   *
+   * Translating a whole page to read one line is a heavy thing to do, and the
+   * page comes back changed. This leaves the page alone: the words come back
+   * in a bubble under themselves.
+   */
+  async translateSelection(wc: WebContents, text: string) {
+    const cut = text.slice(0, 1200).trim()
+    if (!cut) return
+    wc.send('selection:translating')
+    try {
+      const [out] = await translateBatch([cut], translateTarget())
+      if (out && out !== cut) wc.send('selection:translation', out)
+      else wc.send('selection:translation', cut)
+    } catch {
+      this.send('toast', t('Не удалось перевести'))
+      wc.send('selection:translation', cut)
     }
   }
 

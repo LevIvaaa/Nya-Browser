@@ -44,6 +44,7 @@ export const SHORTCUT_COMMANDS: ShortcutCommand[] = [
   { id: 'toggle-tabs', label: 'Автоскрытие панелей', combo: 'Ctrl+Shift+B' },
   { id: 'fullscreen', label: 'Полный экран', combo: 'F11' },
   { id: 'devtools', label: 'Инструменты разработчика', combo: 'F12' },
+  { id: 'translate-selection', label: 'Перевести', combo: '' },
   { id: 'capture-area', label: 'Снимок области', combo: 'Ctrl+Shift+S' },
   { id: 'capture-full', label: 'Снимок всей страницы', combo: '' }
 ]

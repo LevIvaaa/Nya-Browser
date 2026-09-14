@@ -1073,6 +1073,83 @@ if (isTop && httpOrigin) {
 }
 
 /* ==========================================================================
+   Перевод выделенного
+   ========================================================================== */
+
+/**
+ * The browser can already translate a whole page, which is a heavy thing to do
+ * to read one sentence. This is the small version: the selected words come back
+ * translated in a bubble under them, the page itself untouched.
+ */
+{
+  let bubble: HTMLElement | null = null
+
+  const close = () => {
+    bubble?.remove()
+    bubble = null
+  }
+
+  /** Where the selection is, in viewport coordinates. */
+  const around = (): DOMRect | null => {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return null
+    const rect = selection.getRangeAt(0).getBoundingClientRect()
+    return rect.width + rect.height > 0 ? rect : null
+  }
+
+  const show = (text: string, waiting: boolean) => {
+    const rect = around()
+    close()
+    const host = document.createElement('nya-tr')
+    const width = Math.min(360, Math.max(220, window.innerWidth - 32))
+    const left = rect
+      ? Math.min(Math.max(8, rect.left + rect.width / 2 - width / 2), window.innerWidth - width - 8)
+      : window.innerWidth / 2 - width / 2
+    // Under the words when there is room below, over them when there is not.
+    const below = rect ? rect.bottom + 10 : 80
+    const overshoots = below + 90 > window.innerHeight
+    const top = rect && overshoots ? Math.max(8, rect.top - 96) : below
+    host.setAttribute(
+      'style',
+      'all: initial; position: fixed; z-index: 2147483646; left: ' + left + 'px; top: ' + top + 'px; width: ' + width + 'px'
+    )
+    const shadow = host.attachShadow({ mode: 'open' })
+    const style = document.createElement('style')
+    style.textContent = [
+      '@keyframes nya-tr-in { from { opacity: 0; transform: translateY(-6px) }',
+      '  to { opacity: 1; transform: translateY(0) } }',
+      '.box { animation: nya-tr-in .2s cubic-bezier(.22,1,.36,1) both;',
+      '  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: #f2f3f7;',
+      '  background: rgba(22,23,30,.96); border: 1px solid rgba(255,255,255,.12);',
+      '  border-radius: 12px; padding: 10px 12px; box-shadow: 0 18px 44px -16px rgba(0,0,0,.7);',
+      '  max-height: 220px; overflow: auto; user-select: text; -webkit-user-select: text }',
+      '.wait { opacity: .6 }'
+    ].join(' ')
+    const box = document.createElement('div')
+    box.className = waiting ? 'box wait' : 'box'
+    box.textContent = text
+    shadow.append(style, box)
+    document.documentElement.appendChild(host)
+    bubble = host
+  }
+
+  ipcRenderer.on('selection:translating', () => show('…', true))
+  ipcRenderer.on('selection:translation', (_event, text: string) => show(text, false))
+
+  // Anywhere else, any key, any scroll — the bubble was never a window.
+  document.addEventListener(
+    'mousedown',
+    (event) => {
+      if (bubble && !event.composedPath().includes(bubble)) close()
+    },
+    true
+  )
+  document.addEventListener('keydown', () => close(), true)
+  window.addEventListener('scroll', close, true)
+  window.addEventListener('pagehide', close)
+}
+
+/* ==========================================================================
    What language this is in
    ========================================================================== */
 

@@ -1,4 +1,5 @@
 import { t } from './i18n'
+import { swapLayout } from '../shared/layout'
 import { Menu, clipboard, shell, type MenuItemConstructorOptions, type WebContents } from 'electron'
 import { GROUP_COLOURS, type BrowserWindow } from './browser'
 
@@ -113,15 +114,36 @@ export function pageContextMenu(
       { role: 'cut', label: t('Вырезать'), enabled: params.editFlags.canCut },
       { role: 'copy', label: t('Копировать'), enabled: params.editFlags.canCopy },
       { role: 'paste', label: t('Вставить'), enabled: params.editFlags.canPaste },
+      // Pasting a quote out of a page into a comment box should not bring the
+      // page's font with it, and the plain-text paste key is not on every
+      // keyboard people actually use.
+      {
+        role: 'pasteAndMatchStyle',
+        label: t('Вставить как текст'),
+        enabled: params.editFlags.canPaste
+      },
       { role: 'selectAll', label: t('Выделить всё') },
       { type: 'separator' }
     )
+    if (has(params.selectionText)) {
+      items.push(
+        {
+          label: t('Исправить раскладку'),
+          click: () => wc.insertText(swapLayout(params.selectionText))
+        },
+        { type: 'separator' }
+      )
+    }
   } else if (has(params.selectionText)) {
     items.push(
       { role: 'copy', label: t('Копировать') },
       {
         label: t('Искать «{q}»', { q: params.selectionText.slice(0, 24) }),
         click: () => browser.newTab(params.selectionText, false)
+      },
+      {
+        label: t('Перевести'),
+        click: () => void browser.translateSelection(wc, params.selectionText)
       },
       { type: 'separator' }
     )
