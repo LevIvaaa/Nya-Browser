@@ -150,6 +150,9 @@ export const DEFAULT_SETTINGS: Settings = {
   cacheSizeMb: 512,
   defaultZoom: 0,
 
+  doNotDisturb: false,
+  blockAutoplay: false,
+
   shortcuts: {},
 
   downloadDir: '',
@@ -392,6 +395,9 @@ export function sanitize(input: Partial<Settings>): Settings {
     restoreSession: bool(input.restoreSession, d.restoreSession),
     cacheSizeMb: clamp(input.cacheSizeMb, 64, 4096, d.cacheSizeMb),
     defaultZoom: clamp(input.defaultZoom, -3, 4, d.defaultZoom),
+
+    doNotDisturb: bool(input.doNotDisturb, d.doNotDisturb),
+    blockAutoplay: bool(input.blockAutoplay, d.blockAutoplay),
 
     shortcuts: sanitizeShortcuts(input.shortcuts),
 
