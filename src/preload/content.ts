@@ -1109,6 +1109,143 @@ if (isTop && httpOrigin) {
 }
 
 /* ==========================================================================
+   Глазок у поля пароля
+   ========================================================================== */
+
+/**
+ * Half the sites that ask for a password draw no way to look at it, and a
+ * password out of the generator is exactly the kind you need to look at. The
+ * browser adds the eye itself: a small button that floats over the right edge
+ * of the field while it has the focus, and is gone the moment it does not.
+ *
+ * Nothing is inserted into the page's own layout — the button is fixed to the
+ * viewport over the field, so a site's CSS cannot be broken by it and cannot
+ * break it.
+ */
+{
+  const EYE =
+    '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7"' +
+    ' stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/>' +
+    '<circle cx="12" cy="12" r="3.2"/></svg>'
+  const EYE_OFF =
+    '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7"' +
+    ' stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l16 16"/>' +
+    '<path d="M9.6 6.1A9.6 9.6 0 0 1 12 5.8c6 0 9.5 6.2 9.5 6.2a17 17 0 0 1-3.3 3.9"/>' +
+    '<path d="M6.3 8.2A17 17 0 0 0 2.5 12s3.5 6.2 9.5 6.2c1.3 0 2.5-.3 3.6-.7"/></svg>'
+
+  let eye: HTMLElement | null = null
+  let field: HTMLInputElement | null = null
+
+  const gone = () => {
+    eye?.remove()
+    eye = null
+    field = null
+  }
+
+  const place = () => {
+    if (!eye || !field) return
+    const rect = field.getBoundingClientRect()
+    if (rect.width < 60 || rect.height < 16) return gone()
+    eye.style.left = Math.round(rect.right - 30) + 'px'
+    eye.style.top = Math.round(rect.top + rect.height / 2 - 13) + 'px'
+  }
+
+  const draw = (input: HTMLInputElement) => {
+    gone()
+    field = input
+    const host = document.createElement('nya-eye')
+    host.setAttribute(
+      'style',
+      'all: initial; position: fixed; z-index: 2147483645; width: 26px; height: 26px; cursor: pointer'
+    )
+    const shadow = host.attachShadow({ mode: 'open' })
+    const button = document.createElement('div')
+    button.setAttribute(
+      'style',
+      'width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center;' +
+        ' justify-content: center; color: #6b7280; background: rgba(127,127,127,.12)'
+    )
+    button.innerHTML = EYE
+    // The page must not lose the field when the eye is pressed, or the value
+    // is submitted with the caret somewhere else.
+    button.addEventListener('mousedown', (event) => event.preventDefault())
+    button.addEventListener('click', () => {
+      if (!field) return
+      const shown = field.type === 'text'
+      field.type = shown ? 'password' : 'text'
+      button.innerHTML = shown ? EYE : EYE_OFF
+      field.focus()
+    })
+    shadow.append(button)
+    document.documentElement.appendChild(host)
+    eye = host
+    place()
+  }
+
+  document.addEventListener(
+    'focusin',
+    (event) => {
+      const target = event.target as HTMLElement | null
+      if (target instanceof HTMLInputElement && target.type === 'password') draw(target)
+      else if (eye && !(target && eye.contains(target))) gone()
+    },
+    true
+  )
+  document.addEventListener('focusout', () => setTimeout(() => {
+    if (field && document.activeElement !== field) gone()
+  }, 120), true)
+  window.addEventListener('scroll', place, true)
+  window.addEventListener('resize', place)
+  window.addEventListener('pagehide', gone)
+}
+
+/* ==========================================================================
+   Перемотка видео стрелками
+   ========================================================================== */
+
+/**
+ * Arrows seek the video, on any site, the way they do on the big ones: five
+ * seconds a press, ten with shift held.
+ *
+ * Only when nobody else wants the key. A player that handles arrows itself
+ * calls preventDefault, and this listens after the page has had its say — so
+ * on YouTube nothing here happens at all, and on the small site with a bare
+ * <video> the arrows finally work.
+ */
+{
+  const playing = (): HTMLVideoElement | null => {
+    const videos = Array.from(document.querySelectorAll('video'))
+    // The one being watched: playing, and big enough to be the point of the page.
+    return (
+      videos.find((v) => !v.paused && !v.ended && v.readyState > 2 && v.clientWidth > 160) ??
+      videos.find((v) => v.clientWidth > 320 && v.readyState > 2) ??
+      null
+    )
+  }
+
+  const typing = (node: EventTarget | null) => {
+    const el = node as HTMLElement | null
+    if (!el) return false
+    if (el.isContentEditable) return true
+    const tag = el.tagName
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+  }
+
+  document.addEventListener('keydown', (event) => {
+    if (event.defaultPrevented) return
+    if (event.ctrlKey || event.metaKey || event.altKey) return
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+    if (typing(event.target)) return
+    const video = playing()
+    if (!video) return
+    const step = event.shiftKey ? 10 : 5
+    const to = event.key === 'ArrowRight' ? video.currentTime + step : video.currentTime - step
+    video.currentTime = Math.max(0, Math.min(video.duration || to, to))
+    event.preventDefault()
+  })
+}
+
+/* ==========================================================================
    Перевод выделенного
    ========================================================================== */
 
