@@ -29,6 +29,7 @@ import { looksLikePdf, pdfSource, pdfViewerUrl } from './pdf'
 import { translateBatch } from './translate'
 import { WALLPAPER_EXTENSIONS, registerProtocols } from './protocol'
 import { sites } from './sites'
+import { badgeOf } from '../shared/badge'
 import { usage } from './usage'
 import { drafts } from './drafts'
 import { apps, inScope, readManifest } from './apps'
@@ -147,6 +148,16 @@ interface PersistedTab {
   internal?: InternalPage | null
   /** how far down the page had been read */
   scroll?: number
+  /**
+   * Set on a closed-tab entry that stands for a whole group: closing ten tabs
+   * at once is the close people most often take back, and taking it back one
+   * tab at a time loses the thing that made them a group.
+   */
+  group?: {
+    name: string
+    color: string
+    tabs: Array<{ url: string; title: string; favicon: string | null }>
+  }
 }
 
 /**
@@ -172,7 +183,8 @@ const INTERNAL_PAGES: Record<InternalPage, string> = {
   history: 'История',
   downloads: 'Загрузки',
   bookmarks: 'Закладки',
-  passwords: 'Пароли и карты'
+  passwords: 'Пароли и карты',
+  tasks: 'Что тратит ресурсы'
 }
 
 class Tab {
@@ -203,6 +215,14 @@ class Tab {
   htmlFullscreen = false
   error: TabState['error'] = null
   lastActive = Date.now()
+  /** the tab this one was opened from, while that tab still exists */
+  openerId: number | null = null
+  /** the count the page puts in front of its own title */
+  badge = 0
+  /** something happened here while you were elsewhere */
+  attention = false
+  /** set aside on purpose, to come back to */
+  unread = false
   private pendingUrl: string | null = null
 
   constructor(id: number, private readonly ses: Session) {
@@ -328,7 +348,7 @@ class Tab {
     this.view = null
   }
 
-  serialize(activeId: number): TabState {
+  serialize(activeId: number, depth = 0, memory = 0): TabState {
     const wc = this.wc && !this.wc.isDestroyed() ? this.wc : null
     let origin = ''
     let secure = true
@@ -369,9 +389,25 @@ class Tab {
       translated: this.translated,
       language: this.language,
       reading: this.reading,
-      error: this.error
+      error: this.error,
+      openerId: this.openerId,
+      depth,
+      badge: this.badge,
+      attention: this.attention,
+      unread: this.unread,
+      memory
     }
   }
+}
+
+/**
+ * Sending a tab out into a window of its own belongs to whoever owns the list
+ * of windows, which is the main entry point rather than any one window. This
+ * is how a window reaches it.
+ */
+let detach: (from: BrowserWindow, id: number) => void = () => {}
+export function setDetach(fn: (from: BrowserWindow, id: number) => void) {
+  detach = fn
 }
 
 /**
@@ -531,6 +567,11 @@ export class BrowserWindow {
   private groupSeq = 0
   private closedStack: PersistedTab[] = []
   private layoutRect: ContentLayout = { x: 0, y: 96, width: 0, height: 0, visible: true }
+  /** thumbnails of tabs, kept for a few seconds each */
+  private previews = new Map<number, { at: number; data: string }>()
+  /** app.getAppMetrics is not cheap; this is the last answer and when it came */
+  private metrics: Electron.ProcessMetric[] = []
+  private metricsAt = 0
   private broadcastTimer: NodeJS.Timeout | null = null
   private sleepTimer: NodeJS.Timeout | null = null
   private edgeTimer: NodeJS.Timeout | null = null
@@ -574,6 +615,9 @@ export class BrowserWindow {
    * storage and the cache die with the window, and everything this browser
    * writes for itself — history, the icon cache, the saved session — skips it.
    */
+  private static windowSeq = 0
+  /** So a tab dragged out of one window can name where it came from. */
+  readonly windowId = ++BrowserWindow.windowSeq
   readonly incognito: boolean
   /**
    * Set when this window is one installed app rather than the browser: no tab
@@ -1194,10 +1238,7 @@ export class BrowserWindow {
     // Coalesce bursts (loading + title + favicon arrive together) into one frame.
     this.broadcastTimer = setTimeout(() => {
       this.broadcastTimer = null
-      this.send(
-        'state:tabs',
-        this.here().map((t) => t.serialize(this.activeId))
-      )
+      this.send('state:tabs', this.tabList())
       this.sendSpaces()
       this.send('state:security', { ...stats })
     }, 16)
@@ -1251,8 +1292,19 @@ export class BrowserWindow {
     history.setEnabled(s.saveHistory)
     refreshCustomLists()
     hardenSession(this.ses)
+    this.win.setAlwaysOnTop(s.alwaysOnTop)
+    this.tellPagesAboutGestures()
     this.layout()
     this.send('state:settings', s)
+  }
+
+  /** Every open page has to know whether a right-drag means anything. */
+  private tellPagesAboutGestures() {
+    const on = settings.get().mouseGestures
+    for (const tab of this.tabs) {
+      const wc = tab.wc
+      if (wc && !wc.isDestroyed()) wc.send('gesture:on', on)
+    }
   }
 
   /* ---------------------------------------------------------- tab wiring */
@@ -1273,8 +1325,25 @@ export class BrowserWindow {
       })
     })
 
+    // Every document, not only the first one. A navigation gives the page a
+    // fresh isolated world that has never heard of any of this, so telling it
+    // once when the tab was made leaves every page after that deaf.
+    wc.on('dom-ready', () => {
+      if (!wc.isDestroyed()) wc.send('gesture:on', settings.get().mouseGestures)
+    })
+
     wc.on('page-title-updated', (_e, title) => {
+      const before = tab.badge
       tab.title = title
+      tab.badge = badgeOf(title)
+      /*
+       * A tab that started counting while you were somewhere else.
+       *
+       * This is the one signal worth blinking about: a page that puts a number
+       * in front of its own title is saying something arrived. A title that
+       * merely changed is not — half the web rewrites its title as you scroll.
+       */
+      if (tab.id !== this.activeId && tab.badge > before) tab.attention = true
       if (!this.incognito) history.updateTitle(tab.url, title)
       this.broadcast()
     })
@@ -1520,7 +1589,9 @@ export class BrowserWindow {
           overrideBrowserWindowOptions: popupOptions(features, this.win)
         }
       }
-      this.newTab(url, disposition === 'background-tab')
+      // Opened from this page, and the list says so: a row of links from one
+      // article is that article's children, not eight strangers.
+      this.newTab(url, disposition === 'background-tab', tab.id)
       return { action: 'deny' }
     })
 
@@ -1636,9 +1707,17 @@ export class BrowserWindow {
         return this.closeTab(this.activeId)
       case 'reopen-tab':
         return this.reopenClosed()
+      // Ctrl+Tab goes to the tab you were on, not the one to the right. Where
+      // a tab sits in the strip is where it was dropped; what you were doing
+      // a moment ago is what you meant. The strip order still has its own two
+      // keys, which is what Ctrl+PageDown means everywhere else.
       case 'next-tab':
-        return this.cycleTab(1)
+        return this.recentTab(false)
       case 'prev-tab':
+        return this.recentTab(true)
+      case 'next-tab-order':
+        return this.cycleTab(1)
+      case 'prev-tab-order':
         return this.cycleTab(-1)
       case 'new-window':
         return this.chrome.webContents.send('shortcut', 'new-window')
@@ -1727,9 +1806,14 @@ export class BrowserWindow {
   }
 
   /* -------------------------------------------------------------- actions */
-  newTab(url?: string, background = false): number {
+  newTab(url?: string, background = false, openerId?: number): number {
     const tab = new Tab(++this.seq, this.ses)
     tab.space = this.spaceId
+    // Where this tab came from, when it came from somewhere: a link opened in
+    // the background belongs to the page that offered it.
+    if (openerId != null && this.tabs.some((other) => other.id === openerId)) {
+      tab.openerId = openerId
+    }
     const insertAt = settings.get().newTabAfterCurrent
       ? this.tabs.findIndex((t) => t.id === this.activeId) + 1
       : this.tabs.length
@@ -1760,6 +1844,9 @@ export class BrowserWindow {
     // going to it means going there.
     if (tab.space !== this.spaceId) this.spaceId = tab.space
     tab.lastActive = Date.now()
+    // Looked at is read.
+    tab.attention = false
+    tab.unread = false
     // Whatever this tab decided about being an app, not what the last one did.
     this.candidate = tab.candidate
     this.sendApp()
@@ -1832,6 +1919,20 @@ export class BrowserWindow {
       this.windowedBeforeHtmlFullscreen = false
       this.win.setFullScreen(false)
     }
+    /*
+     * A tab closed with something typed into it and never sent.
+     *
+     * Not a dialog in the way: the click was deliberate and blocking it would
+     * be rude. The text is not lost either — it is kept for a day, and coming
+     * back to the page brings it with it. So the browser simply says so, with
+     * the one button that undoes the mistake.
+     */
+    if (!this.incognito && tab.hasContent && drafts.find(tab.url)) {
+      this.send('toast', {
+        message: t('Здесь остался незаконченный текст'),
+        action: { label: t('Вернуть вкладку'), id: `reopen:${tab.url}` }
+      })
+    }
     if (tab.hasContent) {
       this.closedStack.push({ url: tab.url, title: tab.title, favicon: tab.favicon })
       if (this.closedStack.length > 25) this.closedStack.shift()
@@ -1858,11 +1959,21 @@ export class BrowserWindow {
       this.newTab()
       return
     }
+    // A tab that opened others hands them to its own parent rather than
+    // leaving them orphaned at the top of the strip.
+    for (const child of this.tabs) {
+      if (child.openerId === id) child.openerId = tab.openerId
+    }
+
     if (this.activeId === id) {
-      const here = this.here()
-      const next = here[Math.min(index, here.length - 1)] ?? here[here.length - 1]
-      this.activeId = next.id
-      this.wake(next)
+      const next = this.afterClosing(tab, index)
+      if (next) {
+        this.activeId = next.id
+        next.lastActive = Date.now()
+        next.attention = false
+        next.unread = false
+        this.wake(next)
+      }
     }
     this.showActive()
     this.persistSession()
@@ -1871,6 +1982,244 @@ export class BrowserWindow {
 
   // Pinning a tab is a way of saying it should still be there later, so
   // neither of these takes it away.
+  /**
+   * Which tab to look at once this one is gone.
+   *
+   * The default is the tab this one was opened from, because that is where the
+   * reading was: open three links from an article, close them, and you are
+   * back at the article rather than four tabs away from it. The other answers
+   * are there because people's habits differ, and one of them is simply "the
+   * one I was on before".
+   */
+  private afterClosing(closed: Tab, index: number): Tab | undefined {
+    const here = this.here()
+    if (here.length === 0) return undefined
+    const rule = settings.get().afterClose
+    if (rule === 'opener' && closed.openerId != null) {
+      const parent = here.find((tab) => tab.id === closed.openerId)
+      if (parent) return parent
+    }
+    if (rule === 'recent') {
+      return [...here].sort((a, b) => b.lastActive - a.lastActive)[0]
+    }
+    if (rule === 'left') {
+      return here[Math.max(0, Math.min(index - 1, here.length - 1))]
+    }
+    return here[Math.min(index, here.length - 1)] ?? here[here.length - 1]
+  }
+
+  /**
+   * Everything needed to build this tab again somewhere else: the address, the
+   * name it is showing, and how far down it was read.
+   *
+   * A tab is not carried across as a live view. Moving a WebContentsView from
+   * one window to another is possible and looks simple until the page is in
+   * fullscreen, or playing, or holding a file dialog — at which point it is a
+   * source of bugs nobody can reproduce. Opening the same page at the same
+   * place in another window is what a move visibly is, and it always works.
+   */
+  takeTab(id: number): { url: string; title: string; scroll: number } | null {
+    const tab = this.tabs.find((t) => t.id === id)
+    if (!tab || tab.internal || !/^https?:/i.test(tab.url)) return null
+    const taken = { url: tab.url, title: tab.title, scroll: tab.scroll }
+    this.closeTab(id)
+    return taken
+  }
+
+  /** The other end of that: a tab arriving from another window. */
+  adoptTab(taken: { url: string; title: string; scroll: number }) {
+    const id = this.newTab(taken.url)
+    const tab = this.tabs.find((t) => t.id === id)
+    if (tab) {
+      tab.title = taken.title
+      tab.restoreScroll = taken.scroll
+    }
+    this.win.show()
+    this.win.focus()
+    this.broadcast()
+  }
+
+  /** What each tab is costing, for the page that asks. */
+  tabCosts(): Array<{ id: number; title: string; origin: string; memory: number; audible: boolean; sleeping: boolean }> {
+    const memory = this.memoryByProcess()
+    return this.tabs.map((tab) => {
+      const wc = tab.wc && !tab.wc.isDestroyed() ? tab.wc : null
+      let origin = ''
+      try {
+        origin = new URL(tab.url).hostname.replace(/^www\./, '')
+      } catch {
+        origin = ''
+      }
+      return {
+        id: tab.id,
+        title: tab.title,
+        origin,
+        memory: wc ? memory.get(wc.getOSProcessId()) ?? 0 : 0,
+        audible: wc ? wc.isCurrentlyAudible() : false,
+        sleeping: tab.sleeping
+      }
+    })
+  }
+
+  /**
+   * A picture of what a tab is showing.
+   *
+   * Taken when it is asked for and kept for a few seconds, because capturing
+   * costs a frame and a strip of twenty tabs under a moving cursor would ask
+   * for twenty of them. A sleeping tab has nothing to show and says so by
+   * returning nothing, which the preview draws as its icon instead.
+   */
+  async tabPreview(id: number): Promise<string> {
+    const tab = this.tabs.find((t) => t.id === id)
+    const wc = tab?.wc
+    if (!tab || !wc || wc.isDestroyed() || tab.sleeping) return ''
+    const fresh = this.previews.get(id)
+    if (fresh && Date.now() - fresh.at < 4000) return fresh.data
+    try {
+      const picture = await wc.capturePage()
+      if (picture.isEmpty()) return ''
+      // Small on purpose: this is a thumbnail under a cursor, not a document.
+      const data = picture.resize({ width: 280, quality: 'good' }).toDataURL()
+      this.previews.set(id, { at: Date.now(), data })
+      // Twelve is more than any strip shows at once.
+      if (this.previews.size > 12) {
+        const oldest = [...this.previews.entries()].sort((a, b) => a[1].at - b[1].at)[0]
+        if (oldest) this.previews.delete(oldest[0])
+      }
+      return data
+    } catch {
+      return ''
+    }
+  }
+
+  /**
+   * A tab's own back-and-forward list, as a long press on Back asks for.
+   *
+   * Offsets rather than indexes, because that is what going there takes and
+   * because it keeps the list meaningful when the page navigates underneath.
+   */
+  tabHistory(id: number): Array<{ offset: number; title: string; url: string }> {
+    const tab = this.tabs.find((t) => t.id === id) ?? this.getActive()
+    const wc = tab?.wc
+    if (!wc || wc.isDestroyed()) return []
+    const list = wc.navigationHistory.getAllEntries()
+    const at = wc.navigationHistory.getActiveIndex()
+    const out: Array<{ offset: number; title: string; url: string }> = []
+    // Fifteen back and fifteen forward: more than that is the history page.
+    for (let i = Math.max(0, at - 15); i <= Math.min(list.length - 1, at + 15); i += 1) {
+      if (i === at) continue
+      const entry = list[i]
+      if (!entry) continue
+      out.push({ offset: i - at, title: entry.title || prettyUrl(entry.url), url: entry.url })
+    }
+    return out.reverse()
+  }
+
+  /** Straight to one of those, rather than pressing Back four times. */
+  goToOffset(id: number, offset: number) {
+    const tab = this.tabs.find((t) => t.id === id) ?? this.getActive()
+    const wc = tab?.wc
+    if (!wc || wc.isDestroyed() || offset === 0) return
+    try {
+      wc.navigationHistory.goToOffset(offset)
+    } catch {
+      /* the entry went away underneath us */
+    }
+  }
+
+  /**
+   * Ctrl+Tab, as people expect it: the tab you were on before, then the one
+   * before that — not the one to the right, which is where the tab happens to
+   * sit and has nothing to do with what you were doing.
+   */
+  recentTab(back: boolean) {
+    const here = this.here()
+    if (here.length < 2) return
+    const order = [...here].sort((a, b) => b.lastActive - a.lastActive)
+    const at = order.findIndex((tab) => tab.id === this.activeId)
+    const next = order[(at + (back ? 1 : order.length - 1)) % order.length]
+    if (next) this.switchTab(next.id)
+  }
+
+  /**
+   * A shortcut on the desktop that opens this page.
+   *
+   * Not an installed app — no manifest, no icon of its own, no window without
+   * a toolbar. Just the thing people mean by "put this on my desktop".
+   */
+  tabShortcut(id: number): boolean {
+    const tab = this.tabs.find((t) => t.id === id) ?? this.getActive()
+    if (!tab || !/^https?:/i.test(tab.url)) return false
+    const desktop = app.getPath('desktop')
+    if (!desktop) return false
+    const name = (tab.title || new URL(tab.url).hostname)
+      .replace(/[\\/:*?"<>|]/g, ' ')
+      .trim()
+      .slice(0, 60) || 'Page'
+    try {
+      if (process.platform === 'win32') {
+        shell.writeShortcutLink(join(desktop, `${name}.lnk`), 'create', {
+          target: process.execPath,
+          args: app.isPackaged ? tab.url : `"${app.getAppPath()}" ${tab.url}`,
+          description: tab.title || tab.url
+        })
+      } else {
+        const file = join(desktop, `${name}.desktop`)
+        writeFileSync(
+          file,
+          [
+            '[Desktop Entry]',
+            'Type=Application',
+            `Name=${tab.title || tab.url}`,
+            `Exec=${process.execPath} ${tab.url}`,
+            'Terminal=false',
+            ''
+          ].join('\n'),
+          { mode: 0o755 }
+        )
+      }
+      this.send('toast', t('Ярлык на рабочем столе'))
+      return true
+    } catch (error) {
+      log('shortcut failed', String(error))
+      return false
+    }
+  }
+
+  /** A handful of gathered tabs into one new group. */
+  groupTabs(ids: number[]) {
+    const wanted = ids.filter((id) => this.tabs.some((tab) => tab.id === id))
+    const first = wanted[0]
+    if (first === undefined) return
+    this.createGroup(first)
+    const group = this.groups[this.groups.length - 1]
+    if (!group) return
+    for (const id of wanted.slice(1)) this.addToGroup(id, group.id)
+    this.sendGroups()
+    this.broadcast()
+  }
+
+  /** Out into a window of its own. */
+  detachTab(id: number) {
+    detach(this, id)
+  }
+
+  /** Put aside on purpose, to come back to. */
+  markUnread(id: number, unread: boolean) {
+    const tab = this.tabs.find((t) => t.id === id)
+    if (!tab || tab.id === this.activeId) return
+    tab.unread = unread
+    if (!unread) tab.attention = false
+    this.broadcast()
+  }
+
+  /** The window above everything else, for a video or a reference while working. */
+  setAlwaysOnTop(on: boolean) {
+    this.win.setAlwaysOnTop(on)
+    settings.patch({ alwaysOnTop: on })
+    this.sendWindowState()
+  }
+
   closeOthers(id: number) {
     for (const tab of this.here()) if (tab.id !== id && !tab.pinned) this.closeTab(tab.id)
   }
@@ -1882,10 +2231,15 @@ export class BrowserWindow {
     for (const tab of here.slice(index + 1)) if (!tab.pinned) this.closeTab(tab.id)
   }
 
-  reopenClosed() {
-    const last = this.closedStack.pop()
+  reopenClosed(url?: string) {
+    // By address when the list was clicked, otherwise whatever went last.
+    const index = url ? this.closedStack.findLastIndex((entry) => entry.url === url) : this.closedStack.length - 1
+    if (index < 0) return
+    const [last] = this.closedStack.splice(index, 1)
     this.send('state:closed', this.closedStack.slice(-10).reverse())
-    if (last) this.newTab(last.url)
+    if (!last) return
+    if (last.group) this.reopenGroup(last)
+    else this.newTab(last.url)
   }
 
   recentlyClosed(): PersistedTab[] {
@@ -2123,9 +2477,55 @@ export class BrowserWindow {
     this.broadcast()
   }
 
+  /**
+   * Closing a group, and being able to change your mind about it.
+   *
+   * Ten tabs going at once is the one close people most often regret, and
+   * undoing it one tab at a time puts them back without the thing that made
+   * them a group. So the group is remembered as a group: its name, its colour
+   * and everything that was in it.
+   */
   closeGroup(groupId: number) {
+    const group = this.groups.find((g) => g.id === groupId)
+    const inside = this.tabs
+      .filter((tab) => tab.groupId === groupId && tab.hasContent)
+      .map((tab) => ({ url: tab.url, title: tab.title, favicon: tab.favicon }))
     for (const tab of [...this.tabs]) if (tab.groupId === groupId) this.closeTab(tab.id)
+    if (group && inside.length > 0) {
+      // The tabs were pushed one by one as they closed; they belong to the
+      // group now, not to the list on their own.
+      this.closedStack = this.closedStack.filter(
+        (entry) => !inside.some((row) => row.url === entry.url && !entry.group)
+      )
+      this.closedStack.push({
+        url: inside[0].url,
+        title: group.name || inside[0].title,
+        favicon: inside[0].favicon,
+        group: { name: group.name, color: group.color, tabs: inside }
+      })
+      if (this.closedStack.length > 25) this.closedStack.shift()
+      this.send('state:closed', this.closedStack.slice(-10).reverse())
+    }
     this.sendGroups()
+  }
+
+  /** Puts a remembered group back, with its name, its colour and its tabs. */
+  private reopenGroup(entry: PersistedTab) {
+    const saved = entry.group
+    if (!saved) return
+    const ids: number[] = []
+    for (const row of saved.tabs.slice(0, 40)) ids.push(this.newTab(row.url, true))
+    const first = ids[0]
+    if (first === undefined) return
+    this.createGroup(first)
+    const group = this.groups[this.groups.length - 1]
+    if (group) {
+      group.name = saved.name
+      group.color = saved.color
+      for (const id of ids.slice(1)) this.addToGroup(id, group.id)
+      this.sendGroups()
+    }
+    this.switchTab(first)
   }
 
   moveTab(id: number, toIndex: number) {
@@ -3386,6 +3786,63 @@ export class BrowserWindow {
   }
 
   /**
+   * The tabs of this big group, each knowing how deep in the chain it sits.
+   *
+   * Depth is worked out here rather than kept on the tab, because it is a
+   * property of the list: closing a parent lifts its children, and a tab moved
+   * out of the chain is no longer under anything.
+   */
+  private tabList(): TabState[] {
+    const here = this.here()
+    const present = new Set(here.map((tab) => tab.id))
+    const depthOf = (tab: Tab): number => {
+      let depth = 0
+      let at: Tab | undefined = tab
+      const seen = new Set<number>()
+      while (at?.openerId != null && present.has(at.openerId) && !seen.has(at.id)) {
+        seen.add(at.id)
+        at = here.find((other) => other.id === (at as Tab).openerId)
+        depth += 1
+        // Six levels is already more indentation than a strip can show.
+        if (depth >= 6) break
+      }
+      return depth
+    }
+    const memory = this.memoryByProcess()
+    return here.map((tab) => {
+      const pid = tab.wc && !tab.wc.isDestroyed() ? tab.wc.getOSProcessId() : 0
+      return tab.serialize(this.activeId, depthOf(tab), memory.get(pid) ?? 0)
+    })
+  }
+
+  /**
+   * How much memory each renderer process is using, in megabytes.
+   *
+   * Electron gives this per process rather than per tab, and several tabs on
+   * one site share a process — so two tabs of the same site will show the same
+   * number. That is the truth, and it is more useful than dividing it up and
+   * being confidently wrong.
+   */
+  private memoryByProcess(): Map<number, number> {
+    const out = new Map<number, number>()
+    // Asking the system on every frame would be absurd; once a few seconds is
+    // enough for a number that moves slowly.
+    if (Date.now() - this.metricsAt > 4000) {
+      this.metricsAt = Date.now()
+      try {
+        this.metrics = app.getAppMetrics()
+      } catch {
+        this.metrics = []
+      }
+    }
+    for (const row of this.metrics) {
+      const mb = Math.round((row.memory?.workingSetSize ?? 0) / 1024)
+      if (row.pid) out.set(row.pid, mb)
+    }
+    return out
+  }
+
+  /**
    * Puts a new order for this group's tabs back into the whole list, leaving
    * every other group's tabs where they were.
    */
@@ -3423,7 +3880,7 @@ export class BrowserWindow {
    */
   snapshot() {
     return {
-      tabs: this.here().map((tab) => tab.serialize(this.activeId)),
+      tabs: this.tabList(),
       groups: this.groups,
       spaces: this.spacesForUi()
     }

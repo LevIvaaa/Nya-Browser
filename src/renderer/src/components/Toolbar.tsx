@@ -7,7 +7,8 @@ import type {
   WebAppCandidate
 } from '../../../shared/types'
 import { currentLanguage, t } from '../i18n'
-import { useEffect, useState } from 'react'
+import type { HistoryStep } from '../../../preload/index'
+import { useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
@@ -195,11 +196,7 @@ export default function Toolbar({
   return (
     <div className="drag flex items-center gap-1 pl-2 pr-0" style={{ height }}>
       <div className="no-drag flex items-center gap-0.5">
-        <Tooltip label={t('Назад · Alt+←')}>
-          <button className="icon-btn" disabled={!tab?.canGoBack} onClick={() => window.browser.back()}>
-            <ArrowLeft />
-          </button>
-        </Tooltip>
+        <BackButton tab={tab} />
         <Tooltip label={t('Вперёд · Alt+→')}>
           <button className="icon-btn" disabled={!tab?.canGoForward} onClick={() => window.browser.forward()}>
             <ArrowRight />
@@ -515,6 +512,116 @@ export default function Toolbar({
       </div>
 
       <WindowControls maximized={maximized} />
+    </div>
+  )
+}
+
+/**
+ * Back, and — held down — everywhere this tab has been.
+ *
+ * Pressing Back four times to get past a redirect chain is a thing everybody
+ * does and nobody enjoys. Every other browser hides the list behind a long
+ * press or a right-click on the same button; this does both, and a plain click
+ * still simply goes back.
+ */
+function BackButton({ tab }: { tab: TabState | undefined }) {
+  const [list, setList] = useState<HistoryStep[] | null>(null)
+  const held = useRef<number | null>(null)
+  const box = useRef<HTMLDivElement>(null)
+
+  const open = async () => {
+    if (!tab) return
+    const steps = await window.browser.tabHistory(tab.id)
+    setList(steps.length > 0 ? steps : null)
+  }
+
+  useEffect(() => {
+    if (!list) return
+    const away = (event: MouseEvent) => {
+      if (!box.current?.contains(event.target as Node)) setList(null)
+    }
+    const key = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setList(null)
+    }
+    // A frame later, or the click that opened it closes it again.
+    const timer = window.setTimeout(() => {
+      window.addEventListener('mousedown', away)
+      window.addEventListener('keydown', key)
+    }, 0)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('mousedown', away)
+      window.removeEventListener('keydown', key)
+    }
+  }, [list])
+
+  return (
+    <div className="relative" ref={box}>
+      <Tooltip label={t('Назад · Alt+←')}>
+        <button
+          className="icon-btn"
+          disabled={!tab?.canGoBack}
+          onPointerDown={() => {
+            if (held.current) window.clearTimeout(held.current)
+            held.current = window.setTimeout(() => {
+              held.current = null
+              void open()
+            }, 420)
+          }}
+          onPointerUp={() => {
+            // Let go before the list opened: an ordinary click, an ordinary
+            // step back.
+            if (held.current === null) return
+            window.clearTimeout(held.current)
+            held.current = null
+            window.browser.back()
+          }}
+          onPointerLeave={() => {
+            if (held.current) window.clearTimeout(held.current)
+            held.current = null
+          }}
+          onContextMenu={(event) => {
+            event.preventDefault()
+            void open()
+          }}
+        >
+          <ArrowLeft />
+        </button>
+      </Tooltip>
+
+      {list && (
+        <div
+          className="animate-pop absolute left-0 top-full z-[80] mt-1 w-[320px] overflow-hidden rounded-[12px] py-1"
+          style={{
+            background: 'var(--elevated)',
+            border: '1px solid var(--line)',
+            boxShadow: 'var(--shadow-lg)',
+            backdropFilter: 'blur(24px) saturate(160%)'
+          }}
+        >
+          {list.map((step) => (
+            <button
+              key={`${step.offset}:${step.url}`}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-[var(--surface-hover)]"
+              style={{ transition: 'background var(--t-fast) linear' }}
+              onClick={() => {
+                if (tab) void window.browser.goToOffset(tab.id, step.offset)
+                setList(null)
+              }}
+            >
+              <span
+                className="w-[22px] shrink-0 text-right text-2xs tabular-nums text-faint"
+                title={t('Назад · Alt+←')}
+              >
+                {step.offset > 0 ? `+${step.offset}` : step.offset}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm">{step.title}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

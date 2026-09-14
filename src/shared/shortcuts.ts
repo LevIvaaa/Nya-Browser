@@ -28,6 +28,8 @@ export const SHORTCUT_COMMANDS: ShortcutCommand[] = [
   { id: 'reopen-tab', label: 'Вернуть вкладку', combo: 'Ctrl+Shift+T' },
   { id: 'next-tab', label: 'Следующая вкладка', combo: 'Ctrl+Tab' },
   { id: 'prev-tab', label: 'Предыдущая вкладка', combo: 'Ctrl+Shift+Tab' },
+  { id: 'next-tab-order', label: 'Вкладка справа', combo: 'Ctrl+PageDown' },
+  { id: 'prev-tab-order', label: 'Вкладка слева', combo: 'Ctrl+PageUp' },
   { id: 'new-window', label: 'Новое окно', combo: 'Ctrl+N' },
   { id: 'new-private-window', label: 'Приватное окно', combo: 'Ctrl+Shift+N' },
   { id: 'focus-address', label: 'Адресная строка', combo: 'Ctrl+L' },

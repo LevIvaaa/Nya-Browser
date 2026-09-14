@@ -1,6 +1,6 @@
 {
   "name": "nya-browser",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Nya Browser — быстрый и приватный браузер на Electron с вертикальными вкладками, автоскрытием интерфейса и встроенной блокировкой рекламы",
   "main": "./out/main/index.js",
   "author": "Nya",
@@ -10,7 +10,7 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "test": "node tests/filters.mjs && node tests/extensions.mjs && node tests/settings.mjs && node tests/vault.mjs && node tests/trust.mjs && node tests/secrets.mjs && node tests/keys.mjs && node tests/backup.mjs && node tests/passwords.mjs && node tests/drafts.mjs && node tests/downloads.mjs",
+    "test": "node tests/filters.mjs && node tests/extensions.mjs && node tests/settings.mjs && node tests/vault.mjs && node tests/trust.mjs && node tests/secrets.mjs && node tests/keys.mjs && node tests/backup.mjs && node tests/passwords.mjs && node tests/drafts.mjs && node tests/downloads.mjs && node tests/tabs.mjs",
     "check:locales": "node build/tools/python.mjs check-locales.py",
     "check:installer": "node build/tools/python.mjs check-installer-strings.py && node build/tools/python.mjs gen-installer-languages.py --check",
     "check": "npm run typecheck && npm test && npm run check:locales && npm run check:installer && npm run build",

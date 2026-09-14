@@ -156,6 +156,11 @@ export const DEFAULT_SETTINGS: Settings = {
 
   shortcuts: {},
 
+  afterClose: 'opener' as const,
+  alwaysOnTop: false,
+  mouseGestures: false,
+  tabPreview: true,
+
   downloadDir: '',
   askWhereToSave: false,
   downloadLimit: 0,
@@ -407,6 +412,11 @@ export function sanitize(input: Partial<Settings>): Settings {
     cardHello: bool(input.cardHello, d.cardHello),
 
     shortcuts: sanitizeShortcuts(input.shortcuts),
+
+    afterClose: oneOf(input.afterClose, ['opener', 'right', 'left', 'recent'] as const, d.afterClose),
+    alwaysOnTop: bool(input.alwaysOnTop, d.alwaysOnTop),
+    mouseGestures: bool(input.mouseGestures, d.mouseGestures),
+    tabPreview: bool(input.tabPreview, d.tabPreview),
 
     downloadDir: str(input.downloadDir, 400, d.downloadDir),
     askWhereToSave: bool(input.askWhereToSave, d.askWhereToSave),

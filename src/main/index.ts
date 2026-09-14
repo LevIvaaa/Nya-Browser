@@ -3,7 +3,7 @@ import { app, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, s
 import { basename, join } from 'path'
 import { readFileSync, writeFileSync } from 'fs'
 import { execFile, execFileSync } from 'child_process'
-import { BrowserWindow } from './browser'
+import { BrowserWindow, setDetach } from './browser'
 import { DOH_TEMPLATES, settings } from './settings'
 import { history } from './history'
 import { bookmarks } from './bookmarks'
@@ -189,6 +189,22 @@ function applyStartupSwitches() {
 // message came from, so a second window is not a special case anywhere.
 const windows = new Set<BrowserWindow>()
 let browser: BrowserWindow | null = null
+
+/**
+   * A tab leaving one window for a new one of its own.
+   *
+   * The page is opened again in the new window rather than carried across as a
+   * live view: see takeTab. The window is placed a little down and to the
+   * right of the one it came from, the way every window manager does it.
+   */
+function detachTab(from: BrowserWindow, id: number) {
+  const taken = from.takeTab(id)
+  if (!taken) return
+  const win = openWindow(from.incognito)
+  win.chrome.webContents.once('did-finish-load', () => win.adoptTab(taken))
+}
+
+setDetach((from, id) => detachTab(from, id))
 
 /** Opens another window, wired the same way as the first. */
 function openWindow(incognito = false, appId?: string | null): BrowserWindow {
@@ -1254,7 +1270,57 @@ function registerIpc() {
     drafts.keep(str(data.url, 2000), clean)
   })
   ipcMain.on('page:gesture', (event) => downloads.noteGesture(event.sender.id))
+  /**
+   * A stroke drawn with the right button held. The page reports the shape; the
+   * meaning lives here, where the commands are.
+   */
+  ipcMain.on('gesture:done', (event, path: unknown) => {
+    const shape = str(path, 8)
+    const command: Record<string, string> = {
+      L: 'back',
+      R: 'forward',
+      D: 'new-tab',
+      U: 'reload',
+      DR: 'close-tab',
+      UL: 'reopen-tab'
+    }
+    const id = command[shape]
+    if (id) current(event).runCommand(id)
+  })
   ipcMain.handle('page:harvest', (event) => current(event).harvestFiles())
+  /* ---- tabs: 1.4 ---- */
+  ipcMain.handle('tab:detach', (event, id: unknown) => detachTab(current(event), num(id)))
+  ipcMain.handle('tab:unread', (event, id: unknown, on: unknown) =>
+    current(event).markUnread(num(id), flag(on))
+  )
+  ipcMain.handle('tab:costs', (event) => current(event).tabCosts())
+  ipcMain.handle('tab:group-many', (event, ids: unknown) => {
+    const list = Array.isArray(ids) ? ids.filter((id): id is number => typeof id === 'number') : []
+    current(event).groupTabs(list)
+  })
+  ipcMain.handle('tab:shortcut', (event, id: unknown) => current(event).tabShortcut(num(id)))
+  ipcMain.handle('tab:history', (event, id: unknown) => current(event).tabHistory(num(id)))
+  ipcMain.handle('tab:go', (event, id: unknown, offset: unknown) =>
+    current(event).goToOffset(num(id), num(offset))
+  )
+  ipcMain.handle('tab:preview', (event, id: unknown) => current(event).tabPreview(num(id)))
+  ipcMain.handle('tab:recent', (event, back: unknown) => current(event).recentTab(flag(back)))
+  ipcMain.handle('window:on-top', (event, on: unknown) => current(event).setAlwaysOnTop(flag(on)))
+  /**
+   * A tab dropped on another window. The window it came from is found by the
+   * id it reported when the drag started — a renderer cannot name a window it
+   * does not own.
+   */
+  ipcMain.handle('tab:move-window', (event, fromId: unknown, id: unknown) => {
+    const to = current(event)
+    const from = [...windows].find((win) => win.windowId === num(fromId))
+    if (!from || from === to) return false
+    const taken = from.takeTab(num(id))
+    if (!taken) return false
+    to.adoptTab(taken)
+    return true
+  })
+  ipcMain.handle('window:id', (event) => current(event).windowId)
   ipcMain.on('page:files', (event, payload: unknown) => {
     const data = (payload ?? {}) as { files?: unknown }
     const rows = Array.isArray(data.files) ? data.files : []
@@ -1322,8 +1388,9 @@ function registerIpc() {
    * and each one names what it does.
    */
   ipcMain.handle('toast:action', (event, id: unknown) => {
-    const value = str(id, 100)
+    const value = str(id, 4000)
     if (value.startsWith('reveal:')) downloads.reveal(value.slice('reveal:'.length))
+    else if (value.startsWith('reopen:')) current(event).reopenClosed(value.slice('reopen:'.length))
   })
 
   /* ---- permissions ---- */
