@@ -4,6 +4,7 @@ import Wallpaper from './components/Wallpaper'
 import Toolbar from './components/Toolbar'
 import BookmarksBar from './components/BookmarksBar'
 import Toasts from './components/Toasts'
+import DownloadPlate from './components/DownloadPlate'
 import Welcome from './components/Welcome'
 import { applyLanguage, onLanguageChange } from './i18n'
 import { FindBar, PermissionBar } from './components/Bars'
@@ -399,6 +400,8 @@ export default function App() {
           )}
         </div>
       </div>
+
+      <DownloadPlate items={downloads} onOpenList={() => toggleView('downloads')} />
 
       <Toasts items={toasts} />
 
