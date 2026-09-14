@@ -27,6 +27,7 @@ import { RELEASES_PAGE } from '../../../shared/types'
 import logoUrl from '../assets/logo.png'
 import { Shortcuts } from '../components/Shortcuts'
 import { Wellbeing } from '../components/Wellbeing'
+import { Backup } from '../components/Backup'
 import {
   Alert,
   Clock,
@@ -1039,6 +1040,14 @@ export default function SettingsPage({
           {/* ---------------------------------------------------------- data */}
           {which === 'data' && (
             <>
+              <Section
+                title={t('Резервная копия')}
+                icon={<Download width={15} height={15} />}
+                description={t('Пароли, карты, закладки, история и настройки — в одном файле')}
+              >
+                <Backup />
+              </Section>
+
               <Section title={t('Очистка')} icon={<Trash width={15} height={15} />}>
                 <Row title={t('История просмотров')} hint={t('Локальные подсказки адресной строки')}>
                   <button className="btn" onClick={async () => { await window.browser.clearHistory(); flash(t('История очищена')) }}>
@@ -1344,13 +1353,16 @@ export default function SettingsPage({
           {/* --------------------------------------------------------- about */}
           {which === 'time' && (
             <>
-              <Section
-                title={t('Цифровое благополучие')}
-                icon={<Clock width={15} height={15} />}
-                description={t('Считается только время, когда окно перед глазами')}
-              >
-                <Wellbeing />
-              </Section>
+              <header className="mb-3 flex items-center gap-2.5 px-1">
+                <span
+                  className="flex h-7 w-7 items-center justify-center rounded-[9px]"
+                  style={{ background: 'color-mix(in srgb, var(--accent) 14%, transparent)', color: 'var(--accent)' }}
+                >
+                  <Clock width={15} height={15} />
+                </span>
+                <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{t('Цифровое благополучие')}</h2>
+              </header>
+              <Wellbeing />
             </>
           )}
 

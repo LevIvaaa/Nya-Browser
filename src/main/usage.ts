@@ -83,7 +83,20 @@ class Usage {
         .slice(0, 20)
       return { seconds: [...totals.values()].reduce((sum, n) => sum + n, 0), sites }
     }
-    return { today: span(1), week: span(7), month: span(30) }
+    // The last thirty days as a row of numbers: the chart takes whichever
+    // slice of it the chosen period needs.
+    const trend: Array<{ day: string; seconds: number }> = []
+    for (let i = 29; i >= 0; i -= 1) {
+      const when = new Date(now)
+      when.setDate(now.getDate() - i)
+      const key = dayKey(when)
+      const hosts = days[key]
+      trend.push({
+        day: key,
+        seconds: hosts ? Object.values(hosts).reduce((sum, n) => sum + n, 0) : 0
+      })
+    }
+    return { today: span(1), week: span(7), month: span(30), trend }
   }
 
   clear() {
