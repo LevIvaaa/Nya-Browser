@@ -1,6 +1,7 @@
+import { useMemo, useState } from 'react'
 import { t } from '../i18n'
 import type { DownloadItem } from '../../../shared/types'
-import { Cross, Download, Folder, Pause, Play, Trash } from '../components/Icons'
+import { Cross, Download, Folder, Pause, Play, Reload, Search, Trash } from '../components/Icons'
 import { EmptyState, formatBytes, formatDate } from '../components/ui'
 
 const STATE_LABEL: Record<DownloadItem['state'], string> = {
@@ -11,7 +12,20 @@ const STATE_LABEL: Record<DownloadItem['state'], string> = {
   interrupted: 'прервано'
 }
 
+/** Files a picture can be made of; everything else gets the plain icon. */
+const PICTURES = /\.(png|jpe?g|gif|webp|avif|bmp|svg)$/i
+
 export default function DownloadsPage({ items }: { items: DownloadItem[] }) {
+  const [looking, setLooking] = useState('')
+  const shown = useMemo(() => {
+    const needle = looking.trim().toLowerCase()
+    if (!needle) return items
+    return items.filter(
+      (item) =>
+        item.name.toLowerCase().includes(needle) || item.url.toLowerCase().includes(needle)
+    )
+  }, [items, looking])
+
   return (
     <div className="relative z-10 h-full overflow-y-auto">
       <div className="mx-auto w-full max-w-[760px] px-6 py-8">
@@ -20,22 +34,46 @@ export default function DownloadsPage({ items }: { items: DownloadItem[] }) {
             <h1 className="text-[22px] font-semibold tracking-[-0.02em]">{t('Загрузки')}</h1>
             <p className="text-sm text-dim">{items.length} файлов в этой сессии</p>
           </div>
+          <label
+            className="flex h-[34px] items-center gap-2 rounded-[var(--radius-md)] px-3"
+            style={{ background: 'var(--field-idle)' }}
+          >
+            <Search width={14} height={14} className="text-faint" />
+            <input
+              value={looking}
+              onChange={(event) => setLooking(event.target.value)}
+              placeholder={t('Поиск')}
+              className="w-[160px] bg-transparent text-sm outline-none"
+            />
+          </label>
           <button className="btn" onClick={() => window.browser.clearDownloads()}>
             <Trash width={15} height={15} />
             {t('Очистить список')}
           </button>
         </header>
 
-        {items.length === 0 ? (
-          <EmptyState icon={<Download width={26} height={26} />} title={t('Загрузок пока нет')} hint={t('Скачанные файлы появятся здесь.')} />
+        {shown.length === 0 ? (
+          <EmptyState
+            icon={<Download width={26} height={26} />}
+            title={looking ? t('Ничего не найдено') : t('Загрузок пока нет')}
+            hint={looking ? '' : t('Скачанные файлы появятся здесь.')}
+          />
         ) : (
           <div className="card stagger overflow-hidden">
-            {items.map((item) => {
+            {shown.map((item) => {
               const active = item.state === 'progressing' || item.state === 'paused'
               const pct = item.total > 0 ? Math.round((item.received / item.total) * 100) : 0
               return (
                 <div key={item.id} className="px-4 py-3" style={{ borderTop: '1px solid var(--line)' }}>
                   <div className="flex items-center gap-3">
+                    {item.state === 'completed' && PICTURES.test(item.name) && (
+                      <img
+                        src={`nya-media://download/${encodeURIComponent(item.id)}`}
+                        alt=""
+                        className="h-[38px] w-[38px] shrink-0 rounded-[var(--radius-sm)] object-cover"
+                        style={{ background: 'var(--field-idle)' }}
+                      />
+                    )}
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-base font-medium">{item.name}</span>
                       <span className="block truncate text-sm text-dim">
@@ -60,6 +98,15 @@ export default function DownloadsPage({ items }: { items: DownloadItem[] }) {
                           <Folder width={14} height={14} />
                         </button>
                       </>
+                    )}
+                    {!active && (
+                      <button
+                        className="icon-btn"
+                        title={t('Скачать снова')}
+                        onClick={() => window.browser.downloadAgain(item.id)}
+                      >
+                        <Reload width={14} height={14} />
+                      </button>
                     )}
                     <button
                       className="icon-btn"

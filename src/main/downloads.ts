@@ -94,6 +94,21 @@ class Downloads {
     if (item?.path) shell.showItemInFolder(item.path)
   }
 
+  /**
+   * Where a finished file lies, for the preview protocol. By id, never by a
+   * path from the renderer: the renderer cannot ask for a file the browser
+   * did not download itself.
+   */
+  pathOf(id: string): string | null {
+    const item = this.items.get(id)
+    return item?.state === 'completed' && item.path ? item.path : null
+  }
+
+  /** The address a file came from, so it can be asked for again. */
+  sourceOf(id: string): string | null {
+    return this.items.get(id)?.url ?? null
+  }
+
   remove(id: string) {
     this.handles.get(id)?.cancel()
     this.handles.delete(id)
