@@ -196,6 +196,11 @@ const api = {
   ): Promise<boolean> => ipcRenderer.invoke('media:command', tabId, what, to),
   capture: (kind: 'view' | 'full' | 'area'): Promise<boolean> =>
     ipcRenderer.invoke('nav:capture', kind),
+  /**
+   * Asks the window to stop answering shortcuts while the settings page is
+   * listening for one. Without it, binding Ctrl+T would open a tab.
+   */
+  captureShortcut: (on: boolean): Promise<void> => ipcRenderer.invoke('shortcuts:capture', on),
   addToHome: (): Promise<boolean> => ipcRenderer.invoke('nav:add-to-home'),
 
   /* ---- find ---- */

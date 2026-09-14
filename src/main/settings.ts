@@ -32,6 +32,7 @@ import type {
   WidgetId
 } from '../shared/types'
 import { DEFAULT_LAYOUT, GRID_COLUMNS } from '../shared/startPage'
+import { SHORTCUT_IDS, isCombo } from '../shared/shortcuts'
 import { isKnownLanguage } from '../shared/i18n'
 
 /** Bump when the shape changes in a way sanitize() cannot infer. */
@@ -148,6 +149,8 @@ export const DEFAULT_SETTINGS: Settings = {
   restoreSession: true,
   cacheSizeMb: 512,
   defaultZoom: 0,
+
+  shortcuts: {},
 
   downloadDir: '',
   askWhereToSave: false
@@ -294,6 +297,24 @@ function sanitizeFavorites(v: unknown, fallback: Favorite[]): Favorite[] {
   return out
 }
 
+/**
+ * Key bindings a person changed. Unknown command ids are dropped rather than
+ * kept: they would sit in the file forever and mean nothing. An empty string
+ * survives — it is how a command is left with no key at all.
+ */
+function sanitizeShortcuts(v: unknown): Record<string, string> {
+  if (!v || typeof v !== 'object') return {}
+  const out: Record<string, string> = {}
+  for (const [id, combo] of Object.entries(v as Record<string, unknown>)) {
+    if (!SHORTCUT_IDS.has(id)) continue
+    if (typeof combo !== 'string') continue
+    if (combo !== '' && !isCombo(combo)) continue
+    out[id] = combo
+    if (Object.keys(out).length >= 60) break
+  }
+  return out
+}
+
 /** Everything read from disk or IPC passes through here before it is used. */
 export function sanitize(input: Partial<Settings>): Settings {
   const d = DEFAULT_SETTINGS
@@ -371,6 +392,8 @@ export function sanitize(input: Partial<Settings>): Settings {
     restoreSession: bool(input.restoreSession, d.restoreSession),
     cacheSizeMb: clamp(input.cacheSizeMb, 64, 4096, d.cacheSizeMb),
     defaultZoom: clamp(input.defaultZoom, -3, 4, d.defaultZoom),
+
+    shortcuts: sanitizeShortcuts(input.shortcuts),
 
     downloadDir: str(input.downloadDir, 400, d.downloadDir),
     askWhereToSave: bool(input.askWhereToSave, d.askWhereToSave)

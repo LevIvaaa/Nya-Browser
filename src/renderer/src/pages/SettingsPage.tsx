@@ -25,6 +25,7 @@ import { LANGUAGES } from '../../../shared/i18n'
 import type { ImportSource, VaultState } from '../../../preload/index'
 import { RELEASES_PAGE } from '../../../shared/types'
 import logoUrl from '../assets/logo.png'
+import { Shortcuts } from '../components/Shortcuts'
 import {
   Alert,
   Cross,
@@ -100,6 +101,7 @@ const TABS = [
   { id: 'passwords', label: 'Пароли и карты', icon: <Wallet width={15} height={15} /> },
   { id: 'speed', label: 'Скорость', icon: <Zap width={15} height={15} /> },
   { id: 'downloads', label: 'Загрузки', icon: <Download width={15} height={15} /> },
+  { id: 'keys', label: 'Горячие клавиши', icon: <Keyboard width={15} height={15} /> },
   { id: 'system', label: 'Система', icon: <Monitor width={15} height={15} /> },
   { id: 'data', label: 'Данные', icon: <Eraser width={15} height={15} /> },
   { id: 'about', label: 'О браузере', icon: <Gear width={15} height={15} /> }
@@ -1336,6 +1338,28 @@ export default function SettingsPage({
           )}
 
           {/* --------------------------------------------------------- about */}
+          {which === 'keys' && (
+            <>
+              <Section
+                title={t('Горячие клавиши')}
+                icon={<Keyboard width={15} height={15} />}
+                action={
+                  <button className="btn" onClick={() => onPatch({ shortcuts: {} })}>
+                    {t('Сбросить')}
+                  </button>
+                }
+              >
+                <Shortcuts shortcuts={settings.shortcuts} onPatch={onPatch} />
+                <Row title={t('Перейти к вкладке')}>
+                  <kbd className="rounded-[7px] px-2 py-1 text-2xs" style={{ background: 'var(--field-idle)' }}>Ctrl+1…9</kbd>
+                </Row>
+                <Row title={t('Масштаб страницы')}>
+                  <kbd className="rounded-[7px] px-2 py-1 text-2xs" style={{ background: 'var(--field-idle)' }}>Ctrl + / − / 0</kbd>
+                </Row>
+              </Section>
+            </>
+          )}
+
           {which === 'about' && (
             <>
               <div className="animate-fade-up flex flex-col items-center gap-3 py-4 text-center">
@@ -1388,26 +1412,6 @@ export default function SettingsPage({
                 </Row>
               </Section>
 
-              <Section title={t('Горячие клавиши')} icon={<Keyboard width={15} height={15} />}>
-                {[
-                  ['Ctrl+T / Ctrl+W', t('Новая вкладка / закрыть')],
-                  ['Ctrl+Shift+T', t('Вернуть закрытую вкладку')],
-                  ['Ctrl+L, Alt+D, F6', t('Адресная строка')],
-                  ['Ctrl+D', t('Добавить в закладки')],
-                  ['Ctrl+F', t('Поиск по странице')],
-                  ['Ctrl+J / Ctrl+H', t('Загрузки / история')],
-                  ['Ctrl+Shift+O', t('Закладки')],
-                  ['Ctrl+Shift+B', t('Автоскрытие панелей')],
-                  ['Ctrl+Tab', t('Следующая вкладка')],
-                  ['Ctrl+1…9', t('Перейти к вкладке')],
-                  ['Ctrl + / −  / 0', t('Масштаб страницы')],
-                  ['F11 / F12', t('Полный экран / DevTools')]
-                ].map(([keys, label]) => (
-                  <Row key={keys} title={label}>
-                    <kbd className="rounded-[7px] px-2 py-1 text-2xs" style={{ background: 'var(--field-idle)' }}>{keys}</kbd>
-                  </Row>
-                ))}
-              </Section>
             </>
           )}
     </>
