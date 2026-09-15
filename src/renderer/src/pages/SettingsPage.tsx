@@ -642,9 +642,121 @@ export default function SettingsPage({
                 )}
               </Section>
 
+              {/* Somebody's own engines, each with the word that reaches it.
+                  "w Тьюринг" is thirty years old and still the fastest way to
+                  search anything that is not your default. */}
+              <Section
+                title={t('Свои поисковики')}
+                icon={<Globe width={15} height={15} />}
+                description={t('Слово, пробел, запрос — и он уходит туда')}
+                action={
+                  <button
+                    className="btn"
+                    onClick={() =>
+                      onPatch({
+                        customEngines: [
+                          ...settings.customEngines,
+                          { key: '', name: '', template: 'https://example.com/search?q=%s' }
+                        ]
+                      })
+                    }
+                  >
+                    <Plus width={15} height={15} />
+                    {t('Добавить')}
+                  </button>
+                }
+              >
+                {settings.customEngines.length === 0 && (
+                  <div className="px-4 py-3 text-sm text-faint">
+                    {t('Например: w — Википедия, gh — GitHub')}
+                  </div>
+                )}
+                {settings.customEngines.map((one, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center gap-2 px-4 py-2.5"
+                    style={{ borderTop: '1px solid var(--line)' }}
+                  >
+                    <TextField
+                      value={one.key}
+                      onChange={(key) =>
+                        onPatch({
+                          customEngines: settings.customEngines.map((row, at) =>
+                            at === index ? { ...row, key } : row
+                          )
+                        })
+                      }
+                      placeholder="w"
+                      width={64}
+                      mono
+                    />
+                    <TextField
+                      value={one.name}
+                      onChange={(name) =>
+                        onPatch({
+                          customEngines: settings.customEngines.map((row, at) =>
+                            at === index ? { ...row, name } : row
+                          )
+                        })
+                      }
+                      placeholder={t('Название')}
+                      width={140}
+                    />
+                    <TextField
+                      value={one.template}
+                      onChange={(template) =>
+                        onPatch({
+                          customEngines: settings.customEngines.map((row, at) =>
+                            at === index ? { ...row, template } : row
+                          )
+                        })
+                      }
+                      placeholder="https://…%s"
+                      width={260}
+                      mono
+                    />
+                    <button
+                      className="icon-btn shrink-0"
+                      aria-label={t('Удалить')}
+                      onClick={() =>
+                        onPatch({
+                          customEngines: settings.customEngines.filter((_row, at) => at !== index)
+                        })
+                      }
+                    >
+                      <Cross width={14} height={14} />
+                    </button>
+                  </div>
+                ))}
+              </Section>
+
               <Section title={t('Адресная строка')} icon={<Search width={15} height={15} />}>
                 <Row title={t('Подсказки из истории')} hint={t('Подсказки строятся локально и никуда не отправляются')}>
                   <Toggle checked={settings.historySuggestions} onChange={(v) => onPatch({ historySuggestions: v })} />
+                </Row>
+                <Row title={t('Подсказки')} hint={t('Строки под тем, что вы печатаете')}>
+                  <Toggle checked={settings.suggestions} onChange={(v) => onPatch({ suggestions: v })} />
+                </Row>
+                <Row title={t('Страницы сайта')} hint={t('Не только главная, но и то, где вы были')}>
+                  <Toggle checked={settings.siteSuggestions} onChange={(v) => onPatch({ siteSuggestions: v })} />
+                </Row>
+                <Row
+                  title={t('Считать прямо в строке')}
+                  hint={t('Арифметика, единицы, время в городе — без отправки запроса')}
+                >
+                  <Toggle checked={settings.inlineAnswers} onChange={(v) => onPatch({ inlineAnswers: v })} />
+                </Row>
+                <Row title={t('Забыть поисковые запросы')} hint={t('Страницы останутся, запросы уйдут')}>
+                  <button
+                    className="btn"
+                    onClick={async () => {
+                      const gone = await window.browser.forgetSearches()
+                      flash(t('Убрано запросов: {n}', { n: gone }))
+                    }}
+                  >
+                    <Trash width={15} height={15} />
+                    {t('Очистить')}
+                  </button>
                 </Row>
                 <Row title={t('Домашняя страница')} hint={t('Открывается по кнопке «домой»; пусто — стартовый экран')}>
                   <TextField value={settings.homepage} onChange={(v) => onPatch({ homepage: v })} placeholder="https://" width={260} />

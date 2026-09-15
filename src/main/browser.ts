@@ -53,7 +53,8 @@ import {
 import { engine, hideCss } from './filters'
 import { comboOf, shortcutMap } from '../shared/shortcuts'
 import { extensionActions, loadExtensions, setExtensionSession } from './extensions'
-import { normalizeInput } from '../shared/search'
+import { aimed, normalizeInput } from '../shared/search'
+import { answer } from '../shared/answer'
 import type {
   ContentLayout,
   InternalPage,
@@ -3726,6 +3727,41 @@ export class BrowserWindow {
     this.send('state:chapters', list)
   }
 
+  /**
+   * One row off the list for good.
+   *
+   * A page opened once by mistake — a wrong autocomplete, a link from a chat —
+   * otherwise sits near the top of the suggestions for weeks, because it
+   * matches what you type and there is nothing to push it down. This is the
+   * small delete key every address bar should have.
+   */
+  forgetSuggestion(url: string) {
+    if (!url) return
+    history.remove(url)
+    pageText.forgetUrl(url)
+    this.send('state:history', history.all())
+  }
+
+  /**
+   * Every search this profile made, forgotten; the pages stay.
+   *
+   * Searches are the part of a history people most often want gone without
+   * losing the rest of it, and picking them out of a list of a thousand rows
+   * by hand is not a thing anybody does.
+   */
+  forgetSearches(): number {
+    const engines = /^https?:\/\/(www\.)?(duckduckgo|google|bing|yandex|startpage|search\.brave|mojeek|ecosia|searx)/i
+    let gone = 0
+    for (const entry of history.all()) {
+      if (!engines.test(entry.url)) continue
+      history.remove(entry.url)
+      pageText.forgetUrl(entry.url)
+      gone += 1
+    }
+    if (gone > 0) this.send('state:history', history.all())
+    return gone
+  }
+
   /** Shows what each translated paragraph said before, on hover. */
   compareTranslation(on: boolean) {
     this.withActive((wc) => wc.send('translate:compare', on))
@@ -4233,6 +4269,8 @@ export class BrowserWindow {
   suggestions(query: string): Suggestion[] {
     const q = query.trim()
     const s = settings.get()
+    // Turned off means turned off: what was typed, and nothing under it.
+    if (!s.suggestions) return []
     // A private window neither writes history nor reads it back: suggesting
     // yesterday's browsing to whoever is at the keyboard now defeats the point.
     const useHistory = s.historySuggestions && !this.incognito
@@ -4264,6 +4302,28 @@ export class BrowserWindow {
 
     const out: Suggestion[] = []
     const lower = q.toLowerCase()
+
+    /*
+     * An answer, where there is one.
+     *
+     * Arithmetic, a conversion, the time somewhere: worked out here and shown
+     * at the top, because the question has an answer and sending it to a
+     * search engine to read the answer off somebody's page is the long way
+     * round. Nothing is sent anywhere to produce it.
+     */
+    const said = s.inlineAnswers ? answer(q) : null
+
+    // "g кошки": the word in front says where this is going.
+    const elsewhere = aimed(q, s)
+    if (elsewhere) {
+      out.push({
+        kind: 'search',
+        title: elsewhere.query,
+        url: elsewhere.url,
+        subtitle: elsewhere.where
+      })
+    }
+
     out.push(...openTabs(lower))
 
     for (const fav of s.favorites) {
@@ -4277,7 +4337,34 @@ export class BrowserWindow {
       }
       if (out.length > 6) break
     }
-    if (useHistory) out.push(...history.search(q, 6))
+    if (useHistory) {
+      // Rows from history can be taken off the list: a page visited once by
+      // mistake should not shadow the one you want for the next month.
+      out.push(...history.search(q, 6).map((row) => ({ ...row, forgettable: true })))
+      /*
+       * Other pages of a site whose name is being typed.
+       *
+       * Typing "github" and being offered only github.com is the browser
+       * forgetting that you were on one particular repository yesterday. These
+       * are pages from this profile's own history, under the host that matches.
+       */
+      if (s.siteSuggestions && !lower.includes('/') && lower.length > 2) {
+        const deeper = history
+          .search(lower, 20)
+          .filter((row) => {
+            try {
+              const host = new URL(row.url).hostname.replace(/^www\./, '')
+              return host.includes(lower) && new URL(row.url).pathname.length > 1
+            } catch {
+              return false
+            }
+          })
+          .filter((row) => !out.some((already) => already.url === row.url))
+          .slice(0, 3)
+          .map((row) => ({ ...row, forgettable: true, subtitle: t('Страница сайта') }))
+        out.push(...deeper)
+      }
+    }
 
     // Whatever was typed goes first, because it is the one thing certainly
     // meant. An address if it reads like one, a search if it does not —
@@ -4290,8 +4377,25 @@ export class BrowserWindow {
       url: normalizeInput(`${q} `, s),
       subtitle: t('Поиск')
     }
-    if (!/^https?:\/\/(duckduckgo|www\.google|www\.bing|search|yandex|www\.startpage|www\.mojeek|www\.ecosia|searx)/i.test(direct)) {
-      out.unshift({ kind: 'url', title: q, url: direct, subtitle: t('Открыть сайт') })
+    if (elsewhere) {
+      // A word in front already put a row at the top that says both what is
+      // being searched for and where it is going — which is also what Enter
+      // does. Anything else here would be the same thing said worse.
+    } else if (
+      !/^https?:\/\/(duckduckgo|www\.google|www\.bing|search|yandex|www\.startpage|www\.mojeek|www\.ecosia|searx)/i.test(
+        direct
+      )
+    ) {
+      // Typed http:// on purpose. The row still goes there — it is what was
+      // asked for — but says plainly what the address gives up.
+      const plain = /^http:\/\//i.test(direct)
+      out.unshift({
+        kind: 'url',
+        title: q,
+        url: direct,
+        subtitle: plain ? t('Без шифрования — данные пойдут открытым текстом') : t('Открыть сайт'),
+        warn: plain
+      })
       out.push(search)
     } else {
       out.unshift(search)
@@ -4310,6 +4414,24 @@ export class BrowserWindow {
       seen.add(same)
       kept.push(item)
       if (kept.length === 9) break
+    }
+
+    /*
+     * The answer above everything.
+     *
+     * It shares an address with the search for the same words — which is what
+     * Enter still does — so it goes in after the de-duplicator rather than
+     * being eaten by it.
+     */
+    if (said) {
+      kept.unshift({
+        kind: 'search',
+        title: said.text,
+        url: search.url,
+        subtitle: said.about,
+        answer: { text: said.text, kind: said.kind }
+      })
+      if (kept.length > 9) kept.length = 9
     }
     return kept
   }
