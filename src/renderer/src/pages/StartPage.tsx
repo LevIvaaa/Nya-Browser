@@ -30,6 +30,17 @@ import {
 } from '../components/Icons'
 import { Modal, TextField, cx } from '../components/ui'
 import WeatherWidget from '../components/Weather'
+import {
+  CalendarWidget,
+  ChartWidget,
+  DownloadsWidget,
+  HabitsWidget,
+  NotesWidget,
+  PlayingWidget,
+  RatesWidget,
+  TodoWidget,
+  WIDGET_ICONS
+} from '../components/Widgets'
 
 interface Props {
   settings: Settings
@@ -57,7 +68,15 @@ const TITLES: Record<WidgetId, string> = {
   stats: 'Защита',
   recent: 'Недавнее',
   closed: 'Недавно закрытые',
-  weather: 'Погода'
+  weather: 'Погода',
+  downloads: 'Последние загрузки',
+  calendar: 'Календарь',
+  notes: 'Стикеры',
+  chart: 'График заблокированного',
+  habits: 'Частое в это время',
+  todo: 'Список дел',
+  playing: 'Сейчас играет',
+  rates: 'Курс валют'
 }
 
 /** Which settings toggle decides whether a widget is on the page at all. */
@@ -69,7 +88,15 @@ const SWITCH: Record<WidgetId, keyof StartPageSettings> = {
   stats: 'stats',
   recent: 'recent',
   closed: 'closed',
-  weather: 'weather'
+  weather: 'weather',
+  downloads: 'downloads',
+  calendar: 'calendar',
+  notes: 'notes',
+  chart: 'chart',
+  habits: 'habits',
+  todo: 'todo',
+  playing: 'playing',
+  rates: 'rates'
 }
 
 const FONTS: Record<StartPageFont, string> = {
@@ -87,7 +114,15 @@ const ORDER: WidgetId[] = [
   'stats',
   'recent',
   'closed',
-  'weather'
+  'weather',
+  'downloads',
+  'playing',
+  'todo',
+  'notes',
+  'calendar',
+  'chart',
+  'habits',
+  'rates'
 ]
 
 const SHAPES: { value: TileShape; label: string }[] = [
@@ -428,6 +463,64 @@ export default function StartPage({
             shape={page.shape}
             onPick={(place) => patchPage({ place })}
           />
+        )
+
+      // The eight that keep or fetch something of their own; each draws
+      // itself inside the same card the others use.
+      case 'downloads':
+        return (
+          <Card icon={WIDGET_ICONS.downloads} title={t('Последние загрузки')} shape={page.shape}>
+            <DownloadsWidget />
+          </Card>
+        )
+
+      case 'calendar':
+        return (
+          <Card icon={WIDGET_ICONS.calendar} title={t('Календарь')} shape={page.shape}>
+            <CalendarWidget now={now} />
+          </Card>
+        )
+
+      case 'notes':
+        return (
+          <Card icon={WIDGET_ICONS.notes} title={t('Стикеры')} shape={page.shape}>
+            <NotesWidget />
+          </Card>
+        )
+
+      case 'chart':
+        return (
+          <Card icon={WIDGET_ICONS.chart} title={t('Заблокировано за две недели')} shape={page.shape}>
+            <ChartWidget />
+          </Card>
+        )
+
+      case 'habits':
+        return (
+          <Card icon={WIDGET_ICONS.habits} title={t('Частое в это время')} shape={page.shape}>
+            <HabitsWidget onOpen={open} />
+          </Card>
+        )
+
+      case 'todo':
+        return (
+          <Card icon={WIDGET_ICONS.todo} title={t('Список дел')} shape={page.shape}>
+            <TodoWidget />
+          </Card>
+        )
+
+      case 'playing':
+        return (
+          <Card icon={WIDGET_ICONS.playing} title={t('Сейчас играет')} shape={page.shape}>
+            <PlayingWidget onOpen={(tabId) => void window.browser.switchTab(tabId)} />
+          </Card>
+        )
+
+      case 'rates':
+        return (
+          <Card icon={WIDGET_ICONS.rates} title={t('Курс валют')} shape={page.shape}>
+            <RatesWidget />
+          </Card>
         )
     }
   }

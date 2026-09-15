@@ -61,7 +61,11 @@ check('runaway zoom is capped', box({ x: 0, y: 0, w: 6, h: 3, scale: 9 }).scale,
 check('a missing scale falls back', box({ x: 3, y: 3, w: 6, h: 3 }).scale, 1)
 check('garbage becomes the default box', box('nonsense'), DEFAULT_SETTINGS.startPage.layout.clock)
 check('a layout with nothing in it is filled in', page({ layout: {} }).layout, DEFAULT_SETTINGS.startPage.layout)
-check('every widget is always present', Object.keys(page({}).layout).length, 8)
+check(
+  'every widget is always present',
+  Object.keys(page({}).layout).length,
+  Object.keys(DEFAULT_SETTINGS.startPage.layout).length
+)
 
 // ---- the rest of the start page
 check('an unknown font falls back', page({ font: 'comic' }).font, 'system')

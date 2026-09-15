@@ -89,6 +89,19 @@ export const DEFAULT_START_PAGE: StartPageSettings = {
   stats: true,
   closed: true,
   weather: false,
+  // Every one of the eight later widgets is off: a start page that fills
+  // itself with things nobody asked for is a start page full of things to
+  // switch off first.
+  downloads: false,
+  calendar: false,
+  notes: false,
+  chart: false,
+  habits: false,
+  todo: false,
+  playing: false,
+  rates: false,
+  ratesBase: 'USD',
+  ratesTo: ['EUR', 'GBP'],
   columns: 8,
   font: 'system',
   tiles: 'card',
@@ -198,6 +211,7 @@ export const DEFAULT_SETTINGS: Settings = {
   toolbar: [...DEFAULT_TOOLBAR],
   menuOrder: [...DEFAULT_MENU],
   settingsFull: true,
+  blockedDays: {},
 
   reader: {
     theme: 'system' as const,

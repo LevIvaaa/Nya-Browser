@@ -202,6 +202,19 @@ function sanitizeLooks(v: unknown, d: LookPreset[]): LookPreset[] {
   return out
 }
 
+/** A fortnight of counts: real dates, real numbers, and nothing else. */
+function sanitizeDays(v: unknown): Record<string, number> {
+  if (!v || typeof v !== 'object') return {}
+  const out: Record<string, number> = {}
+  for (const [day, count] of Object.entries(v as Record<string, unknown>)) {
+    const n = Number(count)
+    if (!/^d{4}-d{2}-d{2}$/.test(day) || !Number.isFinite(n) || n < 0) continue
+    out[day] = Math.min(10_000_000, Math.round(n))
+  }
+  // Fourteen days; anything older is not drawn and not kept.
+  return Object.fromEntries(Object.entries(out).sort().slice(-14))
+}
+
 /**
  * The toolbar and the menu: a list of ids the interface knows how to draw.
  *
@@ -292,6 +305,26 @@ function sanitizeStartPage(v: unknown): StartPageSettings {
     stats: bool(s.stats, d.stats),
     closed: bool(s.closed, d.closed),
     weather: bool(s.weather, d.weather),
+    downloads: bool(s.downloads, d.downloads),
+    calendar: bool(s.calendar, d.calendar),
+    notes: bool(s.notes, d.notes),
+    chart: bool(s.chart, d.chart),
+    habits: bool(s.habits, d.habits),
+    todo: bool(s.todo, d.todo),
+    playing: bool(s.playing, d.playing),
+    rates: bool(s.rates, d.rates),
+    // Three letters, which is what a currency code is and all that is ever
+    // sent to the bank.
+    ratesBase: /^[A-Za-z]{3}$/.test(String(s.ratesBase)) ? String(s.ratesBase).toUpperCase() : d.ratesBase,
+    ratesTo: Array.isArray(s.ratesTo)
+      ? [
+          ...new Set(
+            s.ratesTo
+              .filter((one): one is string => typeof one === 'string' && /^[A-Za-z]{3}$/.test(one))
+              .map((one) => one.toUpperCase())
+          )
+        ].slice(0, 6)
+      : [...d.ratesTo],
     columns: clamp(s.columns, 4, 12, d.columns),
     font: oneOf(s.font, ['system', 'rounded', 'serif', 'mono'] as const, d.font),
     tiles: oneOf(s.tiles, ['card', 'icon'] as const, d.tiles),
@@ -452,6 +485,7 @@ export function sanitize(input: Partial<Settings>): Settings {
     toolbar: idList(input.toolbar, TOOLBAR_IDS, d.toolbar),
     menuOrder: idList(input.menuOrder, MENU_IDS, d.menuOrder),
     settingsFull: bool(input.settingsFull, d.settingsFull),
+    blockedDays: sanitizeDays(input.blockedDays),
     reader: sanitizeReader(input.reader, d.reader),
 
     downloadDir: str(input.downloadDir, 400, d.downloadDir),

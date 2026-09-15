@@ -263,6 +263,45 @@ export type WidgetId =
   | 'recent'
   | 'closed'
   | 'weather'
+  | 'downloads'
+  | 'calendar'
+  | 'notes'
+  | 'chart'
+  | 'habits'
+  | 'todo'
+  | 'playing'
+  | 'rates'
+
+/** A note somebody stuck on their own start page. */
+export interface Note {
+  id: string
+  text: string
+  colour: 'yellow' | 'pink' | 'blue' | 'green' | 'plain'
+  at: number
+}
+
+/** One line of the to-do list on the start page. */
+export interface Todo {
+  id: string
+  text: string
+  done: boolean
+  at: number
+}
+
+/** What one unit of `base` is worth, on the day the bank last said so. */
+export interface Rates {
+  base: string
+  /** the day the rates are from, as the bank gave it */
+  date: string
+  /** currency code → how many of it one `base` buys */
+  rates: Record<string, number>
+}
+
+/** How much was blocked on one day. */
+export interface BlockedDay {
+  day: string
+  count: number
+}
 
 /**
  * Where a widget sits, in grid cells. The grid is the same width on every
@@ -438,6 +477,26 @@ export interface StartPageSettings {
   stats: boolean
   closed: boolean
   weather: boolean
+  /** the files that landed recently */
+  downloads: boolean
+  /** this month, with today marked */
+  calendar: boolean
+  /** notes stuck on the page */
+  notes: boolean
+  /** how much was blocked over the last fortnight */
+  chart: boolean
+  /** what you usually open around this time */
+  habits: boolean
+  /** a list of things to do */
+  todo: boolean
+  /** whatever is playing in some tab */
+  playing: boolean
+  /** exchange rates, the only other thing that reaches the network */
+  rates: boolean
+  /** what the rates are counted from */
+  ratesBase: string
+  /** and what they are counted into */
+  ratesTo: string[]
   columns: number
   font: StartPageFont
   tiles: TileStyle
@@ -645,6 +704,12 @@ export interface Settings {
   menuOrder: string[]
   /** the settings page shows everything, rather than what most people change */
   settingsFull: boolean
+  /**
+   * How much was blocked on each of the last fourteen days, as date → count.
+   * Not a setting anybody sets; it lives here because it is fourteen numbers
+   * and a file of its own would be a file of its own.
+   */
+  blockedDays: Record<string, number>
 
   // ---- reading
   /** How the reading sheet is set: everything a person changes while reading. */

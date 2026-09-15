@@ -956,6 +956,63 @@ export default function SettingsPage({
               <Row title={t('Погода')} hint={t('Город выбирается в самом виджете; без него никуда ничего не уходит')} {...of('startPage')}>
                 <Toggle checked={settings.startPage.weather} onChange={(v) => onPatch({ startPage: { ...settings.startPage, weather: v } })} />
               </Row>
+              {/* The eight that came later. Every one is off until somebody
+                  asks for it, and two of them say plainly what they cost. */}
+              <Row title={t('Последние загрузки')} hint={t('Пять последних файлов, каждый — нажатие до папки')}>
+                <Toggle checked={settings.startPage.downloads} onChange={(v) => onPatch({ startPage: { ...settings.startPage, downloads: v } })} />
+              </Row>
+              <Row title={t('Календарь')} hint={t('Этот месяц с отмеченным сегодня — ни с чем не связан и никуда не ходит')}>
+                <Toggle checked={settings.startPage.calendar} onChange={(v) => onPatch({ startPage: { ...settings.startPage, calendar: v } })} />
+              </Row>
+              <Row title={t('Стикеры')} hint={t('Заметки лежат в папке этого профиля и никуда не отправляются')}>
+                <Toggle checked={settings.startPage.notes} onChange={(v) => onPatch({ startPage: { ...settings.startPage, notes: v } })} />
+              </Row>
+              <Row title={t('Список дел')}>
+                <Toggle checked={settings.startPage.todo} onChange={(v) => onPatch({ startPage: { ...settings.startPage, todo: v } })} />
+              </Row>
+              <Row title={t('График заблокированного')} hint={t('Две недели по дням — видно, становится ли тише')}>
+                <Toggle checked={settings.startPage.chart} onChange={(v) => onPatch({ startPage: { ...settings.startPage, chart: v } })} />
+              </Row>
+              <Row title={t('Частое в это время')} hint={t('Что вы обычно открываете примерно сейчас; хранятся только домены и часы')}>
+                <Toggle checked={settings.startPage.habits} onChange={(v) => onPatch({ startPage: { ...settings.startPage, habits: v } })} />
+              </Row>
+              <Row title={t('Сейчас играет')}>
+                <Toggle checked={settings.startPage.playing} onChange={(v) => onPatch({ startPage: { ...settings.startPage, playing: v } })} />
+              </Row>
+              <Row
+                title={t('Курс валют')}
+                hint={t('Единственное, кроме погоды, что ходит в сеть: три кода валют, без ключа и учётной записи')}
+              >
+                <Toggle checked={settings.startPage.rates} onChange={(v) => onPatch({ startPage: { ...settings.startPage, rates: v } })} />
+              </Row>
+              {settings.startPage.rates && (
+                <Row title={t('Какие валюты')} hint={t('Из чего и во что — трёхбуквенными кодами')}>
+                  <div className="flex items-center gap-2">
+                    <TextField
+                      value={settings.startPage.ratesBase}
+                      onChange={(v) => onPatch({ startPage: { ...settings.startPage, ratesBase: v.toUpperCase().slice(0, 3) } })}
+                      width={64}
+                      mono
+                    />
+                    <span className="text-sm text-faint">→</span>
+                    <TextField
+                      value={settings.startPage.ratesTo.join(' ')}
+                      onChange={(v) =>
+                        onPatch({
+                          startPage: {
+                            ...settings.startPage,
+                            ratesTo: v.toUpperCase().split(/[s,]+/).filter(Boolean).slice(0, 6)
+                          }
+                        })
+                      }
+                      placeholder="EUR RUB"
+                      width={160}
+                      mono
+                    />
+                  </div>
+                </Row>
+              )}
+
               <Row title={t('Шрифт главной')} {...of('startPage')}>
                 <Select
                   value={settings.startPage.font}
