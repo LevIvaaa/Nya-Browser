@@ -32,6 +32,21 @@ export interface SearchEngine {
 }
 
 /**
+ * A search engine somebody added themselves, and the word that reaches it.
+ *
+ * The word is the whole point: typing "w Тьюринг" going straight to Wikipedia
+ * is thirty years old, older than most of the browsers that dropped it, and
+ * it is the fastest way to search anything that is not your default.
+ */
+export interface CustomEngine {
+  /** what is typed before the space; lower case, no spaces */
+  key: string
+  name: string
+  /** any address with %s where the query goes */
+  template: string
+}
+
+/**
  * A set of tabs that stays put while you work in another one — the thing
  * in the corner of the strip with a number on it. Every tab is in exactly
  * one; the first one has no name and is simply where tabs go.
@@ -445,6 +460,14 @@ export interface Settings {
   startPage: StartPageSettings
   favorites: Favorite[]
   searchEngine: SearchEngineId
+  /** engines added by hand, each with the word that reaches it */
+  customEngines: CustomEngine[]
+  /** the address bar may answer a sum, a conversion or a clock itself */
+  inlineAnswers: boolean
+  /** suggestions at all, beyond what was typed */
+  suggestions: boolean
+  /** other pages of a site you are typing the name of */
+  siteSuggestions: boolean
   customSearchUrl: string
   historySuggestions: boolean
   homepage: string
@@ -727,6 +750,12 @@ export interface GroupEdit {
 export type DnsProvider = 'system' | 'cloudflare' | 'google' | 'quad9' | 'adguard' | 'custom'
 
 export interface Suggestion {
+  /** an answer the browser worked out itself, shown rather than searched */
+  answer?: { text: string; kind: 'math' | 'units' | 'time' }
+  /** true for a row that can be taken off the list for good */
+  forgettable?: boolean
+  /** a warning rather than a destination */
+  warn?: boolean
   kind: 'search' | 'url' | 'history' | 'favorite' | 'tab'
   title: string
   url: string

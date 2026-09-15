@@ -370,6 +370,8 @@ const api = {
   /** Vault → clipboard, without the password passing through the interface. */
   vaultCopy: (id: string): Promise<boolean> => ipcRenderer.invoke('vault:copy', id),
   copyText: (text: string): Promise<boolean> => ipcRenderer.invoke('clipboard:write', text),
+  /** The clipboard, for "paste and go" in the address bar and nothing else. */
+  readText: (): Promise<string> => ipcRenderer.invoke('clipboard:read'),
   vaultRemove: (id: string): Promise<boolean> => ipcRenderer.invoke('vault:remove', id),
   /** The bin: what was thrown away, putting one back, and emptying it. */
   vaultBinned: (): Promise<Credential[]> => ipcRenderer.invoke('vault:binned'),
@@ -422,6 +424,11 @@ const api = {
   /** Shows what each translated paragraph said before, on hover. */
   compareTranslation: (on: boolean): Promise<void> =>
     ipcRenderer.invoke('translate:compare', on),
+  /** One suggestion off the list for good. */
+  forgetSuggestion: (url: string): Promise<void> => ipcRenderer.invoke('suggest:forget', url),
+  /** Every search this profile made, forgotten. */
+  forgetSearches: (): Promise<number> => ipcRenderer.invoke('suggest:forget-searches'),
+
   /* ---- media ---- */
   /** One of the player's own commands, into whichever tab is playing. */
   player: (what: 'panel' | 'replay' | 'frame-now' | 'subtitles' | 'chapters', to?: number): Promise<boolean> =>

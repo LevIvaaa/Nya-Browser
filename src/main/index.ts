@@ -1009,6 +1009,14 @@ function registerIpc() {
     clipboard.writeText(value)
     return true
   })
+  /**
+   * What is on the clipboard, for the one place that needs it: "paste and go".
+   *
+   * Reading the clipboard is a real capability, so it is reachable only from
+   * the browser's own interface and only in answer to a press — never from a
+   * page, which has its own permission for this and does not get it here.
+   */
+  ipcMain.handle('clipboard:read', () => clipboard.readText().slice(0, 4000))
   ipcMain.handle('clipboard:write', (event, text: unknown) => {
     clipboard.writeText(str(text, 4000))
     return true
@@ -1481,6 +1489,8 @@ function registerIpc() {
   /* ---- suggestions & misc ---- */
   ipcMain.handle('suggest:query', (event, query: unknown) => current(event).suggestions(str(query, 512)))
   ipcMain.handle('suggest:preconnect', (event, query: unknown) => current(event).preconnect(str(query, 512)))
+  ipcMain.handle('suggest:forget', (event, url: unknown) => current(event).forgetSuggestion(str(url, 2000)))
+  ipcMain.handle('suggest:forget-searches', (event) => current(event).forgetSearches())
   ipcMain.handle('privacy:stats', (event) => ({ ...stats }))
   ipcMain.handle('privacy:reset-stats', (event) => resetStats())
   ipcMain.handle('privacy:blocked-log', () => blockedLog())

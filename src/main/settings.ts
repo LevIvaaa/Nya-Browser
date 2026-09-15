@@ -22,6 +22,7 @@ export const DNS_PROVIDERS: DnsProvider[] = [
 ]
 import type {
   BackgroundSettings,
+  CustomEngine,
   DnsProvider,
   Favorite,
   PermissionSettings,
@@ -111,6 +112,10 @@ export const DEFAULT_SETTINGS: Settings = {
   // things to delete first.
   favorites: [],
   searchEngine: 'duckduckgo',
+  customEngines: [] as CustomEngine[],
+  inlineAnswers: true,
+  suggestions: true,
+  siteSuggestions: true,
   customSearchUrl: 'https://searx.be/search?q=%s',
   historySuggestions: true,
   homepage: '',
@@ -218,6 +223,32 @@ function sanitizeReader(v: unknown, d: Settings['reader']): Settings['reader'] {
     spacing: Math.round(clamp(input.spacing, 1.2, 2.2, d.spacing) * 20) / 20,
     textOnly: bool(input.textOnly, d.textOnly)
   }
+}
+
+/**
+ * Engines somebody added by hand.
+ *
+ * A template without %s cannot search for anything, and one that is not https
+ * would send the query in the clear — both are simply not kept. The word is
+ * squeezed into something that can be typed before a space.
+ */
+function sanitizeEngines(v: unknown): CustomEngine[] {
+  if (!Array.isArray(v)) return []
+  const out: CustomEngine[] = []
+  const taken = new Set<string>()
+  for (const row of v.slice(0, 20)) {
+    const one = (row ?? {}) as Partial<CustomEngine>
+    const key = String(one.key ?? '')
+      .toLowerCase()
+      .replace(/[^a-z0-9а-яё_-]/gi, '')
+      .slice(0, 12)
+    const template = String(one.template ?? '').slice(0, 500)
+    if (!key || taken.has(key)) continue
+    if (!/^https:\/\/\S+%s/i.test(template)) continue
+    taken.add(key)
+    out.push({ key, name: String(one.name ?? key).slice(0, 60), template })
+  }
+  return out
 }
 
 function sanitizeBackground(v: unknown): BackgroundSettings {
@@ -378,6 +409,10 @@ export function sanitize(input: Partial<Settings>): Settings {
 
     startPage: sanitizeStartPage(input.startPage),
     favorites: sanitizeFavorites(input.favorites, d.favorites),
+    customEngines: sanitizeEngines(input.customEngines),
+    inlineAnswers: bool(input.inlineAnswers, d.inlineAnswers),
+    suggestions: bool(input.suggestions, d.suggestions),
+    siteSuggestions: bool(input.siteSuggestions, d.siteSuggestions),
     searchEngine: oneOf(
       input.searchEngine,
       ['duckduckgo', 'startpage', 'brave', 'mojeek', 'ecosia', 'google', 'bing', 'yandex', 'custom'] as const,

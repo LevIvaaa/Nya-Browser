@@ -1,7 +1,7 @@
 import { t } from '../i18n'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { SearchEngine, Suggestion } from '../../../shared/types'
-import { Clock, Globe, Search, Star, Tabs } from './Icons'
+import type { CustomEngine, SearchEngine, Suggestion } from '../../../shared/types'
+import { Alert, Clock, Copy, Cross, Globe, Search, Star, Tabs } from './Icons'
 import { cx } from './ui'
 
 const iconFor = (kind: Suggestion['kind']) => {
@@ -33,6 +33,31 @@ export default function CommandPalette({
   const [value, setValue] = useState(initialValue)
   const [items, setItems] = useState<Suggestion[]>([])
   const [cursor, setCursor] = useState(0)
+  /** the row of other engines, shown when asked for */
+  const [elsewhere, setElsewhere] = useState(false)
+  const [engines, setEngines] = useState<SearchEngine[]>([])
+  /** the list of engines to become the default one, shown when asked for */
+  const [picking, setPicking] = useState(false)
+  /** engines somebody added themselves, offered alongside the built-in ones */
+  const [mine, setMine] = useState<CustomEngine[]>([])
+
+  useEffect(() => {
+    void window.browser.getEngines().then(setEngines)
+    void window.browser.getSettings().then((s) => setMine(s.customEngines))
+  }, [])
+
+  /* Everywhere the same words could go: the engines that ship with the
+     browser, minus the one they are going to anyway, plus anything added
+     by hand. */
+  const others = useMemo(
+    () => [
+      ...engines
+        .filter((one) => one.id !== 'custom' && one.id !== engine.id)
+        .map((one) => ({ name: one.name, template: one.template })),
+      ...mine.filter((one) => one.template.includes('%s')).map((one) => ({ name: one.name || one.key, template: one.template }))
+    ],
+    [engines, mine, engine.id]
+  )
   const input = useRef<HTMLInputElement>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -53,6 +78,14 @@ export default function CommandPalette({
       if (timer.current) clearTimeout(timer.current)
     }
   }, [value])
+
+  /** What is on the clipboard, gone to in one press. */
+  const pasteAndGo = async () => {
+    const text = (await window.browser.readText()).trim()
+    if (!text) return
+    void window.browser.navigate(text)
+    onClose()
+  }
 
   const go = (target?: Suggestion) => {
     if (target?.kind === 'tab' && target.tabId !== undefined) {
@@ -117,7 +150,19 @@ export default function CommandPalette({
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-center gap-3 px-4" style={{ height: 58 }}>
-          <Search width={18} height={18} className="shrink-0 text-faint" />
+          {/* Where a search would go, said out loud rather than guessed at —
+              and changed here, without a trip to the settings. */}
+          <button
+            className="icon-btn h-8 w-8 shrink-0"
+            title={t('Поисковик: {name}', { name: engine.name })}
+            onClick={() => {
+              setPicking(!picking)
+              setElsewhere(false)
+            }}
+            style={{ color: picking ? 'var(--accent)' : 'var(--text-faint)' }}
+          >
+            <Search width={18} height={18} />
+          </button>
           <input
             ref={input}
             value={value}
@@ -128,10 +173,75 @@ export default function CommandPalette({
             onKeyDown={onKeyDown}
             className="min-w-0 flex-1 bg-transparent text-[16px] outline-none placeholder:text-faint"
           />
+          {/* The same words, somewhere else. One press rather than retyping
+              them into another engine's box. */}
+          {value.trim() && (
+            <button
+              className="icon-btn h-8 w-8 shrink-0"
+              title={t('Искать в другом поисковике')}
+              onClick={() => {
+                setElsewhere(!elsewhere)
+                setPicking(false)
+              }}
+              style={{ color: elsewhere ? 'var(--accent)' : undefined }}
+            >
+              <Globe width={15} height={15} />
+            </button>
+          )}
+          <button
+            className="icon-btn h-8 w-8 shrink-0"
+            title={t('Вставить и перейти')}
+            onClick={() => void pasteAndGo()}
+          >
+            <Copy width={15} height={15} />
+          </button>
           <kbd className="shrink-0 rounded-[7px] px-2 py-1 text-2xs font-medium text-faint" style={{ background: 'var(--field-idle)' }}>
             Esc
           </kbd>
         </div>
+
+        {/* The engine everything goes to from now on. */}
+        {picking && (
+          <div className="flex flex-wrap gap-1.5 border-t px-3 py-2.5" style={{ borderColor: 'var(--line)' }}>
+            {engines
+              .filter((one) => one.id !== 'custom')
+              .map((one) => (
+                <button
+                  key={one.id}
+                  className="h-[26px] rounded-pill px-3 text-2xs font-medium"
+                  style={{
+                    background: one.id === engine.id ? 'var(--accent)' : 'var(--field-idle)',
+                    color: one.id === engine.id ? '#fff' : 'var(--text-dim)'
+                  }}
+                  onClick={() => {
+                    void window.browser.setSettings({ searchEngine: one.id })
+                    setPicking(false)
+                  }}
+                >
+                  {one.name}
+                </button>
+              ))}
+          </div>
+        )}
+
+        {/* Every other engine, with the words already in them. */}
+        {elsewhere && value.trim() && (
+          <div className="flex flex-wrap gap-1.5 border-t px-3 py-2.5" style={{ borderColor: 'var(--line)' }}>
+            {others.map((one) => (
+              <button
+                key={one.name + one.template}
+                className="h-[26px] rounded-pill px-3 text-2xs font-medium"
+                style={{ background: 'var(--field-idle)', color: 'var(--text-dim)' }}
+                onClick={() => {
+                  void window.browser.navigate(one.template.replace('%s', encodeURIComponent(value.trim())))
+                  onClose()
+                }}
+              >
+                {one.name}
+              </button>
+            ))}
+          </div>
+        )}
 
         {items.length > 0 && (
           <div className="max-h-[48vh] overflow-y-auto border-t px-2 py-2" style={{ borderColor: 'var(--line)' }}>
@@ -146,13 +256,40 @@ export default function CommandPalette({
                   transition: 'background var(--t-fast) linear'
                 }}
               >
-                <span className="shrink-0 text-dim">{iconFor(item.kind)}</span>
+                <span
+                  className="shrink-0"
+                  style={{ color: item.warn ? 'var(--warn)' : item.answer ? 'var(--accent)' : 'var(--text-dim)' }}
+                >
+                  {item.warn ? <Alert width={15} height={15} /> : iconFor(item.kind)}
+                </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-base">{item.title}</span>
+                  <span
+                    className={cx('block truncate', item.answer ? 'text-[19px] font-semibold' : 'text-base')}
+                    style={item.warn ? { color: 'var(--warn)' } : undefined}
+                  >
+                    {item.title}
+                  </span>
                   <span className="block truncate text-sm text-faint">{item.subtitle ?? item.url}</span>
                 </span>
                 {item.visits && item.visits > 1 && (
                   <span className="shrink-0 text-2xs text-faint">{item.visits}×</span>
+                )}
+                {/* Off the list for good: the row that keeps coming back. */}
+                {item.forgettable && (
+                  <span
+                    role="button"
+                    tabIndex={-1}
+                    aria-label={t('Убрать из подсказок')}
+                    title={t('Убрать из подсказок')}
+                    className="icon-btn h-6 w-6 shrink-0"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void window.browser.forgetSuggestion(item.url)
+                      setItems((list) => list.filter((row) => row.url !== item.url))
+                    }}
+                  >
+                    <Cross width={12} height={12} />
+                  </span>
                 )}
               </button>
             ))}
