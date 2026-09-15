@@ -3,6 +3,7 @@ import { tabHeight } from '../look'
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import type {
   InternalPage,
+  ProfilesState,
   Settings,
   SplitState,
   TabGroup,
@@ -10,7 +11,7 @@ import type {
   TabState
 } from '../../../shared/types'
 import { ChevronDown, ChevronLeft, ChevronRight, Clock, Cross, Download, Gear, Globe, HalfLeft, HalfRight, Pin, Plus, Sleep, Star, Volume, VolumeOff, Wallet, Zap } from './Icons'
-import { cx } from './ui'
+import { Avatar, cx } from './ui'
 
 /** The same icons these pages carry in the toolbar and in the menu. */
 const INTERNAL_ICONS: Record<InternalPage, typeof Gear> = {
@@ -965,6 +966,7 @@ export function TabStrip({
       onDoubleClick={() => window.browser.maximize()}
     >
       <PickedBar ids={[...picked]} onDone={clear} />
+      <ProfileChip />
       {/* The group in force, and any pinned beside it — never more than a
           slice of the window, however many are pinned, because the tabs are
           what the strip is for. */}
@@ -1217,6 +1219,40 @@ function SpaceChip({
   )
 }
 /* ---------------------------------------------------------------- vertical */
+/**
+ * Whose browser this is, and a way to make it somebody else's.
+ *
+ * One press cycles to the next profile, which is the whole gesture for the
+ * two-profile case that covers most people; the menu in the toolbar is still
+ * there for the rest. It draws nothing at all when there is only one profile,
+ * because then there is nothing to switch to.
+ */
+function ProfileChip() {
+  const [state, setState] = useState<ProfilesState | null>(null)
+
+  useEffect(() => {
+    void window.browser.profiles().then(setState)
+    return window.browser.onProfiles(setState)
+  }, [])
+
+  if (!state || state.profiles.length < 2) return null
+  const here = state.profiles.find((one) => one.id === state.activeId) ?? state.profiles[0]
+  const next =
+    state.profiles[(state.profiles.findIndex((one) => one.id === here.id) + 1) % state.profiles.length]
+
+  return (
+    <button
+      className="no-drag flex h-[26px] shrink-0 items-center gap-1.5 rounded-pill pl-1 pr-2"
+      style={{ background: 'var(--field-idle)' }}
+      title={t('Профиль: {name} · нажмите, чтобы перейти в «{next}»', { name: here.name, next: next.name })}
+      onClick={() => void window.browser.switchProfile(next.id)}
+    >
+      <Avatar avatar={here.avatar} crop={here.crop} color={here.color} size={20} />
+      <span className="max-w-[90px] truncate text-2xs font-medium text-dim">{here.name}</span>
+    </button>
+  )
+}
+
 export function TabRail({
   tabs,
   groups,
@@ -1236,6 +1272,7 @@ export function TabRail({
   const { drawn, leaving } = useFarewell(tabs)
   const rows = rowsOf(drawn, groups)
   const column = useRef<HTMLDivElement>(null)
+  // The rail is the strip turned on its side; the same chip belongs at its top.
   useFlight(
     column,
     rows.map((row) => (row.kind === 'tab' ? row.tab.id : `g${row.group.id}`)).join(',')

@@ -23,5 +23,21 @@ export const DEFAULT_LAYOUT: Record<WidgetId, WidgetBox> = {
   stats: box(3, 16, 9, 4),
   recent: box(12, 16, 9, 4),
   closed: box(3, 21, 18, 4),
-  weather: box(19, 1, 5, 4)
+  weather: box(19, 1, 5, 4),
+
+  /*
+   * The eight that arrived later, laid out below the fold.
+   *
+   * None of them is on until somebody switches it on, so where they sit only
+   * matters the moment they are: they go under everything that was here
+   * before, side by side in pairs, and get dragged wherever they are wanted.
+   */
+  downloads: box(3, 26, 9, 5),
+  playing: box(12, 26, 9, 4),
+  todo: box(3, 31, 9, 6),
+  notes: box(12, 30, 9, 6),
+  calendar: box(3, 37, 9, 7),
+  chart: box(12, 36, 9, 5),
+  habits: box(12, 41, 9, 5),
+  rates: box(3, 44, 9, 5)
 }

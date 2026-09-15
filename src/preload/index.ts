@@ -1,5 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
+  Todo,
+  Rates,
+  Note,
+  BlockedDay,
   AppInfo,
   ContentLayout,
   AddExtensionResult,
@@ -349,6 +353,26 @@ const api = {
 
   /* ---- history ---- */
   history: (): Promise<HistoryEntry[]> => ipcRenderer.invoke('history:all'),
+
+  /* ---- the start page's own things ---- */
+  /** Notes and the to-do list, as this profile has them. */
+  desk: (): Promise<{ notes: Note[]; todos: Todo[] }> => ipcRenderer.invoke('desk:all'),
+  setNote: (note: Note): Promise<{ notes: Note[]; todos: Todo[] }> =>
+    ipcRenderer.invoke('desk:note', note),
+  removeNote: (id: string): Promise<{ notes: Note[]; todos: Todo[] }> =>
+    ipcRenderer.invoke('desk:note-remove', id),
+  setTodo: (todo: Todo): Promise<{ notes: Note[]; todos: Todo[] }> =>
+    ipcRenderer.invoke('desk:todo', todo),
+  removeTodo: (id: string): Promise<{ notes: Note[]; todos: Todo[] }> =>
+    ipcRenderer.invoke('desk:todo-remove', id),
+  clearDoneTodos: (): Promise<{ notes: Note[]; todos: Todo[] }> =>
+    ipcRenderer.invoke('desk:clear-done'),
+  /** What this profile usually opens around this hour. */
+  habitsNow: (): Promise<Array<{ host: string; count: number }>> => ipcRenderer.invoke('habits:now'),
+  /** A fortnight of blocking, one number a day. */
+  blockedDays: (): Promise<BlockedDay[]> => ipcRenderer.invoke('security:days'),
+  /** Exchange rates, or null when the widget is off or the bank is away. */
+  rates: (): Promise<Rates | null> => ipcRenderer.invoke('rates:get'),
   recentHistory: (limit?: number): Promise<Suggestion[]> => ipcRenderer.invoke('history:recent', limit),
   removeHistory: (url: string) => ipcRenderer.invoke('history:remove', url),
   clearHistory: () => ipcRenderer.invoke('history:clear'),

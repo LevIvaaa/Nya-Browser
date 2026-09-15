@@ -5,6 +5,9 @@ import { readFileSync, writeFileSync } from 'fs'
 import { execFile, execFileSync } from 'child_process'
 import { BrowserWindow, setDetach } from './browser'
 import { DOH_TEMPLATES, settings } from './settings'
+import { desk } from './desk'
+import { habits } from './habits'
+import { rates } from './rates'
 import { history } from './history'
 import { bookmarks } from './bookmarks'
 import { profiles, AVATAR_CHOICES, AVATAR_PICTURE_EXTENSIONS, COLOR_CHOICES } from './profiles'
@@ -22,7 +25,7 @@ import { registerProtocols, registerSchemes } from './protocol'
 import { helloAvailable, helloVerify } from './hello'
 import { apps, appIdFromArgv, appRemoveFromArgv } from './apps'
 import { sites } from './sites'
-import { BLOCKLIST_SIZE, blockedLog, clearBrowsingData, hardenApp, hardenSession, resetStats, stats } from './security'
+import { blockedDays, BLOCKLIST_SIZE, blockedLog, clearBrowsingData, hardenApp, hardenSession, resetStats, stats } from './security'
 import { detectSources, importBookmarks, importHistory, importPasswordsCsv } from './import'
 import { translateBatch } from './translate'
 import { engine, filterStatus, hideCss, loadFilters } from './filters'
@@ -53,7 +56,9 @@ import {
   urlFromArgv
 } from './integration'
 import { SEARCH_ENGINES } from '../shared/search'
-import type { AppInfo, PrintOptions, Settings, SiteRules, ThemeMode } from '../shared/types'
+import type {
+  Todo,
+  Note, AppInfo, PrintOptions, Settings, SiteRules, ThemeMode } from '../shared/types'
 
 /* ------------------------------------------------------------------------- */
 /* Startup switches — read before app.whenReady() and fixed for the session.  */
@@ -938,11 +943,38 @@ function registerIpc() {
 
   /* ---- history ---- */
   ipcMain.handle('history:all', (event) => history.all())
+
+  /* ---- what the start page keeps of its own ---- */
+
+  ipcMain.handle('desk:all', (event) => desk.all())
+  ipcMain.handle('desk:note', (event, note: unknown) => desk.setNote((note ?? {}) as Note))
+  ipcMain.handle('desk:note-remove', (event, id: unknown) => desk.removeNote(str(id, 24)))
+  ipcMain.handle('desk:todo', (event, todo: unknown) => desk.setTodo((todo ?? {}) as Todo))
+  ipcMain.handle('desk:todo-remove', (event, id: unknown) => desk.removeTodo(str(id, 24)))
+  ipcMain.handle('desk:clear-done', (event) => desk.clearDone())
+
+  /** What this profile usually opens around now — hosts and counts, no more. */
+  ipcMain.handle('habits:now', (event) => habits.atThisHour())
+
+  /** A fortnight of blocking, for the chart. */
+  ipcMain.handle('security:days', (event) => blockedDays())
+
+  /**
+   * Exchange rates. Nothing goes out unless the widget is on: the check is
+   * here rather than in the renderer, so a page that asks anyway gets nothing.
+   */
+  ipcMain.handle('rates:get', async (event) => {
+    const page = settings.get().startPage
+    if (!page.rates) return null
+    return rates(page.ratesBase, page.ratesTo)
+  })
   ipcMain.handle('history:recent', (event, limit?: unknown) => history.recent(num(limit) || 60))
   ipcMain.handle('history:remove', (event, url: unknown) => history.remove(str(url, 2048)))
   ipcMain.handle('history:clear', (event) => {
     history.clear()
     pageText.clear()
+    // What you open at which hour is made of the same visits, so it goes too.
+    habits.clear()
   })
 
   /* ---- passwords ---- */

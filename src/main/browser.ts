@@ -18,6 +18,8 @@ import { basename, extname, join } from 'path'
 import { randomUUID } from 'crypto'
 import { URL } from 'url'
 import { settings } from './settings'
+import { desk } from './desk'
+import { habits } from './habits'
 import { history } from './history'
 import { bookmarks } from './bookmarks'
 import { favicons } from './favicons'
@@ -49,7 +51,7 @@ import {
   refreshCustomLists,
   resetStats,
   setPermissionPrompt,
-  stats, isBlockedPopup } from './security'
+  stats, isBlockedPopup, restoreBlockedDays } from './security'
 import { engine, hideCss } from './filters'
 import { comboOf, shortcutMap } from '../shared/shortcuts'
 import { extensionActions, loadExtensions, setExtensionSession } from './extensions'
@@ -844,6 +846,8 @@ export class BrowserWindow {
       bookmarks.flush()
       vault.flush()
       favicons.flush()
+      desk.flush()
+      habits.flush()
     })
 
     setPermissionPrompt((request) => this.askPermission(request))
@@ -892,6 +896,13 @@ export class BrowserWindow {
       drafts.load(dir)
       pageText.load(dir)
       playback.load(dir)
+      desk.load(dir)
+      habits.load(dir)
+      // The fortnight of blocking that the chart draws. It is kept with the
+      // settings rather than in a file of its own: fourteen numbers.
+      restoreBlockedDays(settings.get().blockedDays, (days) =>
+        settings.patch({ blockedDays: days })
+      )
     }
     // Held shut on purpose when the setting says to ask: the OS keychain would
     // otherwise open the vault before anyone had been asked anything.
@@ -957,6 +968,8 @@ export class BrowserWindow {
     history.flush()
     bookmarks.flush()
     vault.flush()
+    desk.flush()
+    habits.flush()
 
     for (const tab of [...this.tabs]) tab.destroy(this.win)
     this.tabs = []
@@ -1548,7 +1561,10 @@ export class BrowserWindow {
       documentHosts.set(wc.id, hostOfUrl(url))
       tab.progress = 0.7
       tab.upgraded = url.startsWith('https://')
-      if (!this.incognito) history.record(url, tab.title)
+      if (!this.incognito) {
+        history.record(url, tab.title)
+        habits.record(url)
+      }
       this.persistSession()
       this.broadcast()
     })
@@ -1557,7 +1573,10 @@ export class BrowserWindow {
       // A route change in a single-page app brings a whole new set of elements.
       void this.applyCosmetic(wc)
       tab.url = url
-      if (!this.incognito) history.record(url, tab.title)
+      if (!this.incognito) {
+        history.record(url, tab.title)
+        habits.record(url)
+      }
       this.broadcast()
     })
     wc.on('did-fail-load', (_e, code, description, url, isMainFrame) => {

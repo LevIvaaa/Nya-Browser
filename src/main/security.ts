@@ -42,6 +42,53 @@ const blockLog: BlockedEntry[] = []
 function remember(kind: BlockedEntry['kind'], host: string, page: string) {
   blockLog.push({ time: Date.now(), host, page, kind })
   if (blockLog.length > BLOCK_LOG_MAX) blockLog.splice(0, blockLog.length - BLOCK_LOG_MAX)
+  countToday()
+}
+
+/*
+ * How much was blocked on each of the last fourteen days.
+ *
+ * One number a day, in memory and in the profile's own file — the block log
+ * above holds four hundred entries and is gone on restart, which is fine for
+ * "what happened on this page" and useless for "is this getting better". The
+ * day is a local date string, because a chart of somebody's fortnight should
+ * break where their days break.
+ */
+const DAYS_KEPT = 14
+
+const dayKey = (at = new Date()) =>
+  `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`
+
+let byDay: Record<string, number> = {}
+let onDaysChanged: ((days: Record<string, number>) => void) | null = null
+
+function countToday() {
+  const key = dayKey()
+  byDay[key] = (byDay[key] ?? 0) + 1
+  onDaysChanged?.(byDay)
+}
+
+/** The fortnight, oldest first, with the quiet days filled in as zero. */
+export function blockedDays(): Array<{ day: string; count: number }> {
+  const out: Array<{ day: string; count: number }> = []
+  const today = new Date()
+  for (let back = DAYS_KEPT - 1; back >= 0; back--) {
+    const at = new Date(today)
+    at.setDate(today.getDate() - back)
+    const key = dayKey(at)
+    out.push({ day: key, count: byDay[key] ?? 0 })
+  }
+  return out
+}
+
+/** Handed the counts kept from last time, and told where to put new ones. */
+export function restoreBlockedDays(
+  days: Record<string, number>,
+  save: (days: Record<string, number>) => void
+) {
+  const alive = new Set(blockedDays().map((one) => one.day))
+  byDay = Object.fromEntries(Object.entries(days).filter(([day]) => alive.has(day)))
+  onDaysChanged = save
 }
 
 export function blockedLog(): BlockedEntry[] {
