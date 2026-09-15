@@ -1,13 +1,22 @@
 import { t } from '../i18n'
 import { useState } from 'react'
 import type { Profile, ProfilesState } from '../../../shared/types'
-import { Clock, Download, Eraser, Gear, Incognito, Keyboard, Plus, Printer, Shield, Star, Users, Wallet, Zap } from './Icons'
+import { Clock, Download, Eraser, Gear, Incognito, Keyboard, Plus, Printer, Search, Shield, Star, Users, Wallet, Zap } from './Icons'
 import { Avatar, Modal, Popover, TextField } from './ui'
 
 type View = 'settings' | 'history' | 'passwords' | 'downloads' | 'bookmarks' | 'security' | 'tasks'
 
 /* ------------------------------------------------------------- main menu */
-export function AppMenu({ onClose, onOpen }: { onClose: () => void; onOpen: (view: View) => void }) {
+export function AppMenu({
+  onClose,
+  onOpen,
+  order
+}: {
+  onClose: () => void
+  onOpen: (view: View) => void
+  /** the rows to show, in the order somebody arranged them */
+  order: string[]
+}) {
   const item = (icon: React.ReactNode, label: string, shortcut: string, action: () => void) => (
     <button
       key={label}
@@ -24,34 +33,50 @@ export function AppMenu({ onClose, onOpen }: { onClose: () => void; onOpen: (vie
     </button>
   )
 
+  /* Every row the menu can show, by the name the settings call it. The list
+     decides which appear and in what order; the four that are not in it are
+     the ones nobody reorders — they sit at the bottom where they always were. */
+  const rows: Record<string, React.ReactNode> = {
+    'new-tab': item(<Plus width={15} height={15} />, t('Новая вкладка'), 'Ctrl+T', () =>
+      void window.browser.newTab()
+    ),
+    'new-window': item(<Plus width={15} height={15} />, t('Новое окно'), 'Ctrl+N', () =>
+      void window.browser.newWindow()
+    ),
+    'new-private-window': item(<Incognito width={15} height={15} />, t('Приватное окно'), 'Ctrl+Shift+N', () =>
+      void window.browser.newWindow(true)
+    ),
+    bookmarks: item(<Star width={15} height={15} />, t('Закладки'), 'Ctrl+Shift+O', () => onOpen('bookmarks')),
+    history: item(<Clock width={15} height={15} />, t('История'), 'Ctrl+H', () => onOpen('history')),
+    downloads: item(<Download width={15} height={15} />, t('Загрузки'), 'Ctrl+J', () => onOpen('downloads')),
+    passwords: item(<Wallet width={15} height={15} />, t('Пароли и карты'), '', () => onOpen('passwords')),
+    tasks: item(<Zap width={15} height={15} />, t('Что тратит ресурсы'), '', () => onOpen('tasks')),
+    find: item(<Search width={15} height={15} />, t('Найти на странице'), 'Ctrl+F', () =>
+      void window.browser.uiAction('find')
+    ),
+    print: item(<Printer width={15} height={15} />, t('Печать страницы'), '', () =>
+      window.browser.setOverlay('print')
+    ),
+    zoom: item(<Search width={15} height={15} />, t('Масштаб страницы'), 'Ctrl+0', () =>
+      void window.browser.zoom('reset')
+    ),
+    settings: item(<Gear width={15} height={15} />, t('Настройки'), 'Ctrl+,', () => onOpen('settings'))
+  }
+
   return (
     <Popover onClose={onClose} width={264}>
       <div className="p-1">
-        {item(<Plus width={15} height={15} />, t('Новая вкладка'), 'Ctrl+T', () =>
-          void window.browser.newTab()
-        )}
-        {item(<Incognito width={15} height={15} />, t('Приватное окно'), 'Ctrl+Shift+N', () =>
-          void window.browser.newWindow(true)
-        )}
+        {order.map((id) => rows[id] ?? null)}
         <div className="my-1.5" style={{ borderTop: '1px solid var(--line)' }} />
-        {item(<Star width={15} height={15} />, t('Закладки'), 'Ctrl+Shift+O', () => onOpen('bookmarks'))}
-        {item(<Clock width={15} height={15} />, t('История'), 'Ctrl+H', () => onOpen('history'))}
-        {item(<Download width={15} height={15} />, t('Загрузки'), 'Ctrl+J', () => onOpen('downloads'))}
-        {item(<Wallet width={15} height={15} />, t('Пароли и карты'), '', () => onOpen('passwords'))}
-        <div className="my-1.5" style={{ borderTop: '1px solid var(--line)' }} />
-        {item(<Zap width={15} height={15} />, t('Что тратит ресурсы'), '', () => onOpen('tasks'))}
         {item(<Shield width={15} height={15} />, t('Проверка безопасности'), '', () =>
           window.browser.newTab('nya://security')
         )}
         {item(<Eraser width={15} height={15} />, t('Очистить данные сайтов'), 'Ctrl+Shift+Del', () =>
           window.browser.clearBrowsingData()
         )}
-        <div className="my-1.5" style={{ borderTop: '1px solid var(--line)' }} />
-        {item(<Printer width={15} height={15} />, t('Печать страницы'), '', () => window.browser.setOverlay('print'))}
         {item(<Keyboard width={15} height={15} />, t('Инструменты разработчика'), 'F12', () =>
           window.browser.openDevTools()
         )}
-        {item(<Gear width={15} height={15} />, t('Настройки'), 'Ctrl+,', () => onOpen('settings'))}
       </div>
     </Popover>
   )

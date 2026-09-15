@@ -203,6 +203,8 @@ const api = {
   dropOnGroup: (tabId: number, groupId: number) => ipcRenderer.invoke('group:drop', tabId, groupId),
   onGroupEdit: (cb: (edit: GroupEdit) => void) => on<GroupEdit>('state:group-edit', cb),
   setGroupColour: (groupId: number, colour: string) => ipcRenderer.invoke('group:colour', groupId, colour),
+  /** One emoji on a group, or none. */
+  setGroupIcon: (groupId: number, icon: string) => ipcRenderer.invoke('group:icon', groupId, icon),
   toggleGroup: (groupId: number, collapsed?: boolean) => ipcRenderer.invoke('group:toggle', groupId, collapsed),
   ungroup: (groupId: number) => ipcRenderer.invoke('group:ungroup', groupId),
   closeGroup: (groupId: number) => ipcRenderer.invoke('group:close', groupId),
@@ -307,6 +309,8 @@ const api = {
   importSettings: (json: string): Promise<boolean> => ipcRenderer.invoke('settings:import', json),
   getEngines: (): Promise<SearchEngine[]> => ipcRenderer.invoke('settings:engines'),
   pickWallpaper: (): Promise<string | null> => ipcRenderer.invoke('settings:wallpaper'),
+  /** Every picture this profile has imported, by name. */
+  wallpapers: (): Promise<string[]> => ipcRenderer.invoke('settings:wallpapers'),
   openDataFolder: () => ipcRenderer.invoke('settings:open-data'),
   pickDownloadDir: (): Promise<string | null> => ipcRenderer.invoke('settings:download-dir'),
 
@@ -503,6 +507,12 @@ const api = {
 
   /* ---- downloads ---- */
   /** The whole profile in one sealed file, and back again. */
+  /** A text file, saved where the person picks. */
+  saveText: (name: string, text: string): Promise<boolean> =>
+    ipcRenderer.invoke('file:save-text', name, text),
+  /** One text file, read back; empty when nothing was picked. */
+  openText: (): Promise<string> => ipcRenderer.invoke('file:open-text'),
+
   makeBackup: (password: string): Promise<BackupCounts | null> =>
     ipcRenderer.invoke('backup:make', password),
   restoreBackup: (password: string): Promise<BackupCounts | null> =>

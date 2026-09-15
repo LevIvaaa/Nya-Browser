@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { applyLanguage, onLanguageChange } from './i18n'
 import { useBrowser } from './state/useBrowser'
 import CommandPalette from './components/CommandPalette'
+import { useLook } from './look'
 import { AppMenu, ProfileMenu } from './components/Menus'
 import GroupColour from './components/GroupColour'
 import AutofillCard from './components/AutofillOffer'
@@ -28,7 +29,7 @@ import type { PageFile } from '../../preload/index'
  * itself stays visible underneath.
  */
 export default function OverlayApp() {
-  const { settings, profiles, active, engine, groups, spaces, tabs, appCandidate, autofill, savePassword } =
+  const { settings, profiles, profile, active, engine, groups, spaces, tabs, appCandidate, autofill, savePassword } =
     useBrowser()
   const [mode, setMode] = useState<string | null>(null)
   const [update, setUpdate] = useState<UpdateState | null>(null)
@@ -47,27 +48,11 @@ export default function OverlayApp() {
     return window.browser.onUpdate(setUpdate)
   }, [])
 
-  // Same theme tokens as the chrome UI, minus the opaque page background.
+  // Same tokens as the chrome UI, minus the opaque page background.
+  useLook(settings, settings?.accentFromProfile ? profile?.color : undefined)
   useEffect(() => {
-    if (!settings) return
-    const root = document.documentElement
-    const media = window.matchMedia('(prefers-color-scheme: dark)')
-    const apply = () => {
-      const dark = settings.theme === 'dark' || (settings.theme === 'system' && media.matches)
-      root.dataset.theme = dark ? 'dark' : 'light'
-    }
-    apply()
-    media.addEventListener('change', apply)
-    root.style.setProperty('--accent', settings.accent)
-    root.style.setProperty('--radius', `${settings.radius}px`)
-    root.style.setProperty('--speed', String(settings.reduceMotion ? 0.001 : settings.animationSpeed))
-    root.dataset.motion = settings.reduceMotion ? 'reduced' : 'full'
-    root.style.setProperty('--panel', String(settings.glass / 100))
-    // Blurring what cannot be seen through costs frames for nothing.
-    root.dataset.glass = settings.glass >= 100 ? 'off' : 'on'
     document.body.style.background = 'transparent'
-    return () => media.removeEventListener('change', apply)
-  }, [settings])
+  }, [])
 
   const close = () => void window.browser.setOverlay(null)
 
@@ -136,6 +121,7 @@ export default function OverlayApp() {
       )}
       {mode === 'menu' && (
         <AppMenu
+          order={settings?.menuOrder ?? []}
           onClose={close}
           onOpen={(view) => {
             if (view === 'security') {

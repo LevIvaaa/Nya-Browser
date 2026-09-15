@@ -1,4 +1,5 @@
 import { t } from '../i18n'
+import { tabHeight } from '../look'
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import type {
   InternalPage,
@@ -563,7 +564,6 @@ function PickedBar({ ids, onDone }: { ids: number[]; onDone: () => void }) {
 }
 
 /** How tall anything that stands in the strip is. */
-const tabHeight = (settings: Settings) => (settings.compact ? 30 : 34)
 
 /* ------------------------------------------------------------ group chip */
 
@@ -661,10 +661,16 @@ function GroupChip({
         reorder.onDropOnGroup(group.id, index)
       }}
     >
-      <span
-        className='shrink-0 rounded-pill'
-        style={{ width: 7, height: 7, background: group.color }}
-      />
+      {/* The picture replaces the dot when there is one: with four groups
+          open, a colour each stops being enough to tell them apart. */}
+      {group.icon ? (
+        <span className='shrink-0 text-2xs leading-none'>{group.icon}</span>
+      ) : (
+        <span
+          className='shrink-0 rounded-pill'
+          style={{ width: 7, height: 7, background: group.color }}
+        />
+      )}
       {editing ? (
         <input
           ref={field}

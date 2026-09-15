@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { t } from '../i18n'
 import type { TabGroup } from '../../../shared/types'
+import { Cross } from './Icons'
 import { cx } from './ui'
 
 /**
@@ -17,6 +18,9 @@ import { cx } from './ui'
  */
 
 const PRESETS = ['#7c6cff', '#2fbf71', '#f5a524', '#e5484d', '#38bdf8', '#e879f9', '#94a3b8']
+
+/** The pictures a group can wear. The first is none, which is the default. */
+const ICONS = ['', '📚', '💼', '🛒', '🎬', '🎧', '🧪', '🏠', '✈️', '🍳', '💬', '🐈']
 
 const clamp = (n: number, low: number, high: number) => Math.max(low, Math.min(high, n))
 
@@ -70,6 +74,7 @@ export default function GroupColour({
   // a named #2fbf71 would come back as #2fc173 — close, and not the colour that
   // was asked for. A slider clears this and takes over.
   const [typed, setTyped] = useState(group?.color ?? '')
+  const [icon, setIcon] = useState(group?.icon ?? '')
 
   const colour = typed && /^#[0-9a-f]{6}$/i.test(typed) ? typed.toLowerCase() : hexOf(h, s, l)
 
@@ -113,10 +118,36 @@ export default function GroupColour({
       >
         <div className="mb-3 flex items-center gap-2">
           <span
-            className="h-6 w-6 shrink-0 rounded-[8px]"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[8px] text-sm"
             style={{ background: colour, border: '1px solid var(--line)' }}
-          />
+          >
+            {icon}
+          </span>
           <span className="min-w-0 flex-1 truncate text-base font-medium">{group.name}</span>
+        </div>
+
+        {/* A picture as well as a colour. Four groups in, the colours stop
+            telling them apart — three of them are blue by then. */}
+        <div className="mb-3 flex flex-wrap gap-1">
+          {ICONS.map((one) => (
+            <button
+              key={one || 'none'}
+              aria-label={one || t('Без значка')}
+              title={one || t('Без значка')}
+              onClick={() => {
+                setIcon(one)
+                void window.browser.setGroupIcon(group.id, one)
+              }}
+              className="flex h-7 w-7 items-center justify-center rounded-[8px] text-sm"
+              style={{
+                background: icon === one ? 'var(--surface-hover)' : 'var(--field-idle)',
+                outline: icon === one ? '2px solid var(--accent)' : 'none',
+                outlineOffset: -1
+              }}
+            >
+              {one || <Cross width={12} height={12} />}
+            </button>
+          ))}
         </div>
 
         <div className="mb-3 flex flex-wrap gap-1.5">

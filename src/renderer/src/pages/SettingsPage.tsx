@@ -34,6 +34,7 @@ import {
   Cross,
   Download,
   Eraser,
+  Eye,
   Film,
   Gear,
   Globe,
@@ -48,6 +49,7 @@ import {
   LayoutTop,
   Monitor,
   Moon,
+  More,
   Palette,
   Plus,
   Refresh,
@@ -63,6 +65,7 @@ import {
 import {
   Avatar,
   ChoiceCard,
+  FullSettings,
   Looking,
   Modal,
   Pill,
@@ -78,6 +81,9 @@ import {
   cx,
   formatBytes
 } from '../components/ui'
+import { Arrangement, DensityDemo } from '../components/Arrangement'
+import { DEFAULT_SETTINGS, LOOK_KEYS } from '../../../shared/defaults'
+import { MENU_ROWS, TOOLBAR_BUTTONS, TOOLBAR_REQUIRED } from '../../../shared/chrome'
 
 interface Props {
   settings: Settings
@@ -213,6 +219,8 @@ export default function SettingsPage({
   const [update, setUpdate] = useState<UpdateState | null>(null)
   const [drm, setDrm] = useState<(WidevineState & { needsRestart: boolean }) | null>(null)
   const [installedApps, setInstalledApps] = useState<InstalledApp[]>([])
+  /** the pictures this profile has, for the wallpaper rotation */
+  const [pictures, setPictures] = useState<string[]>([])
 
   useEffect(() => {
     void window.browser.appInfo().then(setInfo)
@@ -233,7 +241,32 @@ export default function SettingsPage({
       void window.browser.installedApps().then(setInstalledApps)
     }
     if (tab === 'privacy') void window.browser.filterStatus().then(setFilters)
+    if (tab === 'wallpaper') void window.browser.wallpapers().then(setPictures)
   }, [tab])
+
+  /*
+   * "You changed this", and the way back.
+   *
+   * Every row can say whether it still holds what the browser was installed
+   * with, and offer to put that one setting back without touching the other
+   * two hundred. Comparing as JSON is what makes it work for the settings that
+   * are objects — the wallpaper, the start page — as well as the numbers.
+   */
+  const of = <K extends keyof Settings>(key: K) => ({
+    changed: JSON.stringify(settings[key]) !== JSON.stringify(DEFAULT_SETTINGS[key]),
+    onRevert: () => onPatch({ [key]: DEFAULT_SETTINGS[key] } as unknown as Partial<Settings>)
+  })
+
+  /** Everything on the appearance page, under a name, kept for later. */
+  const saveLook = () => {
+    const look: Partial<Settings> = {}
+    for (const key of LOOK_KEYS) (look as Record<string, unknown>)[key] = settings[key]
+    const id = String(Date.now())
+    onPatch({
+      looks: [...settings.looks, { id, name: t('Оформление {n}', { n: settings.looks.length + 1 }), look }]
+    })
+    flash(t('Оформление сохранено'))
+  }
 
   const engine = engines.find((item) => item.id === settings.searchEngine) ?? engines[0]
   const bg = settings.background
@@ -258,6 +291,7 @@ export default function SettingsPage({
                 description={t('Интерфейс, меню и язык, который сообщается сайтам')}
               >
                 <Row
+                  {...of('language')}
                   title={t('Язык')}
                   hint={t('Интерфейс переключается сразу; сайты и системные надписи — после перезапуска')}
                 >
@@ -275,7 +309,7 @@ export default function SettingsPage({
               </Section>
 
               <Section title={t('Тема')} icon={<Sun width={15} height={15} />} description={t('Как выглядит браузер')}>
-                <Row title={t('Оформление')}>
+                <Row title={t('Оформление')} {...of('theme')}>
                   <Segmented
                     value={settings.theme}
                     onChange={(value) => onPatch({ theme: value })}
@@ -286,7 +320,7 @@ export default function SettingsPage({
                     ]}
                   />
                 </Row>
-                <Row title={t('Акцентный цвет')} hint={t('Подсветка, активные элементы и процедурный фон')}>
+                <Row title={t('Акцентный цвет')} hint={t('Подсветка, активные элементы и процедурный фон')} {...of('accent')}>
                   <div className="flex items-center gap-1.5">
                     {ACCENTS.map((color) => (
                       <button
@@ -312,13 +346,13 @@ export default function SettingsPage({
                     />
                   </div>
                 </Row>
-                <Row title={t('Скругление углов')} hint={t('Вкладки, панели и окно страницы')}>
+                <Row title={t('Скругление углов')} hint={t('Вкладки, панели и окно страницы')} {...of('radius')} advanced>
                   <Slider value={settings.radius} min={0} max={24} onChange={(value) => onPatch({ radius: value })} format={(v) => `${v}px`} />
                 </Row>
-                <Row title={t('Компактный режим')} hint={t('Меньше высота панелей и вкладок')}>
+                <Row title={t('Компактный режим')} hint={t('Меньше высота панелей и вкладок')} {...of('compact')}>
                   <Toggle checked={settings.compact} onChange={(value) => onPatch({ compact: value })} />
                 </Row>
-                <Row title={t('Эффект стекла')} hint={t('Насколько плотные панели, вкладки и карточки — обои под ними остаются как есть')}>
+                <Row title={t('Эффект стекла')} hint={t('Насколько плотные панели, вкладки и карточки — обои под ними остаются как есть')} {...of('glass')} advanced>
                   <Slider
                     value={settings.glass}
                     min={0}
@@ -330,8 +364,254 @@ export default function SettingsPage({
                 </Row>
               </Section>
 
+              {/* How big and how tight, which between them decide how much
+                  browser is on the screen and how much page. */}
+              <Section
+                title={t('Размер и плотность')}
+                icon={<Grid width={15} height={15} />}
+                description={t('Насколько крупно нарисован сам браузер')}
+              >
+                <Row
+                  title={t('Масштаб интерфейса')}
+                  hint={t('Панели, вкладки и меню — страница масштабируется отдельно')}
+                  {...of('uiScale')}
+                >
+                  <Slider
+                    value={settings.uiScale}
+                    min={0.8}
+                    max={1.4}
+                    step={0.05}
+                    format={(v) => `${Math.round(v * 100)}%`}
+                    onChange={(value) => onPatch({ uiScale: value })}
+                  />
+                </Row>
+                <Row
+                  title={t('Плотность')}
+                  hint={t('Свободнее — выше панели и больше воздуха; плотнее — больше страницы')}
+                  {...of('density')}
+                  demo={<DensityDemo value={settings.density} />}
+                >
+                  <Segmented
+                    value={String(settings.density)}
+                    onChange={(value) => onPatch({ density: Number(value), compact: false })}
+                    options={[
+                      { value: '0', label: t('Свободно') },
+                      { value: '1', label: t('Обычно') },
+                      { value: '2', label: t('Плотно') }
+                    ]}
+                  />
+                </Row>
+                <Row
+                  title={t('Шрифт интерфейса')}
+                  hint={t('Любой шрифт, установленный в системе; пусто — как в системе')}
+                  {...of('uiFont')} advanced
+                  
+                >
+                  <TextField
+                    value={settings.uiFont}
+                    onChange={(value) => onPatch({ uiFont: value })}
+                    placeholder={t('Как в системе')}
+                    width={200}
+                  />
+                </Row>
+              </Section>
+
+              {/* Light by day and dark by night, decided by the clock rather
+                  than by whatever the operating system thinks. */}
+              <Section
+                title={t('Тема по времени суток')}
+                icon={<Clock width={15} height={15} />}
+                description={t('Светлая днём, тёмная вечером')}
+              >
+                <Row title={t('Переключать по часам')} {...of('themeSchedule')}>
+                  <Toggle
+                    checked={settings.themeSchedule.on}
+                    onChange={(on) => onPatch({ themeSchedule: { ...settings.themeSchedule, on } })}
+                  />
+                </Row>
+                {settings.themeSchedule.on && (
+                  <>
+                    <Row title={t('Светлая с')} {...of('themeSchedule')}>
+                      <TextField
+                        value={settings.themeSchedule.light}
+                        onChange={(light) => onPatch({ themeSchedule: { ...settings.themeSchedule, light } })}
+                        placeholder="07:00"
+                        width={92}
+                        mono
+                      />
+                    </Row>
+                    <Row title={t('Тёмная с')} {...of('themeSchedule')}>
+                      <TextField
+                        value={settings.themeSchedule.dark}
+                        onChange={(dark) => onPatch({ themeSchedule: { ...settings.themeSchedule, dark } })}
+                        placeholder="20:00"
+                        width={92}
+                        mono
+                      />
+                    </Row>
+                  </>
+                )}
+              </Section>
+
+              {/* Contrast is not a style: for somebody who needs it, it is
+                  whether the browser can be used at all. */}
+              <Section
+                title={t('Доступность')}
+                icon={<Eye width={15} height={15} />}
+                description={t('Когда важнее разглядеть, чем красиво')}
+              >
+                <Row
+                  title={t('Высокий контраст')}
+                  hint={t('Полная яркость текста, границы у всего, что нажимается, без прозрачности')}
+                  {...of('highContrast')}
+                >
+                  <Toggle checked={settings.highContrast} onChange={(v) => onPatch({ highContrast: v })} />
+                </Row>
+                <Row
+                  title={t('Цвет окна по профилю')}
+                  hint={t('Окно носит цвет своего профиля — два окна рядом видно сразу')}
+                  {...of('accentFromProfile')} advanced
+                >
+                  <Toggle checked={settings.accentFromProfile} onChange={(v) => onPatch({ accentFromProfile: v })} />
+                </Row>
+                <Row
+                  title={t('Отдача на действия')}
+                  hint={t('Нажатая кнопка коротко отвечает, что нажатие дошло')}
+                  {...of('feedback')} advanced
+                >
+                  <Toggle checked={settings.feedback} onChange={(v) => onPatch({ feedback: v })} />
+                </Row>
+                <Row
+                  title={t('Горячие клавиши в подсказках')}
+                  hint={t('Каждая подсказка называет клавиши, которые делают то же самое')}
+                  {...of('shortcutsInTips')} advanced
+                >
+                  <Toggle checked={settings.shortcutsInTips} onChange={(v) => onPatch({ shortcutsInTips: v })} />
+                </Row>
+              </Section>
+
+              {/* A whole appearance, saved and put on again in one press. */}
+              <Section
+                title={t('Профили оформления')}
+                icon={<Palette width={15} height={15} />}
+                description={t('Весь внешний вид целиком — сохранить и вернуть одним нажатием')}
+                action={
+                  <button className="btn" onClick={saveLook}>
+                    <Plus width={15} height={15} />
+                    {t('Сохранить нынешнее')}
+                  </button>
+                }
+              >
+                {settings.looks.length === 0 && (
+                  <div className="px-4 py-3 text-sm text-faint">
+                    {t('Настройте вид и сохраните — потом можно будет вернуться к нему одним нажатием')}
+                  </div>
+                )}
+                {settings.looks.map((one) => (
+                  <Row key={one.id} title={one.name} {...of('looks')}>
+                    <div className="flex items-center gap-1.5">
+                      <button className="btn" onClick={() => onPatch(one.look)}>
+                        {t('Применить')}
+                      </button>
+                      <button
+                        className="icon-btn"
+                        aria-label={t('Удалить')}
+                        onClick={() => onPatch({ looks: settings.looks.filter((row) => row.id !== one.id) })}
+                      >
+                        <Cross width={14} height={14} />
+                      </button>
+                    </div>
+                  </Row>
+                ))}
+                <Row
+                  title={t('Файл оформления')}
+                  hint={t('Только внешний вид — ни истории, ни паролей, ни адресов')}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      className="btn"
+                      onClick={async () => {
+                        const look: Record<string, unknown> = {}
+                        for (const key of LOOK_KEYS) look[key] = settings[key]
+                        const saved = await window.browser.saveText(
+                          'nya-look.json',
+                          JSON.stringify({ nyaLook: 1, look }, null, 2)
+                        )
+                        if (saved) flash(t('Оформление выгружено'))
+                      }}
+                    >
+                      <Download width={15} height={15} />
+                      {t('Выгрузить')}
+                    </button>
+                    <button
+                      className="btn"
+                      onClick={async () => {
+                        const text = await window.browser.openText()
+                        if (!text) return
+                        try {
+                          const parsed = JSON.parse(text) as { nyaLook?: number; look?: Record<string, unknown> }
+                          if (!parsed.look) throw new Error('not a look')
+                          const look: Record<string, unknown> = {}
+                          for (const key of LOOK_KEYS) {
+                            if (key in parsed.look) look[key] = parsed.look[key]
+                          }
+                          onPatch(look as Partial<Settings>)
+                          flash(t('Оформление загружено'))
+                        } catch {
+                          flash(t('Это не файл оформления'))
+                        }
+                      }}
+                    >
+                      <Install width={15} height={15} />
+                      {t('Загрузить')}
+                    </button>
+                  </div>
+                </Row>
+              </Section>
+
+              {/* The toolbar, arranged by the person who looks at it. */}
+              <Section
+                title={t('Панель инструментов')}
+                icon={<LayoutTop width={15} height={15} />}
+                description={t('Что стоит на панели и в каком порядке')}
+                action={
+                  <button className="btn" onClick={() => onPatch({ toolbar: DEFAULT_SETTINGS.toolbar })}>
+                    <Refresh width={15} height={15} />
+                    {t('Как было')}
+                  </button>
+                }
+              >
+                <Arrangement
+                  chosen={settings.toolbar}
+                  all={TOOLBAR_BUTTONS.map((one) => ({ id: one.id, name: t(one.name) }))}
+                  required={TOOLBAR_REQUIRED}
+                  repeatable={['space']}
+                  onChange={(toolbar) => onPatch({ toolbar })}
+                />
+              </Section>
+
+              <Section
+                title={t('Порядок меню')}
+                icon={<More width={15} height={15} />}
+                description={t('Строки главного меню, в вашем порядке')}
+                action={
+                  <button className="btn" onClick={() => onPatch({ menuOrder: DEFAULT_SETTINGS.menuOrder })}>
+                    <Refresh width={15} height={15} />
+                    {t('Как было')}
+                  </button>
+                }
+              >
+                <Arrangement
+                  chosen={settings.menuOrder}
+                  all={MENU_ROWS.map((one) => ({ id: one.id, name: t(one.name) }))}
+                  required={[]}
+                  repeatable={[]}
+                  onChange={(menuOrder) => onPatch({ menuOrder })}
+                />
+              </Section>
+
               <Section title={t('Движение')} icon={<Sparkles width={15} height={15} />} description={t('Скорость и плавность анимаций')}>
-                <Row title={t('Скорость анимаций')} hint={t('1× — как задумано, меньше — быстрее и резче')}>
+                <Row title={t('Скорость анимаций')} hint={t('1× — как задумано, меньше — быстрее и резче')} {...of('animationSpeed')} advanced>
                   <Slider
                     value={settings.animationSpeed}
                     min={0.4}
@@ -341,7 +621,7 @@ export default function SettingsPage({
                     format={(v) => `${v.toFixed(1)}×`}
                   />
                 </Row>
-                <Row title={t('Меньше движения')} hint={t('Полностью отключает анимации интерфейса')}>
+                <Row title={t('Меньше движения')} hint={t('Полностью отключает анимации интерфейса')} {...of('reduceMotion')}>
                   <Toggle checked={settings.reduceMotion} onChange={(value) => onPatch({ reduceMotion: value })} />
                 </Row>
               </Section>
@@ -363,7 +643,7 @@ export default function SettingsPage({
 
                 {(bg.kind === 'image' || bg.kind === 'video') && (
                   <>
-                    <Row title={t('Файл обоев')} hint={bg.file || t('Файл ещё не выбран')}>
+                    <Row title={t('Файл обоев')} hint={bg.file || t('Файл ещё не выбран')} {...of('background')}>
                       <div className="flex gap-2">
                         {bg.file && (
                           <button className="btn" onClick={() => onPatch({ background: { ...bg, file: '' } })}>
@@ -381,7 +661,7 @@ export default function SettingsPage({
                         </button>
                       </div>
                     </Row>
-                    <Row title={t('Заполнение')}>
+                    <Row title={t('Заполнение')} {...of('background')}>
                       <Segmented
                         value={bg.fit}
                         onChange={(fit) => onPatch({ background: { ...bg, fit } })}
@@ -394,31 +674,116 @@ export default function SettingsPage({
                         size="sm"
                       />
                     </Row>
-                    <Row title={t('Размытие')} hint={t('Чтобы текст поверх обоев читался лучше')}>
+                    <Row title={t('Размытие')} hint={t('Чтобы текст поверх обоев читался лучше')} {...of('background')}>
                       <Slider value={bg.blur} min={0} max={40} onChange={(blur) => onPatch({ background: { ...bg, blur } })} format={(v) => `${v}px`} />
                     </Row>
-                    <Row title={t('Затемнение')}>
+                    <Row title={t('Затемнение')} {...of('background')}>
                       <Slider value={bg.dim} min={0} max={85} onChange={(dim) => onPatch({ background: { ...bg, dim } })} format={(v) => `${v}%`} />
                     </Row>
                   </>
                 )}
 
+                {/* Pictures that change themselves. One wallpaper for a year
+                    is a wallpaper nobody sees any more. */}
+                {bg.kind === 'image' && (
+                  <>
+                    <Row
+                      title={t('Менять обои по расписанию')}
+                      hint={t('Выберите несколько картинок — браузер будет ставить их по очереди')}
+                      {...of('background')}
+                    >
+                      <Toggle
+                        checked={bg.rotate.on}
+                        onChange={(on) => onPatch({ background: { ...bg, rotate: { ...bg.rotate, on } } })}
+                      />
+                    </Row>
+                    {bg.rotate.on && (
+                      <>
+                        <Row title={t('Как часто')}>
+                          <Select
+                            value={String(bg.rotate.everyMinutes)}
+                            options={[
+                              { value: '15', label: t('Каждые 15 минут') },
+                              { value: '60', label: t('Каждый час') },
+                              { value: '360', label: t('Каждые 6 часов') },
+                              { value: '1440', label: t('Раз в день') },
+                              { value: '10080', label: t('Раз в неделю') }
+                            ]}
+                            onChange={(value) =>
+                              onPatch({ background: { ...bg, rotate: { ...bg.rotate, everyMinutes: Number(value) } } })
+                            }
+                          />
+                        </Row>
+                        <Row title={t('В случайном порядке')}>
+                          <Toggle
+                            checked={bg.rotate.shuffle}
+                            onChange={(shuffle) =>
+                              onPatch({ background: { ...bg, rotate: { ...bg.rotate, shuffle } } })
+                            }
+                          />
+                        </Row>
+                        <Row
+                          title={t('Какие картинки')}
+                          hint={t('Выбрано: {n}', { n: bg.rotate.files.length })}
+                        >
+                          <button className="btn" onClick={() => void window.browser.wallpapers().then(setPictures)}>
+                            <Refresh width={15} height={15} />
+                            {t('Обновить список')}
+                          </button>
+                        </Row>
+                        {pictures.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 px-4 pb-3">
+                            {pictures.map((name) => {
+                              const on = bg.rotate.files.includes(name)
+                              return (
+                                <button
+                                  key={name}
+                                  className="h-[26px] max-w-[220px] truncate rounded-pill px-3 text-2xs font-medium"
+                                  style={{
+                                    background: on ? 'var(--accent)' : 'var(--field-idle)',
+                                    color: on ? '#fff' : 'var(--text-dim)'
+                                  }}
+                                  onClick={() =>
+                                    onPatch({
+                                      background: {
+                                        ...bg,
+                                        rotate: {
+                                          ...bg.rotate,
+                                          files: on
+                                            ? bg.rotate.files.filter((one) => one !== name)
+                                            : [...bg.rotate.files, name]
+                                        }
+                                      }
+                                    })
+                                  }
+                                >
+                                  {name}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </>
+                )}
+
                 {bg.kind === 'video' && (
                   <>
-                    <Row title={t('Скорость видео')}>
+                    <Row title={t('Скорость видео')} {...of('background')}>
                       <Slider value={bg.speed} min={0.25} max={2} step={0.05} onChange={(speed) => onPatch({ background: { ...bg, speed } })} format={(v) => `${v.toFixed(2)}×`} />
                     </Row>
-                    <Row title={t('Без звука')} hint={t('Видеообои почти всегда лучше без звука')}>
+                    <Row title={t('Без звука')} hint={t('Видеообои почти всегда лучше без звука')} {...of('background')}>
                       <Toggle checked={bg.muted} onChange={(muted) => onPatch({ background: { ...bg, muted } })} />
                     </Row>
-                    <Row title={t('Пауза при просмотре сайта')} hint={t('Экономит заряд и процессор, пока обои не видно')}>
+                    <Row title={t('Пауза при просмотре сайта')} hint={t('Экономит заряд и процессор, пока обои не видно')} {...of('background')}>
                       <Toggle checked={bg.pauseWhenBrowsing} onChange={(pauseWhenBrowsing) => onPatch({ background: { ...bg, pauseWhenBrowsing } })} />
                     </Row>
                   </>
                 )}
 
                 {['aurora', 'mesh', 'waves'].includes(bg.kind) && (
-                  <Row title={t('Интенсивность')}>
+                  <Row title={t('Интенсивность')} {...of('background')}>
                     <Segmented
                       value={bg.intensity}
                       onChange={(intensity) => onPatch({ background: { ...bg, intensity } })}
@@ -444,15 +809,15 @@ export default function SettingsPage({
                   <ChoiceCard value="right" current={settings.tabPosition} onSelect={(value) => onPatch({ tabPosition: value })} icon={<LayoutRight width={15} height={15} />} title={t('Справа')} hint={t('У правого края')} />
                 </div>
                 {settings.tabPosition !== 'top' ? (
-                  <Row title={t('Ширина панели')}>
+                  <Row title={t('Ширина панели')} {...of('railWidth')} advanced>
                     <Slider value={settings.railWidth} min={168} max={420} step={4} onChange={(value) => onPatch({ railWidth: value })} format={(v) => `${v}px`} />
                   </Row>
                 ) : (
-                  <Row title={t('Максимальная ширина вкладки')}>
+                  <Row title={t('Максимальная ширина вкладки')} {...of('tabMaxWidth')} advanced>
                     <Slider value={settings.tabMaxWidth} min={120} max={420} step={10} onChange={(value) => onPatch({ tabMaxWidth: value })} format={(v) => `${v}px`} />
                   </Row>
                 )}
-                <Row title={t('Кнопка закрытия')}>
+                <Row title={t('Кнопка закрытия')} {...of('closeButton')} advanced>
                   <Segmented
                     value={settings.closeButton}
                     onChange={(value) => onPatch({ closeButton: value })}
@@ -467,19 +832,73 @@ export default function SettingsPage({
               </Section>
 
               <Section title={t('Поведение')} icon={<LayoutHidden width={15} height={15} />}>
-                <Row title={t('Автоскрытие интерфейса')} hint={t('Остаётся только страница; вернуть — курсор к краю или Ctrl+Shift+B')}>
+                <Row
+                  title={t('Что в новой вкладке')}
+                  hint={t('Стартовая страница, ваша домашняя или пустая')}
+                  {...of('newTabShows')}
+                >
+                  <Segmented
+                    value={settings.newTabShows}
+                    onChange={(value) => onPatch({ newTabShows: value })}
+                    options={[
+                      { value: 'start', label: t('Стартовая') },
+                      { value: 'home', label: t('Домашняя') },
+                      { value: 'blank', label: t('Пустая') }
+                    ]}
+                  />
+                </Row>
+                <Row
+                  title={t('Средняя кнопка по ссылке')}
+                  hint={t('Открывать вкладку сзади или сразу переходить в неё')}
+                  {...of('middleClick')} advanced
+                >
+                  <Segmented
+                    value={settings.middleClick}
+                    onChange={(value) => onPatch({ middleClick: value })}
+                    options={[
+                      { value: 'background', label: t('Сзади') },
+                      { value: 'foreground', label: t('Сразу') }
+                    ]}
+                  />
+                </Row>
+                <Row
+                  title={t('Масштаб щипком')}
+                  hint={t('Два пальца на тачпаде или щипок на сенсорном экране увеличивают страницу')}
+                  {...of('pinchZoom')} advanced
+                >
+                  <Toggle checked={settings.pinchZoom} onChange={(v) => onPatch({ pinchZoom: v })} />
+                </Row>
+                <Row
+                  title={t('Клавиатурная навигация по ссылкам')}
+                  hint={t('Нажмите клавишу — у каждой ссылки появится буква; наберите её, и ссылка откроется')}
+                  {...of('linkHints')}
+                >
+                  <Toggle checked={settings.linkHints} onChange={(v) => onPatch({ linkHints: v })} />
+                </Row>
+                {settings.linkHints && (
+                  <Row title={t('Клавиша подсказок')} hint={t('Одна латинская буква')} {...of('linkHintsKey')} advanced >
+                    <TextField
+                      value={settings.linkHintsKey}
+                      onChange={(value) => onPatch({ linkHintsKey: value.slice(-1).toLowerCase() })}
+                      width={64}
+                      mono
+                    />
+                  </Row>
+                )}
+                <Row title={t('Автоскрытие интерфейса')} hint={t('Остаётся только страница; вернуть — курсор к краю или Ctrl+Shift+B')} {...of('tabAutoHide')}>
                   <Toggle checked={settings.tabAutoHide} onChange={(value) => onPatch({ tabAutoHide: value })} />
                 </Row>
-                <Row title={t('Новая вкладка рядом с текущей')}>
+                <Row title={t('Новая вкладка рядом с текущей')} {...of('newTabAfterCurrent')} advanced>
                   <Toggle checked={settings.newTabAfterCurrent} onChange={(value) => onPatch({ newTabAfterCurrent: value })} />
                 </Row>
-                <Row title={t('Закрывать средней кнопкой мыши')}>
+                <Row title={t('Закрывать средней кнопкой мыши')} {...of('middleClickClose')} advanced>
                   <Toggle checked={settings.middleClickClose} onChange={(value) => onPatch({ middleClickClose: value })} />
                 </Row>
-                <Row title={t('Подтверждать закрытие нескольких вкладок')}>
+                <Row title={t('Подтверждать закрытие нескольких вкладок')} {...of('confirmCloseMultiple')} advanced>
                   <Toggle checked={settings.confirmCloseMultiple} onChange={(value) => onPatch({ confirmCloseMultiple: value })} />
                 </Row>
                 <Row
+                  {...of('tabPreview')} advanced
                   title={t('Показывать вкладку при наведении')}
                   hint={t('Картинка страницы, если задержать курсор')}
                 >
@@ -509,7 +928,7 @@ export default function SettingsPage({
                     onChange={(mouseGestures) => onPatch({ mouseGestures })}
                   />
                 </Row>
-                <Row title={t('Окно поверх всех')}>
+                <Row title={t('Окно поверх всех')} {...of('alwaysOnTop')} advanced>
                   <Toggle
                     checked={settings.alwaysOnTop}
                     onChange={(on) => {
@@ -528,16 +947,16 @@ export default function SettingsPage({
               <Row title={t('Приветствие')}><Toggle checked={settings.startPage.greeting} onChange={(v) => onPatch({ startPage: { ...settings.startPage, greeting: v } })} /></Row>
               <Row title={t('Часы')}><Toggle checked={settings.startPage.clock} onChange={(v) => onPatch({ startPage: { ...settings.startPage, clock: v } })} /></Row>
               <Row title={t('Плитки избранного')}><Toggle checked={settings.startPage.favorites} onChange={(v) => onPatch({ startPage: { ...settings.startPage, favorites: v } })} /></Row>
-              <Row title={t('Колонок в избранном')}>
+              <Row title={t('Колонок в избранном')} {...of('startPage')}>
                 <Slider value={settings.startPage.columns} min={4} max={12} onChange={(v) => onPatch({ startPage: { ...settings.startPage, columns: v } })} width={120} />
               </Row>
               <Row title={t('Недавние страницы')}><Toggle checked={settings.startPage.recent} onChange={(v) => onPatch({ startPage: { ...settings.startPage, recent: v } })} /></Row>
               <Row title={t('Недавно закрытые вкладки')}><Toggle checked={settings.startPage.closed} onChange={(v) => onPatch({ startPage: { ...settings.startPage, closed: v } })} /></Row>
               <Row title={t('Счётчик защиты')}><Toggle checked={settings.startPage.stats} onChange={(v) => onPatch({ startPage: { ...settings.startPage, stats: v } })} /></Row>
-              <Row title={t('Погода')} hint={t('Город выбирается в самом виджете; без него никуда ничего не уходит')}>
+              <Row title={t('Погода')} hint={t('Город выбирается в самом виджете; без него никуда ничего не уходит')} {...of('startPage')}>
                 <Toggle checked={settings.startPage.weather} onChange={(v) => onPatch({ startPage: { ...settings.startPage, weather: v } })} />
               </Row>
-              <Row title={t('Шрифт главной')}>
+              <Row title={t('Шрифт главной')} {...of('startPage')}>
                 <Select
                   value={settings.startPage.font}
                   options={[
@@ -549,7 +968,7 @@ export default function SettingsPage({
                   onChange={(v) => onPatch({ startPage: { ...settings.startPage, font: v as StartPageFont } })}
                 />
               </Row>
-              <Row title={t('Вид плиток')}>
+              <Row title={t('Вид плиток')} {...of('startPage')}>
                 <Segmented
                   value={settings.startPage.tiles}
                   options={[
@@ -559,7 +978,7 @@ export default function SettingsPage({
                   onChange={(v) => onPatch({ startPage: { ...settings.startPage, tiles: v as TileStyle } })}
                 />
               </Row>
-              <Row title={t('Форма плиток и карточек')}>
+              <Row title={t('Форма плиток и карточек')} {...of('startPage')}>
                 <Select
                   value={settings.startPage.shape}
                   options={[
@@ -571,13 +990,13 @@ export default function SettingsPage({
                   onChange={(v) => onPatch({ startPage: { ...settings.startPage, shape: v as TileShape } })}
                 />
               </Row>
-              <Row title={t('Подписи под значками')} hint={t('Выключите, чтобы на плитке остался только логотип сайта')}>
+              <Row title={t('Подписи под значками')} hint={t('Выключите, чтобы на плитке остался только логотип сайта')} {...of('startPage')}>
                 <Toggle
                   checked={settings.startPage.tileLabels}
                   onChange={(v) => onPatch({ startPage: { ...settings.startPage, tileLabels: v } })}
                 />
               </Row>
-              <Row title={t('Цвет текста')} hint={settings.startPage.ink || t('По теме — тёмный на светлой, светлый на тёмной')}>
+              <Row title={t('Цвет текста')} hint={settings.startPage.ink || t('По теме — тёмный на светлой, светлый на тёмной')} {...of('startPage')}>
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
@@ -597,7 +1016,7 @@ export default function SettingsPage({
                   )}
                 </div>
               </Row>
-              <Row title={t('Расположение виджетов')} hint={t('Двигать и менять размер можно прямо на главной — кнопка «Настроить» в углу')}>
+              <Row title={t('Расположение виджетов')} hint={t('Двигать и менять размер можно прямо на главной — кнопка «Настроить» в углу')} {...of('startPage')}>
                 <button
                   className="btn"
                   onClick={() => onPatch({ startPage: { ...settings.startPage, layout: { ...DEFAULT_LAYOUT } } })}
@@ -636,7 +1055,7 @@ export default function SettingsPage({
                   </button>
                 ))}
                 {settings.searchEngine === 'custom' && (
-                  <Row title={t('Адрес поиска')} hint={t('%s подставляется вместо запроса')}>
+                  <Row title={t('Адрес поиска')} hint={t('%s подставляется вместо запроса')} {...of('customSearchUrl')} advanced>
                     <TextField value={settings.customSearchUrl} onChange={(v) => onPatch({ customSearchUrl: v })} width={300} mono />
                   </Row>
                 )}
@@ -731,16 +1150,17 @@ export default function SettingsPage({
               </Section>
 
               <Section title={t('Адресная строка')} icon={<Search width={15} height={15} />}>
-                <Row title={t('Подсказки из истории')} hint={t('Подсказки строятся локально и никуда не отправляются')}>
+                <Row title={t('Подсказки из истории')} hint={t('Подсказки строятся локально и никуда не отправляются')} {...of('historySuggestions')}>
                   <Toggle checked={settings.historySuggestions} onChange={(v) => onPatch({ historySuggestions: v })} />
                 </Row>
-                <Row title={t('Подсказки')} hint={t('Строки под тем, что вы печатаете')}>
+                <Row title={t('Подсказки')} hint={t('Строки под тем, что вы печатаете')} {...of('suggestions')}>
                   <Toggle checked={settings.suggestions} onChange={(v) => onPatch({ suggestions: v })} />
                 </Row>
-                <Row title={t('Страницы сайта')} hint={t('Не только главная, но и то, где вы были')}>
+                <Row title={t('Страницы сайта')} hint={t('Не только главная, но и то, где вы были')} {...of('siteSuggestions')} advanced>
                   <Toggle checked={settings.siteSuggestions} onChange={(v) => onPatch({ siteSuggestions: v })} />
                 </Row>
                 <Row
+                  {...of('inlineAnswers')}
                   title={t('Считать прямо в строке')}
                   hint={t('Арифметика, единицы, время в городе — без отправки запроса')}
                 >
@@ -758,7 +1178,7 @@ export default function SettingsPage({
                     {t('Очистить')}
                   </button>
                 </Row>
-                <Row title={t('Домашняя страница')} hint={t('Открывается по кнопке «домой»; пусто — стартовый экран')}>
+                <Row title={t('Домашняя страница')} hint={t('Открывается по кнопке «домой»; пусто — стартовый экран')} {...of('homepage')}>
                   <TextField value={settings.homepage} onChange={(v) => onPatch({ homepage: v })} placeholder="https://" width={260} />
                 </Row>
                 <Row title={t('Текущий движок')}>
@@ -836,16 +1256,16 @@ export default function SettingsPage({
                 icon={<Shield width={15} height={15} />}
                 description={t('С запуска заблокировано: {n}', { n: stats.ads + stats.trackers + stats.crypto })}
               >
-                <Row title={t('Реклама')} hint={t('Рекламные сети отсекаются до сетевого запроса')}>
+                <Row title={t('Реклама')} hint={t('Рекламные сети отсекаются до сетевого запроса')} {...of('blockAds')}>
                   <Toggle checked={settings.blockAds} onChange={(v) => onPatch({ blockAds: v })} />
                 </Row>
-                <Row title={t('Трекеры')} hint={t('Аналитика, пиксели, запись сессий')}>
+                <Row title={t('Трекеры')} hint={t('Аналитика, пиксели, запись сессий')} {...of('blockTrackers')}>
                   <Toggle checked={settings.blockTrackers} onChange={(v) => onPatch({ blockTrackers: v })} />
                 </Row>
-                <Row title={t('Майнеры')} hint={t('Скрипты, считающие криптовалюту на вашем процессоре')}>
+                <Row title={t('Майнеры')} hint={t('Скрипты, считающие криптовалюту на вашем процессоре')} {...of('blockCrypto')} advanced>
                   <Toggle checked={settings.blockCrypto} onChange={(v) => onPatch({ blockCrypto: v })} />
                 </Row>
-                <Row title={t('Убирать метки из ссылок')} hint={t('utm_*, fbclid, gclid, yclid и ещё около 60')}>
+                <Row title={t('Убирать метки из ссылок')} hint={t('utm_*, fbclid, gclid, yclid и ещё около 60')} {...of('stripTrackingParams')} advanced>
                   <Toggle checked={settings.stripTrackingParams} onChange={(v) => onPatch({ stripTrackingParams: v })} />
                 </Row>
               </Section>
@@ -856,6 +1276,7 @@ export default function SettingsPage({
                 description={t('EasyList и другие правила поверх встроенного списка доменов — без них реклама на YouTube и баннеры на сайтах остаются')}
               >
                 <Row
+                  {...of('filterLists')} advanced
                   title={t('Использовать списки фильтров')}
                   hint={
                     filters?.enabled
@@ -865,7 +1286,7 @@ export default function SettingsPage({
                 >
                   <Toggle checked={settings.filterLists} onChange={(v) => onPatch({ filterLists: v })} />
                 </Row>
-                <Row title={t('Прятать пустые блоки')} hint={t('Скрывает рамки и заглушки, оставшиеся от заблокированной рекламы')}>
+                <Row title={t('Прятать пустые блоки')} hint={t('Скрывает рамки и заглушки, оставшиеся от заблокированной рекламы')} {...of('cosmeticFiltering')} advanced>
                   <Toggle
                     checked={settings.cosmeticFiltering}
                     onChange={(v) => onPatch({ cosmeticFiltering: v })}
@@ -911,7 +1332,7 @@ export default function SettingsPage({
               </Section>
 
               <Section title={t('Свои списки')} icon={<Eraser width={15} height={15} />} description={t('Дополнительные домены поверх встроенного списка')}>
-                <Row title={t('Блокировать домен')}>
+                <Row title={t('Блокировать домен')} {...of('customBlocked')}>
                   <div className="flex gap-2">
                     <TextField value={newDomain} onChange={setNewDomain} placeholder="example.com" width={200} onEnter={() => {
                       if (!newDomain.trim()) return
@@ -942,7 +1363,7 @@ export default function SettingsPage({
                     ))}
                   </div>
                 )}
-                <Row title={t('Никогда не блокировать')} hint={t('Если блокировка что-то ломает на конкретном сайте')}>
+                <Row title={t('Никогда не блокировать')} hint={t('Если блокировка что-то ломает на конкретном сайте')} {...of('customAllowed')}>
                   <div className="flex gap-2">
                     <TextField value={newAllowed} onChange={setNewAllowed} placeholder="example.com" width={200} onEnter={() => {
                       if (!newAllowed.trim()) return
@@ -976,16 +1397,16 @@ export default function SettingsPage({
               </Section>
 
               <Section title={t('Соединение и данные')} icon={<Shield width={15} height={15} />}>
-                <Row title={t('Только HTTPS')} hint={t('HTTP повышается автоматически; исключение можно подтвердить вручную')}>
+                <Row title={t('Только HTTPS')} hint={t('HTTP повышается автоматически; исключение можно подтвердить вручную')} {...of('httpsOnly')}>
                   <Toggle checked={settings.httpsOnly} onChange={(v) => onPatch({ httpsOnly: v })} />
                 </Row>
-                <Row title={t('Блокировать сторонние cookie')} hint={t('Разрывает сквозную слежку между сайтами')}>
+                <Row title={t('Блокировать сторонние cookie')} hint={t('Разрывает сквозную слежку между сайтами')} {...of('blockThirdPartyCookies')}>
                   <Toggle checked={settings.blockThirdPartyCookies} onChange={(v) => onPatch({ blockThirdPartyCookies: v })} />
                 </Row>
-                <Row title={t('Заголовки DNT и Sec-GPC')}>
+                <Row title={t('Заголовки DNT и Sec-GPC')} {...of('doNotTrack')} advanced>
                   <Toggle checked={settings.doNotTrack} onChange={(v) => onPatch({ doNotTrack: v })} />
                 </Row>
-                <Row title="WebRTC" hint={t('Ограничивает утечку локальных IP-адресов через видеозвонки')}>
+                <Row title="WebRTC" hint={t('Ограничивает утечку локальных IP-адресов через видеозвонки')} {...of('webrtcPolicy')} advanced>
                   <Select
                     value={settings.webrtcPolicy}
                     onChange={(v) => onPatch({ webrtcPolicy: v })}
@@ -998,6 +1419,7 @@ export default function SettingsPage({
                   />
                 </Row>
                 <Row
+                  {...of('dnsProvider')}
                   title={t('DNS через HTTPS')}
                   hint={t('Иначе каждый адрес уходит провайдеру открытым текстом')}
                 >
@@ -1016,7 +1438,7 @@ export default function SettingsPage({
                   />
                 </Row>
                 {settings.dnsProvider === 'custom' && (
-                  <Row title={t('Адрес DNS-сервера')} hint={t('Шаблон RFC 8484, только https://')}>
+                  <Row title={t('Адрес DNS-сервера')} hint={t('Шаблон RFC 8484, только https://')} {...of('dohCustom')} advanced>
                     <input
                       className="field h-[32px] w-[280px]"
                       defaultValue={settings.dohCustom}
@@ -1028,23 +1450,24 @@ export default function SettingsPage({
                 )}
                 {settings.dnsProvider !== 'system' && (
                   <Row
+                    {...of('dohFallback')} advanced
                     title={t('Возвращаться к системному DNS')}
                     hint={t('Без этого сеть, где защищённый DNS не работает, не откроется вовсе')}
                   >
                     <Toggle checked={settings.dohFallback} onChange={(v) => onPatch({ dohFallback: v })} />
                   </Row>
                 )}
-                <Row title={t('Сохранять историю')}>
+                <Row title={t('Сохранять историю')} {...of('saveHistory')}>
                   <Toggle checked={settings.saveHistory} onChange={(v) => onPatch({ saveHistory: v })} />
                 </Row>
-                <Row title={t('Очищать данные при выходе')} hint={t('Cookies, кэш и история удаляются при закрытии')}>
+                <Row title={t('Очищать данные при выходе')} hint={t('Cookies, кэш и история удаляются при закрытии')} {...of('clearOnExit')}>
                   <Toggle checked={settings.clearOnExit} onChange={(v) => onPatch({ clearOnExit: v })} />
                 </Row>
               </Section>
 
               <Section title={t('Доступ сайтов к устройствам')} icon={<Alert width={15} height={15} />} description={t('По умолчанию всё спрашивается или запрещается')}>
                 {PERMISSION_ROWS.map((row) => (
-                  <Row key={row.key} title={t(row.title)} hint={t(row.hint)}>
+                  <Row key={row.key} title={t(row.title)} hint={t(row.hint)} {...of('permissions')}>
                     <Select
                       value={settings.permissions[row.key]}
                       onChange={(value) => onPatch({ permissions: { ...settings.permissions, [row.key]: value } })}
@@ -1141,39 +1564,39 @@ export default function SettingsPage({
           {which === 'speed' && (
             <>
               <Section title={t('Ускорение')} icon={<Zap width={15} height={15} />} description={t('Часть параметров вступает в силу после перезапуска')}>
-                <Row title={t('Аппаратное ускорение')} hint={t('Отрисовка и декодирование видео на видеокарте')}>
+                <Row title={t('Аппаратное ускорение')} hint={t('Отрисовка и декодирование видео на видеокарте')} {...of('hardwareAcceleration')}>
                   <Toggle checked={settings.hardwareAcceleration} onChange={(v) => onPatch({ hardwareAcceleration: v })} />
                 </Row>
-                <Row title={t('Предподключение')} hint={t('TLS-соединение устанавливается ещё до клика по ссылке')}>
+                <Row title={t('Предподключение')} hint={t('TLS-соединение устанавливается ещё до клика по ссылке')} {...of('preconnect')} advanced>
                   <Toggle checked={settings.preconnect} onChange={(v) => onPatch({ preconnect: v })} />
                 </Row>
-                <Row title={t('Предзагрузка DNS')}>
+                <Row title={t('Предзагрузка DNS')} {...of('prefetchDns')} advanced>
                   <Toggle checked={settings.prefetchDns} onChange={(v) => onPatch({ prefetchDns: v })} />
                 </Row>
-                <Row title={t('Плавная прокрутка')}>
+                <Row title={t('Плавная прокрутка')} {...of('smoothScrolling')} advanced>
                   <Toggle checked={settings.smoothScrolling} onChange={(v) => onPatch({ smoothScrolling: v })} />
                 </Row>
-                <Row title={t('Размер кэша')}>
+                <Row title={t('Размер кэша')} {...of('cacheSizeMb')} advanced>
                   <Slider value={settings.cacheSizeMb} min={128} max={4096} step={128} onChange={(v) => onPatch({ cacheSizeMb: v })} format={(v) => (v >= 1024 ? `${(v / 1024).toFixed(1)} ГБ` : `${v} МБ`)} />
                 </Row>
-                <Row title={t('Масштаб страниц по умолчанию')}>
+                <Row title={t('Масштаб страниц по умолчанию')} {...of('defaultZoom')} advanced>
                   <Slider value={settings.defaultZoom} min={-3} max={4} step={0.5} onChange={(v) => onPatch({ defaultZoom: v })} format={(v) => `${Math.round(1.2 ** v * 100)}%`} />
                 </Row>
               </Section>
 
               <Section title={t('Память')} icon={<Zap width={15} height={15} />}>
-                <Row title={t('Усыплять фоновые вкладки')} hint={t('Освобождает память неактивных вкладок')}>
+                <Row title={t('Усыплять фоновые вкладки')} hint={t('Освобождает память неактивных вкладок')} {...of('sleepBackgroundTabs')}>
                   <Toggle checked={settings.sleepBackgroundTabs} onChange={(v) => onPatch({ sleepBackgroundTabs: v })} />
                 </Row>
                 {settings.sleepBackgroundTabs && (
-                  <Row title={t('Засыпать через')}>
+                  <Row title={t('Засыпать через')} {...of('sleepAfterMinutes')} advanced>
                     <Slider value={settings.sleepAfterMinutes} min={1} max={120} onChange={(v) => onPatch({ sleepAfterMinutes: v })} format={(v) => `${v} мин`} />
                   </Row>
                 )}
-                <Row title={t('Восстанавливать вкладки при запуске')}>
+                <Row title={t('Восстанавливать вкладки при запуске')} {...of('restoreSession')}>
                   <Toggle checked={settings.restoreSession} onChange={(v) => onPatch({ restoreSession: v })} />
                 </Row>
-                <Row title={t('Ленивое восстановление')} hint={t('При старте грузится только активная вкладка')}>
+                <Row title={t('Ленивое восстановление')} hint={t('При старте грузится только активная вкладка')} {...of('lazyRestore')} advanced>
                   <Toggle checked={settings.lazyRestore} onChange={(v) => onPatch({ lazyRestore: v })} />
                 </Row>
               </Section>
@@ -1194,7 +1617,7 @@ export default function SettingsPage({
                   {t('Выбрать')}
                 </button>
               </Row>
-              <Row title={t('Спрашивать, куда сохранять')} hint={t('Диалог для каждого файла')}>
+              <Row title={t('Спрашивать, куда сохранять')} hint={t('Диалог для каждого файла')} {...of('askWhereToSave')} advanced>
                 <Toggle checked={settings.askWhereToSave} onChange={(v) => onPatch({ askWhereToSave: v })} />
               </Row>
               <Row
@@ -1391,6 +1814,7 @@ export default function SettingsPage({
                 description={t('Тот же экран, что и при первом запуске')}
               >
                 <Row
+                  {...of('onboarded')}
                   title={t('Пройти настройку заново')}
                   hint={t('Профиль, тема, прозрачность, обои, поиск и защита — по шагам')}
                 >
@@ -1480,6 +1904,7 @@ export default function SettingsPage({
                 description={t('Widevine — без него Netflix, Spotify и Кинопоиск не играют')}
               >
                 <Row
+                  {...of('drm')}
                   title={t('Разрешить DRM')}
                   hint={drmHint(drm, settings.drm)}
                 >
@@ -1556,6 +1981,7 @@ export default function SettingsPage({
                 description={t('Подчёркивает ошибки в текстовых полях на страницах')}
               >
                 <Row
+                  {...of('spellcheck')}
                   title={t('Проверять правописание')}
                   hint={t('Русский и английский. Словари скачиваются с серверов Google при первом включении — это единственный запрос, который браузер делает сам')}
                 >
@@ -1590,13 +2016,13 @@ export default function SettingsPage({
                 title={t('Уведомления')}
                 icon={<Alert width={15} height={15} />}
               >
-                <Row title={t('Не беспокоить')}>
+                <Row title={t('Не беспокоить')} {...of('doNotDisturb')}>
                   <Toggle
                     checked={settings.doNotDisturb}
                     onChange={(value) => onPatch({ doNotDisturb: value })}
                   />
                 </Row>
-                <Row title={t('Не запускать видео и звук самостоятельно')}>
+                <Row title={t('Не запускать видео и звук самостоятельно')} {...of('blockAutoplay')} advanced>
                   <Toggle
                     checked={settings.blockAutoplay}
                     onChange={(value) => onPatch({ blockAutoplay: value })}
@@ -1687,12 +2113,27 @@ export default function SettingsPage({
 
   return (
     <Looking.Provider value={looking}>
+    <FullSettings.Provider value={settings.settingsFull}>
     <div className="relative z-10 flex h-full min-h-0">
       {/* nav */}
       <nav className="contain flex w-[218px] shrink-0 flex-col gap-1 overflow-y-auto p-3" style={{ borderRight: '1px solid var(--line)' }}>
         <div className="px-2 pb-3 pt-1">
           <div className="text-[17px] font-semibold tracking-[-0.02em]">{t('Настройки')}</div>
           <div className="text-sm text-dim">Nya Browser</div>
+        </div>
+
+        {/* Two hundred settings is a page nobody reads. The short form is the
+            three dozen that most people actually change; the full one is
+            everything, and it is one press away rather than hidden. */}
+        <div className="mb-2 px-0.5">
+          <Segmented
+            value={settings.settingsFull ? 'full' : 'simple'}
+            onChange={(value) => onPatch({ settingsFull: value === 'full' })}
+            options={[
+              { value: 'simple', label: t('Простые') },
+              { value: 'full', label: t('Все') }
+            ]}
+          />
         </div>
 
         <div className="relative mb-1.5 px-0.5">
@@ -1823,6 +2264,7 @@ export default function SettingsPage({
         />
       )}
     </div>
+    </FullSettings.Provider>
     </Looking.Provider>
   )
 }

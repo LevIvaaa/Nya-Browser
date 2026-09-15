@@ -13,7 +13,7 @@ import {
   type Session,
   type WebContents
 } from 'electron'
-import { copyFileSync, existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'fs'
+import { copyFileSync, existsSync, readFileSync, renameSync, unlinkSync, writeFileSync, readdirSync } from 'fs'
 import { basename, extname, join } from 'path'
 import { randomUUID } from 'crypto'
 import { URL } from 'url'
@@ -1324,16 +1324,89 @@ export class BrowserWindow {
     hardenSession(this.ses)
     this.win.setAlwaysOnTop(s.alwaysOnTop)
     this.tellPagesAboutGestures()
+    this.drawChromeAt(s.uiScale)
+    this.tellPagesAboutPinch()
+    this.startWallpaperTurns()
     this.layout()
     this.send('state:settings', s)
   }
 
-  /** Every open page has to know whether a right-drag means anything. */
-  private tellPagesAboutGestures() {
-    const on = settings.get().mouseGestures
+  /**
+   * How big the browser's own interface is drawn.
+   *
+   * Chromium's zoom factor, applied to the two views that hold the chrome —
+   * not to any page. A large screen at arm's length and a laptop on a train
+   * want different answers, and the operating system's own scaling is a
+   * decision about every application at once.
+   */
+  private drawChromeAt(scale: number) {
+    for (const view of [this.chrome, this.overlay]) {
+      const wc = view.webContents
+      if (!wc.isDestroyed()) wc.setZoomFactor(scale)
+    }
+  }
+
+  /**
+   * Two fingers on a trackpad, or a pinch on a touchscreen.
+   *
+   * Chromium calls this visual zoom and ships it off: without limits above
+   * one, the gesture does nothing at all. It is per page, so every tab has to
+   * be told, including the ones made later.
+   */
+  private tellPagesAboutPinch() {
+    const on = settings.get().pinchZoom
     for (const tab of this.tabs) {
       const wc = tab.wc
-      if (wc && !wc.isDestroyed()) wc.send('gesture:on', on)
+      if (wc && !wc.isDestroyed()) void wc.setVisualZoomLevelLimits(1, on ? 3 : 1).catch(() => undefined)
+    }
+  }
+
+  /**
+   * Wallpapers taking turns.
+   *
+   * One timer for the window, restarted whenever the settings change. The
+   * picture is written back into the settings like any other, so the start
+   * page and every other window learn about it the ordinary way — and the one
+   * that is up survives a restart, rather than jumping on every launch.
+   */
+  private wallpaperTimer: NodeJS.Timeout | null = null
+
+  private startWallpaperTurns() {
+    if (this.wallpaperTimer) {
+      clearInterval(this.wallpaperTimer)
+      this.wallpaperTimer = null
+    }
+    const rotate = settings.get().background.rotate
+    // Only the first window does the turning: two windows with one timer each
+    // would race, and the picture would change twice as often as asked.
+    if (!rotate.on || rotate.files.length < 2 || this.offsetFromFirst || this.incognito) return
+    this.wallpaperTimer = setInterval(
+      () => this.nextWallpaper(),
+      Math.max(15, rotate.everyMinutes) * 60_000
+    )
+  }
+
+  /** The next picture in the list, or any other one when shuffling. */
+  private nextWallpaper() {
+    const background = settings.get().background
+    const { files, shuffle } = background.rotate
+    if (files.length < 2) return
+    const at = files.indexOf(background.file)
+    const next = shuffle
+      ? files[(at + 1 + Math.floor(Math.random() * (files.length - 1))) % files.length]
+      : files[(at + 1) % files.length]
+    if (!next || next === background.file) return
+    settings.patch({ background: { ...background, kind: 'image', file: next } })
+  }
+
+  /** Every open page has to know whether a right-drag means anything. */
+  private tellPagesAboutGestures() {
+    const s = settings.get()
+    for (const tab of this.tabs) {
+      const wc = tab.wc
+      if (!wc || wc.isDestroyed()) continue
+      wc.send('gesture:on', s.mouseGestures)
+      wc.send('hints:on', { on: s.linkHints, key: s.linkHintsKey })
     }
   }
 
@@ -1343,6 +1416,11 @@ export class BrowserWindow {
     if (!wc) return
     attachLog(wc, `tab${tab.id}`)
     wc.setZoomLevel(settings.get().defaultZoom)
+    // Chromium ships with the pinch gesture switched off; a tab made after the
+    // settings were applied has to be told the same thing they were.
+    void wc
+      .setVisualZoomLevelLimits(1, settings.get().pinchZoom ? 3 : 1)
+      .catch(() => undefined)
 
     // Chromium counts the matches as it goes; without this the search box
     // could only move the page about and hope you noticed.
@@ -1359,7 +1437,10 @@ export class BrowserWindow {
     // fresh isolated world that has never heard of any of this, so telling it
     // once when the tab was made leaves every page after that deaf.
     wc.on('dom-ready', () => {
-      if (!wc.isDestroyed()) wc.send('gesture:on', settings.get().mouseGestures)
+      if (wc.isDestroyed()) return
+      const s = settings.get()
+      wc.send('gesture:on', s.mouseGestures)
+      wc.send('hints:on', { on: s.linkHints, key: s.linkHintsKey })
     })
 
     wc.on('page-title-updated', (_e, title) => {
@@ -1632,8 +1713,10 @@ export class BrowserWindow {
         }
       }
       // Opened from this page, and the list says so: a row of links from one
-      // article is that article's children, not eight strangers.
-      this.newTab(url, disposition === 'background-tab', tab.id)
+      // article is that article's children, not eight strangers. Whether it
+      // opens behind or in front is what the middle button was asked to mean.
+      const behind = disposition === 'background-tab' && settings.get().middleClick === 'background'
+      this.newTab(url, behind, tab.id)
       return { action: 'deny' }
     })
 
@@ -1868,12 +1951,29 @@ export class BrowserWindow {
     this.raiseOverlay()
 
     if (!background) this.activeId = tab.id
-    if (url && url !== START_URL) tab.load(normalizeInput(url, settings.get()))
+    // Nobody said where this tab goes, so the settings do. The start page is
+    // the browser's own and needs no loading; the other two are addresses.
+    const where = url ?? this.blankTab()
+    if (where && where !== START_URL) tab.load(normalizeInput(where, settings.get()))
 
     this.showActive()
     this.persistSession()
     this.broadcast()
     return tab.id
+  }
+
+  /**
+   * What a tab that was opened without a destination holds.
+   *
+   * The start page is the default because it is the one that has your things
+   * on it. 'blank' is for people who find any start page a distraction, and
+   * 'home' for the ones who have a page they always begin at.
+   */
+  private blankTab(): string {
+    const s = settings.get()
+    if (s.newTabShows === 'home' && s.homepage) return s.homepage
+    if (s.newTabShows === 'blank') return 'about:blank'
+    return START_URL
   }
 
   switchTab(id: number) {
@@ -2364,6 +2464,7 @@ export class BrowserWindow {
     const group: TabGroup = {
       id: ++this.groupSeq,
       name: name ?? t('Новая группа'),
+      icon: '',
       color: GROUP_COLOURS[this.groups.length % GROUP_COLOURS.length],
       pinned: false,
       collapsed: false
@@ -2413,6 +2514,23 @@ export class BrowserWindow {
    * anything that is a colour is allowed. The shape is checked because this
    * value is interpolated straight into the strip's styles.
    */
+  /**
+   * One emoji on a group.
+   *
+   * With four groups and a colour each, the colours stop telling them apart —
+   * three of them are blue-ish by the fourth. A picture is read at a glance and
+   * survives somebody changing the colours.
+   */
+  setGroupIcon(groupId: number, icon: string) {
+    const group = this.groups.find((g) => g.id === groupId)
+    if (!group) return
+    // One character as a person sees it, which is not one as the string sees
+    // it: a flag is two code points and a family can be seven.
+    group.icon = [...icon.trim()].slice(0, 3).join('').slice(0, 12)
+    this.persistSession()
+    this.sendGroups()
+  }
+
   setGroupColour(groupId: number, color: string) {
     const group = this.groups.find((g) => g.id === groupId)
     if (!group || !/^#[0-9a-f]{6}$/i.test(color)) return
@@ -5059,6 +5177,23 @@ export class BrowserWindow {
   }
 
   /* ----------------------------------------------------------- wallpapers */
+  /**
+   * Every picture this profile has imported.
+   *
+   * Only names, and only of files that are still there: the rotation list is
+   * built from these, and a name that has been deleted from the folder would
+   * be a turn where the wallpaper simply vanished.
+   */
+  wallpapers(): string[] {
+    try {
+      return readdirSync(profiles.wallpaperDir())
+        .filter((name) => WALLPAPER_EXTENSIONS.includes(extname(name).toLowerCase().slice(1)))
+        .slice(0, 200)
+    } catch {
+      return []
+    }
+  }
+
   async importWallpaper(): Promise<string | null> {
     const result = await dialog.showOpenDialog(this.win, {
       title: t('Выберите обои'),
@@ -5332,6 +5467,7 @@ export class BrowserWindow {
   dispose() {
     if (this.sleepTimer) clearInterval(this.sleepTimer)
     if (this.edgeTimer) clearInterval(this.edgeTimer)
+    if (this.wallpaperTimer) clearInterval(this.wallpaperTimer)
     this.persistSession()
     this.saveBounds()
   }
