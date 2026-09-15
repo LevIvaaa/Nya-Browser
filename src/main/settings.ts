@@ -23,6 +23,7 @@ export const DNS_PROVIDERS: DnsProvider[] = [
 import type {
   BackgroundSettings,
   CustomEngine,
+  LookPreset,
   DnsProvider,
   Favorite,
   PermissionSettings,
@@ -32,157 +33,34 @@ import type {
   WidgetBox,
   WidgetId
 } from '../shared/types'
+import {
+  DEFAULT_BACKGROUND,
+  LOOK_KEYS,
+  DEFAULT_MENU,
+  DEFAULT_TOOLBAR,
+  DEFAULT_PERMISSIONS,
+  DEFAULT_PLACE,
+  DEFAULT_SETTINGS,
+  DEFAULT_START_PAGE
+} from '../shared/defaults'
 import { DEFAULT_LAYOUT, GRID_COLUMNS } from '../shared/startPage'
+import { MENU_IDS, TOOLBAR_IDS } from '../shared/chrome'
 import { SHORTCUT_IDS, isCombo } from '../shared/shortcuts'
 import { isKnownLanguage } from '../shared/i18n'
 
 /** Bump when the shape changes in a way sanitize() cannot infer. */
 export const SETTINGS_VERSION = 1
 
-export const DEFAULT_BACKGROUND: BackgroundSettings = {
-  kind: 'aurora',
-  intensity: 'medium',
-  file: '',
-  fit: 'cover',
-  blur: 0,
-  dim: 20,
-  muted: true,
-  speed: 1,
-  pauseWhenBrowsing: true
-}
-
-export const DEFAULT_PERMISSIONS: PermissionSettings = {
-  camera: 'ask',
-  microphone: 'ask',
-  geolocation: 'ask',
-  notifications: 'block',
-  clipboard: 'ask',
-  midi: 'block',
-  usb: 'block',
-  fullscreen: 'allow',
-  download: 'ask'
-}
-
-export const DEFAULT_PLACE: WeatherSettings = { place: '', lat: 0, lon: 0, fahrenheit: false }
-
-export const DEFAULT_START_PAGE: StartPageSettings = {
-  greeting: true,
-  clock: true,
-  favorites: true,
-  recent: true,
-  stats: true,
-  closed: true,
-  weather: false,
-  columns: 8,
-  font: 'system',
-  tiles: 'card',
-  shape: 'rounded',
-  tileLabels: true,
-  tileFill: 100,
-  ink: '',
-  layout: { ...DEFAULT_LAYOUT },
-  place: { ...DEFAULT_PLACE }
-}
-
-export const DEFAULT_SETTINGS: Settings = {
-  onboarded: false,
-  language: '',
-  theme: 'system',
-  accent: '#7C6CFF',
-  radius: 14,
-  compact: false,
-  // Enough of the wallpaper to see, enough panel to read small text on.
-  glass: 55,
-  reduceMotion: false,
-  animationSpeed: 1,
-  background: { ...DEFAULT_BACKGROUND },
-
-  tabPosition: 'top',
-  tabAutoHide: false,
-  railWidth: 232,
-  tabMaxWidth: 230,
-  closeButton: 'hover',
-  newTabAfterCurrent: false,
-  middleClickClose: true,
-  confirmCloseMultiple: true,
-
-  startPage: { ...DEFAULT_START_PAGE },
-  // Empty on purpose. A new browser filling the start page with sites nobody
-  // asked for is advertising, and it buries the "Добавить" tile under eight
-  // things to delete first.
-  favorites: [],
-  searchEngine: 'duckduckgo',
-  customEngines: [] as CustomEngine[],
-  inlineAnswers: true,
-  suggestions: true,
-  siteSuggestions: true,
-  customSearchUrl: 'https://searx.be/search?q=%s',
-  historySuggestions: true,
-  homepage: '',
-
-  blockAds: true,
-  blockTrackers: true,
-  blockCrypto: true,
-  filterLists: true,
-  cosmeticFiltering: true,
-  customBlocked: [],
-  customAllowed: [],
-  httpsOnly: true,
-  blockThirdPartyCookies: true,
-  doNotTrack: true,
-  stripTrackingParams: true,
-  permissions: { ...DEFAULT_PERMISSIONS },
-  saveHistory: true,
-  clearOnExit: false,
-  passwordsAskOnStart: false,
-  passwordsHello: false,
-  webrtcPolicy: 'public_only',
-  spellcheck: true,
-  spellcheckLanguages: ['ru', 'en-US'],
-  drm: false,
-
-  hardwareAcceleration: true,
-  preconnect: true,
-  prefetchDns: true,
-  dnsProvider: 'system',
-  dohCustom: '',
-  dohFallback: true,
-  smoothScrolling: true,
-  sleepBackgroundTabs: true,
-  sleepAfterMinutes: 20,
-  lazyRestore: true,
-  restoreSession: true,
-  cacheSizeMb: 512,
-  defaultZoom: 0,
-
-  doNotDisturb: false,
-  blockAutoplay: false,
-  cardHello: true,
-
-  shortcuts: {},
-
-  afterClose: 'opener' as const,
-  alwaysOnTop: false,
-  mouseGestures: false,
-  tabPreview: true,
-
-  reader: {
-    theme: 'system' as const,
-    size: 19,
-    serif: false,
-    width: 44,
-    spacing: 1.65,
-    textOnly: false
-  },
-
-  downloadDir: '',
-  askWhereToSave: false,
-  downloadLimit: 0,
-  downloadAtOnce: 3,
-  downloadNameRule: '',
-  downloadUnzip: false,
-  downloadAsk: true
-}
+export {
+  DEFAULT_BACKGROUND,
+  LOOK_KEYS,
+  DEFAULT_MENU,
+  DEFAULT_TOOLBAR,
+  DEFAULT_PERMISSIONS,
+  DEFAULT_PLACE,
+  DEFAULT_SETTINGS,
+  DEFAULT_START_PAGE
+} from '../shared/defaults'
 
 /* -------------------------------------------------------------- validation */
 const clamp = (n: unknown, lo: number, hi: number, fallback: number) => {
@@ -251,6 +129,24 @@ function sanitizeEngines(v: unknown): CustomEngine[] {
   return out
 }
 
+/** A file name inside the profile's own wallpapers folder, and nothing else. */
+const WALLPAPER_NAME = /^[\w. -]{1,120}$/
+
+/** Wallpapers taking turns: the list is names, the clock is minutes. */
+function sanitizeRotation(v: unknown, d: BackgroundSettings['rotate']): BackgroundSettings['rotate'] {
+  const r = (v ?? {}) as Partial<BackgroundSettings['rotate']>
+  return {
+    on: bool(r.on, d.on),
+    // A quarter of an hour is the shortest that is not a distraction; a week
+    // is the longest that still counts as taking turns.
+    everyMinutes: Math.round(clamp(r.everyMinutes, 15, 10080, d.everyMinutes)),
+    files: Array.isArray(r.files)
+      ? [...new Set(r.files.filter((f): f is string => typeof f === 'string' && WALLPAPER_NAME.test(f)))].slice(0, 60)
+      : d.files,
+    shuffle: bool(r.shuffle, d.shuffle)
+  }
+}
+
 function sanitizeBackground(v: unknown): BackgroundSettings {
   const b = (v ?? {}) as Partial<BackgroundSettings>
   const d = DEFAULT_BACKGROUND
@@ -264,8 +160,69 @@ function sanitizeBackground(v: unknown): BackgroundSettings {
     dim: clamp(b.dim, 0, 85, d.dim),
     muted: bool(b.muted, d.muted),
     speed: clamp(b.speed, 0.25, 2, d.speed),
-    pauseWhenBrowsing: bool(b.pauseWhenBrowsing, d.pauseWhenBrowsing)
+    pauseWhenBrowsing: bool(b.pauseWhenBrowsing, d.pauseWhenBrowsing),
+    rotate: sanitizeRotation(b.rotate, d.rotate)
   }
+}
+
+/** "HH:MM" on a 24-hour clock, or the hour it was. */
+const timeOfDay = (v: unknown, fallback: string) =>
+  /^([01]\d|2[0-3]):[0-5]\d$/.test(String(v)) ? String(v) : fallback
+
+/** Light by day and dark by night, with two hours that are really hours. */
+function sanitizeSchedule(v: unknown, d: Settings['themeSchedule']): Settings['themeSchedule'] {
+  const t = (v ?? {}) as Partial<Settings['themeSchedule']>
+  return { on: bool(t.on, d.on), light: timeOfDay(t.light, d.light), dark: timeOfDay(t.dark, d.dark) }
+}
+
+/**
+ * Saved looks.
+ *
+ * Each one carries only appearance settings — running one must never be able
+ * to turn the ad blocker off or point the browser at somebody's search engine,
+ * so anything outside this list is dropped on the way in.
+ */
+
+function sanitizeLooks(v: unknown, d: LookPreset[]): LookPreset[] {
+  if (!Array.isArray(v)) return d
+  const out: LookPreset[] = []
+  const taken = new Set<string>()
+  for (const row of v.slice(0, 24)) {
+    const one = (row ?? {}) as Partial<LookPreset>
+    const id = String(one.id ?? '').slice(0, 40)
+    if (!id || taken.has(id)) continue
+    const look: Partial<Settings> = {}
+    const given = (one.look ?? {}) as Record<string, unknown>
+    for (const key of LOOK_KEYS) {
+      if (key in given) (look as Record<string, unknown>)[key] = given[key]
+    }
+    taken.add(id)
+    out.push({ id, name: String(one.name ?? '').slice(0, 60), look })
+  }
+  return out
+}
+
+/**
+ * The toolbar and the menu: a list of ids the interface knows how to draw.
+ *
+ * Anything unknown is dropped rather than kept and ignored — a button that
+ * cannot be drawn would be an invisible gap nobody could get rid of. An empty
+ * result falls back to the way it comes, because a toolbar with nothing on it
+ * is not a choice anybody made on purpose.
+ */
+const idList = (v: unknown, allowed: readonly string[], fallback: string[]) => {
+  if (!Array.isArray(v)) return [...fallback]
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const item of v.slice(0, 40)) {
+    const id = String(item ?? '')
+    if (!allowed.includes(id)) continue
+    // Spacers may repeat; nothing else may.
+    if (id !== 'space' && seen.has(id)) continue
+    seen.add(id)
+    out.push(id)
+  }
+  return out.length > 0 ? out : [...fallback]
 }
 
 function sanitizePermissions(v: unknown): PermissionSettings {
@@ -390,9 +347,18 @@ export function sanitize(input: Partial<Settings>): Settings {
     onboarded: bool(input.onboarded, d.onboarded),
     language: isKnownLanguage(String(input.language)) ? String(input.language) : '',
     theme: oneOf(input.theme, ['light', 'dark', 'system'] as const, d.theme),
+    themeSchedule: sanitizeSchedule(input.themeSchedule, d.themeSchedule),
+    highContrast: bool(input.highContrast, d.highContrast),
     accent: /^#[0-9a-f]{6}$/i.test(String(input.accent)) ? String(input.accent) : d.accent,
+    accentFromProfile: bool(input.accentFromProfile, d.accentFromProfile),
     radius: clamp(input.radius, 0, 28, d.radius),
     compact: bool(input.compact, d.compact),
+    density: Math.round(clamp(input.density, 0, 2, d.density) * 2) / 2,
+    // Below four fifths the text stops being readable, above two fifths more
+    // the toolbar stops fitting on a laptop.
+    uiScale: Math.round(clamp(input.uiScale, 0.8, 1.4, d.uiScale) * 20) / 20,
+    uiFont: /^[\w .-]{0,64}$/.test(String(input.uiFont ?? '')) ? String(input.uiFont ?? '') : d.uiFont,
+    looks: sanitizeLooks(input.looks, d.looks),
     glass: clamp(input.glass, 0, 100, d.glass),
     reduceMotion: bool(input.reduceMotion, d.reduceMotion),
     animationSpeed: clamp(input.animationSpeed, 0.4, 2, d.animationSpeed),
@@ -405,6 +371,8 @@ export function sanitize(input: Partial<Settings>): Settings {
     closeButton: oneOf(input.closeButton, ['always', 'hover', 'active'] as const, d.closeButton),
     newTabAfterCurrent: bool(input.newTabAfterCurrent, d.newTabAfterCurrent),
     middleClickClose: bool(input.middleClickClose, d.middleClickClose),
+    middleClick: oneOf(input.middleClick, ['background', 'foreground'] as const, d.middleClick),
+    newTabShows: oneOf(input.newTabShows, ['start', 'home', 'blank'] as const, d.newTabShows),
     confirmCloseMultiple: bool(input.confirmCloseMultiple, d.confirmCloseMultiple),
 
     startPage: sanitizeStartPage(input.startPage),
@@ -475,6 +443,15 @@ export function sanitize(input: Partial<Settings>): Settings {
     alwaysOnTop: bool(input.alwaysOnTop, d.alwaysOnTop),
     mouseGestures: bool(input.mouseGestures, d.mouseGestures),
     tabPreview: bool(input.tabPreview, d.tabPreview),
+    pinchZoom: bool(input.pinchZoom, d.pinchZoom),
+    linkHints: bool(input.linkHints, d.linkHints),
+    // One letter, and not one that already means something while reading.
+    linkHintsKey: /^[a-z]$/.test(String(input.linkHintsKey)) ? String(input.linkHintsKey) : d.linkHintsKey,
+    feedback: bool(input.feedback, d.feedback),
+    shortcutsInTips: bool(input.shortcutsInTips, d.shortcutsInTips),
+    toolbar: idList(input.toolbar, TOOLBAR_IDS, d.toolbar),
+    menuOrder: idList(input.menuOrder, MENU_IDS, d.menuOrder),
+    settingsFull: bool(input.settingsFull, d.settingsFull),
     reader: sanitizeReader(input.reader, d.reader),
 
     downloadDir: str(input.downloadDir, 400, d.downloadDir),

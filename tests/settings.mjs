@@ -94,6 +94,64 @@ check('a bad accent falls back', sanitize({ accent: 'red' }).accent, DEFAULT_SET
 check('a good accent is kept', sanitize({ accent: '#00FF88' }).accent, '#00FF88')
 check('glass is clamped', sanitize({ glass: 400 }).glass, 100)
 
+// ---- the look, which somebody can now arrange and share
+
+check('the interface scale is clamped', sanitize({ uiScale: 9 }).uiScale, 1.4)
+check('and rounded to a step worth having', sanitize({ uiScale: 1.113 }).uiScale, 1.1)
+check('density is clamped', sanitize({ density: -3 }).density, 0)
+check('a font name is kept', sanitize({ uiFont: 'Segoe UI' }).uiFont, 'Segoe UI')
+check('one that could be markup is not', sanitize({ uiFont: '<script>' }).uiFont, '')
+
+check('an hour is an hour', sanitize({ themeSchedule: { on: true, light: '06:30', dark: '22:00' } }).themeSchedule, {
+  on: true,
+  light: '06:30',
+  dark: '22:00'
+})
+check(
+  'a twenty-fifth hour is not',
+  sanitize({ themeSchedule: { on: true, light: '25:00', dark: '22:00' } }).themeSchedule.light,
+  '07:00'
+)
+
+check(
+  'a toolbar of real buttons is kept',
+  sanitize({ toolbar: ['back', 'address', 'menu'] }).toolbar,
+  ['back', 'address', 'menu']
+)
+check(
+  'a button nothing knows how to draw is dropped',
+  sanitize({ toolbar: ['back', 'launch-missiles', 'menu'] }).toolbar,
+  ['back', 'menu']
+)
+check('a gap may repeat', sanitize({ toolbar: ['back', 'space', 'address', 'space', 'menu'] }).toolbar.length, 5)
+check('a button may not', sanitize({ toolbar: ['back', 'back', 'menu'] }).toolbar, ['back', 'menu'])
+check('an empty toolbar is not a choice', sanitize({ toolbar: [] }).toolbar, DEFAULT_SETTINGS.toolbar)
+check('nor is one made of nonsense', sanitize({ toolbar: ['nope'] }).toolbar, DEFAULT_SETTINGS.toolbar)
+check(
+  'the menu is checked the same way',
+  sanitize({ menuOrder: ['settings', 'history', 'nope'] }).menuOrder,
+  ['settings', 'history']
+)
+
+const look = sanitize({
+  looks: [{ id: 'a', name: 'Вечер', look: { theme: 'dark', accent: '#112233', blockAds: false, homepage: 'https://x' } }]
+}).looks
+check('a saved look keeps what it may', look[0].look.theme, 'dark')
+check('and the accent with it', look[0].look.accent, '#112233')
+check('a saved look cannot turn the blocker off', 'blockAds' in look[0].look, false)
+check('nor point the browser anywhere', 'homepage' in look[0].look, false)
+check('a look without an id is not a look', sanitize({ looks: [{ name: 'x' }] }).looks, [])
+
+check('wallpaper turns need real names', sanitize({ background: { rotate: { files: ['a.jpg', '../../etc/passwd'] } } }).background.rotate.files, ['a.jpg'])
+check(
+  'and a sane clock',
+  sanitize({ background: { rotate: { everyMinutes: 1 } } }).background.rotate.everyMinutes,
+  15
+)
+
+check('the hint key is one letter', sanitize({ linkHintsKey: 'ff' }).linkHintsKey, DEFAULT_SETTINGS.linkHintsKey)
+check('and a real one is kept', sanitize({ linkHintsKey: 'j' }).linkHintsKey, 'j')
+
 for (const { name, actual, expected } of failures) {
   console.log(`FAIL ${name}`)
   console.log(`  got      ${JSON.stringify(actual)}`)

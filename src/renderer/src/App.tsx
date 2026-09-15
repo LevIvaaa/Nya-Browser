@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useBrowser } from './state/useBrowser'
+import { useLook } from './look'
 import Wallpaper from './components/Wallpaper'
 import Toolbar from './components/Toolbar'
 import BookmarksBar from './components/BookmarksBar'
@@ -68,28 +69,9 @@ export default function App() {
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   /* ------------------------------------------------------------ appearance */
-  useEffect(() => {
-    if (!settings) return
-    const root = document.documentElement
-    const media = window.matchMedia('(prefers-color-scheme: dark)')
-
-    const apply = () => {
-      const dark = settings.theme === 'dark' || (settings.theme === 'system' && media.matches)
-      root.dataset.theme = dark ? 'dark' : 'light'
-    }
-    apply()
-    media.addEventListener('change', apply)
-
-    root.style.setProperty('--accent', settings.accent)
-    root.style.setProperty('--radius', `${settings.radius}px`)
-    root.style.setProperty('--speed', String(settings.reduceMotion ? 0.001 : settings.animationSpeed))
-    root.dataset.motion = settings.reduceMotion ? 'reduced' : 'full'
-    root.style.setProperty('--panel', String(settings.glass / 100))
-    // Blurring what cannot be seen through costs frames for nothing.
-    root.dataset.glass = settings.glass >= 100 ? 'off' : 'on'
-
-    return () => media.removeEventListener('change', apply)
-  }, [settings])
+  // A window can wear the colour of the profile it belongs to, which is the
+  // fastest way to tell two of them apart on one screen.
+  useLook(settings, settings?.accentFromProfile ? profile?.color : undefined)
 
   /* ------------------------------------------------------------- UI state */
   const hasError = Boolean(active?.error)

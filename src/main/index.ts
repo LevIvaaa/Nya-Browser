@@ -543,6 +543,9 @@ function registerIpc() {
     apps.remove(str(id, 40))
     return apps.list()
   })
+  ipcMain.handle('group:icon', (event, groupId: unknown, icon: unknown) => {
+    current(event).setGroupIcon(num(groupId), str(icon, 16))
+  })
   ipcMain.handle('apps:open', (event, id: unknown) => {
     const wanted = str(id, 40)
     if (!apps.has(wanted)) return false
@@ -848,6 +851,7 @@ function registerIpc() {
     }
   })
   ipcMain.handle('settings:wallpaper', (event) => current(event).importWallpaper())
+  ipcMain.handle('settings:wallpapers', (event) => current(event).wallpapers())
   ipcMain.handle('settings:open-data', (event) => shell.openPath(app.getPath('userData')))
   ipcMain.handle('settings:download-dir', async (event) => {
     const dir = await downloads.chooseFolder()
@@ -1236,6 +1240,46 @@ function registerIpc() {
    * The whole profile, sealed with a password of the person's choosing, into a
    * file they pick. Nothing leaves the machine unless they carry it.
    */
+  /*
+   * A small text file, saved where somebody says.
+   *
+   * Used by the appearance export, which is plain JSON somebody may want to
+   * read, edit or send to another machine. The name is a suggestion only —
+   * the dialog is what decides where it goes, so nothing here can write
+   * outside what the person picked.
+   */
+  ipcMain.handle('file:save-text', async (_event, name: unknown, text: unknown) => {
+    const suggested = String(name ?? 'nya.json').replace(/[^w.-]/g, '').slice(0, 80) || 'nya.json'
+    const body = String(text ?? '').slice(0, 2_000_000)
+    const where = await dialog.showSaveDialog({
+      title: t('Сохранить файл'),
+      defaultPath: join(app.getPath('downloads'), suggested),
+      filters: [{ name: 'JSON', extensions: ['json'] }]
+    })
+    if (where.canceled || !where.filePath) return false
+    try {
+      writeFileSync(where.filePath, body, 'utf8')
+      return true
+    } catch {
+      return false
+    }
+  })
+
+  /** One text file, read back. Nothing is done with it here. */
+  ipcMain.handle('file:open-text', async () => {
+    const picked = await dialog.showOpenDialog({
+      title: t('Открыть файл'),
+      properties: ['openFile'],
+      filters: [{ name: 'JSON', extensions: ['json'] }]
+    })
+    if (picked.canceled || picked.filePaths.length === 0) return ''
+    try {
+      return readFileSync(picked.filePaths[0], 'utf8').slice(0, 2_000_000)
+    } catch {
+      return ''
+    }
+  })
+
   ipcMain.handle('backup:make', async (event, password: unknown) => {
     const made = makeBackup(String(password ?? ''))
     if (!made) return null

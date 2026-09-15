@@ -2053,6 +2053,172 @@ if (isTop && httpOrigin) {
   })
 }
 
+/* ==========================================================================
+ * Letters on every link.
+ *
+ * One key lights up everything on the page that can be followed, each with a
+ * short label; type the label and it opens. Tab reaches the same links in the
+ * order the document happens to be written in, which on a news site is four
+ * hundred presses to reach the article — this is two.
+ *
+ * It is off unless somebody turns it on, because a browser that swallows a
+ * letter while you are typing in a box is a broken browser. The key is
+ * ignored inside anything editable, and everything is put back on Escape, on
+ * a click, and on any scroll.
+ * ====================================================================== */
+{
+  /** Letters that are easy to reach and hard to confuse with each other. */
+  const ALPHABET = 'asdfghjklqwertyuiopzxcvbnm'
+
+  let on = false
+  let key = 'f'
+  let showing = false
+  let typed = ''
+  let layer: HTMLDivElement | null = null
+  let marks: Array<{ label: string; target: HTMLElement; tag: HTMLElement }> = []
+
+  ipcRenderer.on('hints:on', (_event, value: { on?: boolean; key?: string }) => {
+    on = value?.on === true
+    if (typeof value?.key === 'string' && /^[a-z]$/.test(value.key)) key = value.key
+    if (!on) hide()
+  })
+
+  /** Labels of one or two letters, enough for however many links there are. */
+  const labelsFor = (count: number): string[] => {
+    const out: string[] = []
+    if (count <= ALPHABET.length) {
+      for (let i = 0; i < count; i++) out.push(ALPHABET[i])
+      return out
+    }
+    for (const first of ALPHABET) {
+      for (const second of ALPHABET) {
+        out.push(first + second)
+        if (out.length === count) return out
+      }
+    }
+    return out
+  }
+
+  /** Everything on the screen right now that is worth a letter. */
+  const reachable = (): HTMLElement[] => {
+    const all = document.querySelectorAll<HTMLElement>(
+      'a[href], button, [role="button"], [role="link"], input:not([type="hidden"]), select, textarea, summary'
+    )
+    const out: HTMLElement[] = []
+    for (const one of all) {
+      const box = one.getBoundingClientRect()
+      if (box.width < 4 || box.height < 4) continue
+      if (box.bottom < 0 || box.top > window.innerHeight) continue
+      if (box.right < 0 || box.left > window.innerWidth) continue
+      const style = window.getComputedStyle(one)
+      if (style.visibility === 'hidden' || style.display === 'none' || Number(style.opacity) < 0.1) continue
+      out.push(one)
+      // Two hundred is more than anybody reads at once, and past that the
+      // labels themselves start covering the page.
+      if (out.length === 200) break
+    }
+    return out
+  }
+
+  function hide() {
+    showing = false
+    typed = ''
+    layer?.remove()
+    layer = null
+    marks = []
+  }
+
+  const show = () => {
+    const targets = reachable()
+    if (targets.length === 0) return
+    const labels = labelsFor(targets.length)
+    layer = document.createElement('div')
+    layer.setAttribute('style', 'position:fixed;inset:0;z-index:2147483646;pointer-events:none')
+    marks = targets.map((target, at) => {
+      const box = target.getBoundingClientRect()
+      const tag = document.createElement('span')
+      tag.textContent = labels[at]
+      tag.setAttribute(
+        'style',
+        // Just off the corner rather than on top of it: a label over the
+        // first two letters of a link is a label covering the thing it names.
+        'position:absolute;left:' +
+          Math.max(0, Math.round(box.left) - 7) +
+          'px;top:' +
+          Math.max(0, Math.round(box.top) - 9) +
+          'px;font:600 11px/1.4 ui-monospace,monospace;letter-spacing:0.5px;' +
+          'padding:1px 4px;border-radius:4px;background:#ffd60a;color:#1b1b1f;' +
+          'box-shadow:0 1px 3px rgba(0,0,0,0.45);text-transform:uppercase'
+      )
+      layer?.append(tag)
+      return { label: labels[at], target, tag }
+    })
+    document.documentElement.append(layer)
+    showing = true
+    typed = ''
+  }
+
+  /** What a label opens: a link goes where it points, anything else is pressed. */
+  const follow = (element: HTMLElement) => {
+    hide()
+    if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement) {
+      element.focus()
+      return
+    }
+    element.focus?.()
+    element.click()
+  }
+
+  window.addEventListener(
+    'keydown',
+    (event) => {
+      if (!on) return
+      const target = event.target as HTMLElement | null
+      const editing =
+        target?.isContentEditable ||
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement
+      if (showing) {
+        if (event.key === 'Escape') {
+          event.preventDefault()
+          event.stopPropagation()
+          return hide()
+        }
+        if (event.key === 'Backspace') {
+          event.preventDefault()
+          typed = typed.slice(0, -1)
+        } else if (/^[a-z]$/i.test(event.key)) {
+          event.preventDefault()
+          event.stopPropagation()
+          typed += event.key.toLowerCase()
+        } else {
+          return
+        }
+        const exact = marks.find((one) => one.label === typed)
+        if (exact) return follow(exact.target)
+        const left = marks.filter((one) => one.label.startsWith(typed))
+        if (left.length === 0) return hide()
+        // Narrowing as you type: what cannot match any more goes away, so what
+        // is left is what your next letter chooses between.
+        for (const one of marks) one.tag.style.display = one.label.startsWith(typed) ? '' : 'none'
+        return
+      }
+      if (editing || event.ctrlKey || event.altKey || event.metaKey) return
+      if (event.key.toLowerCase() !== key) return
+      event.preventDefault()
+      event.stopPropagation()
+      show()
+    },
+    true
+  )
+
+  // Anything that moves the page moves the labels off what they pointed at.
+  window.addEventListener('scroll', () => showing && hide(), true)
+  window.addEventListener('pointerdown', () => showing && hide(), true)
+  window.addEventListener('blur', () => showing && hide())
+}
+
 /** The word for minutes, handed over by the browser in the reader's language. */
 let MINUTES = 'мин'
 const NEWLINE = String.fromCharCode(10)

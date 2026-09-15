@@ -6,13 +6,18 @@ import type {
   UpdateState,
   WebAppCandidate
 } from '../../../shared/types'
+import { toolbarHeight } from '../look'
 import { currentLanguage, t } from '../i18n'
 import type { HistoryStep } from '../../../preload/index'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
+  Camera,
+  Clock,
   Cross,
+  Download,
+  Plus,
   Grid,
   Home,
   Incognito,
@@ -182,7 +187,7 @@ export default function Toolbar({
   // language to themselves say nothing here, and are left alone.
   const mine = currentLanguage().split('-')[0]
   const foreign = Boolean(tab?.language && tab.language !== mine)
-  const height = settings.compact ? 40 : 44
+  const height = toolbarHeight(settings)
 
   const downloadingUpdate = update?.stage === 'downloading'
   const updateBadge =
@@ -193,35 +198,44 @@ export default function Toolbar({
       ? t('Обновление готово к установке')
       : t('Доступно обновление')
 
-  return (
-    <div className="drag flex items-center gap-1 pl-2 pr-0" style={{ height }}>
-      <div className="no-drag flex items-center gap-0.5">
-        <BackButton tab={tab} />
-        <Tooltip label={t('Вперёд · Alt+→')}>
-          <button className="icon-btn" disabled={!tab?.canGoForward} onClick={() => window.browser.forward()}>
-            <ArrowRight />
+  /*
+   * Every button the toolbar knows how to draw, by the name the settings call
+   * it. The list in the settings decides which of them appear and in what
+   * order; anything not named simply is not there, and 'space' is the gap that
+   * pushes what follows to the right.
+   */
+  const parts: Record<string, ReactNode> = {
+    back: (
+      <BackButton tab={tab} />
+    ),
+    forward: (
+      <Tooltip label={t('Вперёд · Alt+→')}>
+        <button className="icon-btn" disabled={!tab?.canGoForward} onClick={() => window.browser.forward()}>
+          <ArrowRight />
+        </button>
+      </Tooltip>
+    ),
+    reload: (
+      <Tooltip label={loading ? t('Остановить · Esc') : t('Обновить · Ctrl+R')}>
+        <button
+          className="icon-btn"
+          disabled={!hasContent}
+          onClick={() => (loading ? window.browser.stop() : window.browser.reload())}
+        >
+          {loading ? <Cross /> : <Reload />}
+        </button>
+      </Tooltip>
+    ),
+    home: appMode ? null : (
+        <Tooltip label={t('Стартовая страница')}>
+          <button className="icon-btn" onClick={() => window.browser.home()}>
+            <Home />
           </button>
         </Tooltip>
-        <Tooltip label={loading ? t('Остановить · Esc') : t('Обновить · Ctrl+R')}>
-          <button
-            className="icon-btn"
-            disabled={!hasContent}
-            onClick={() => (loading ? window.browser.stop() : window.browser.reload())}
-          >
-            {loading ? <Cross /> : <Reload />}
-          </button>
-        </Tooltip>
-        {!appMode && (
-          <Tooltip label={t('Стартовая страница')}>
-            <button className="icon-btn" onClick={() => window.browser.home()}>
-              <Home />
-            </button>
-          </Tooltip>
-        )}
-      </div>
-
-      {/* address field — in an app window it is a nameplate, not a place to
-          type: there is one page here and it is the app. */}
+      ),
+    // The address field. In an app window it is a nameplate rather than a
+    // place to type: there is one page here and it is the app.
+    address: (
       <div className="flex min-w-0 flex-1 justify-center px-2">
         <button
           disabled={appMode !== null}
@@ -412,6 +426,167 @@ export default function Toolbar({
           )}
         </button>
       </div>
+    ),
+    'new-tab': (
+      <Tooltip label={t('Новая вкладка · Ctrl+T')}>
+        <button className="icon-btn" onClick={() => void window.browser.newTab()}>
+          <Plus />
+        </button>
+      </Tooltip>
+    ),
+    bookmark: canBookmark ? (
+      <Tooltip label={bookmarked ? t('Убрать из закладок · Ctrl+D') : t('В закладки · Ctrl+D')}>
+        <button
+          className="icon-btn"
+          style={bookmarked ? { color: 'var(--accent)' } : undefined}
+          onClick={() => void window.browser.toggleBookmark()}
+        >
+          {bookmarked ? <StarFilled /> : <Star />}
+        </button>
+      </Tooltip>
+    ) : null,
+    bookmarks: (
+      <Tooltip label={t('Закладки · Ctrl+Shift+O')}>
+        <button className="icon-btn" onClick={() => void window.browser.openChromePage('bookmarks')}>
+          <Star />
+        </button>
+      </Tooltip>
+    ),
+    history: (
+      <Tooltip label={t('История · Ctrl+H')}>
+        <button className="icon-btn" onClick={() => void window.browser.openChromePage('history')}>
+          <Clock />
+        </button>
+      </Tooltip>
+    ),
+    downloads: (
+      <Tooltip label={t('Загрузки · Ctrl+J')}>
+        <button className="icon-btn relative" onClick={() => void window.browser.openChromePage('downloads')}>
+          <Download />
+          {downloadCount > 0 && (
+            <span
+              className="animate-pulse-soft absolute right-1 top-1 h-[6px] w-[6px] rounded-pill"
+              style={{ background: 'var(--accent)' }}
+            />
+          )}
+        </button>
+      </Tooltip>
+    ),
+    reader: canBookmark ? (
+      <Tooltip label={t('Режим чтения')}>
+        <button
+          className="icon-btn"
+          style={tab?.reading ? { color: 'var(--accent)' } : undefined}
+          onClick={() => void window.browser.toggleReader()}
+        >
+          <Scroll />
+        </button>
+      </Tooltip>
+    ) : null,
+    translate: canBookmark ? <TranslateButton translated={tab?.translated === true} /> : null,
+    find: (
+      <Tooltip label={t('Найти на странице · Ctrl+F')}>
+        <button className="icon-btn" disabled={!hasContent} onClick={() => void window.browser.uiAction('find')}>
+          <Search />
+        </button>
+      </Tooltip>
+    ),
+    shot: (
+      <Tooltip label={t('Снимок страницы')}>
+        <button className="icon-btn" disabled={!hasContent} onClick={() => void window.browser.capture('area')}>
+          <Camera />
+        </button>
+      </Tooltip>
+    ),
+    extensions: <ExtensionButtons />,
+    media: (
+      <MediaButton onOpen={(x) => void window.browser.setOverlay(`media:${x}`)} />
+    ),
+    update: updateBadge ? (
+        <Tooltip label={updateLabel}>
+          <button
+            className="icon-btn relative"
+            onClick={() => onToggleView('update')}
+            style={
+              view === 'update'
+                ? { background: 'var(--surface-hover)', color: 'var(--text)' }
+                : { color: 'var(--accent)' }
+            }
+          >
+            <UpdateArrow />
+            {/* The hidden download keeps reporting from here: the ring is
+                the same progress the card was showing. */}
+            {downloadingUpdate && (
+              <svg className="absolute inset-0" width={30} height={30} viewBox="0 0 30 30">
+                <circle
+                  cx="15"
+                  cy="15"
+                  r="12.5"
+                  fill="none"
+                  stroke="var(--accent)"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeDasharray={2 * Math.PI * 12.5}
+                  strokeDashoffset={2 * Math.PI * 12.5 * (1 - (update?.percent ?? 0) / 100)}
+                  transform="rotate(-90 15 15)"
+                  style={{ transition: 'stroke-dashoffset var(--t-slow) var(--ease-out)' }}
+                />
+              </svg>
+            )}
+            {update?.stage === 'ready' && (
+              <span
+                className="animate-pulse-soft absolute right-1 top-1 h-[6px] w-[6px] rounded-pill"
+                style={{ background: 'var(--accent)' }}
+              />
+            )}
+          </button>
+        </Tooltip>
+      ) : null,
+    profile: !appMode && profile ? (
+        <Tooltip label={t('Профиль: {name}', { name: profile.name })}>
+          <button
+            className="icon-btn halo-host"
+            data-open={view === 'profiles' ? 'true' : undefined}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={() => onToggleView('profiles')}
+          >
+            <Avatar avatar={profile.avatar} crop={profile.crop} color={profile.color} size={22} halo />
+          </button>
+        </Tooltip>
+      ) : null,
+    menu: (
+      <Tooltip label={downloadCount > 0 ? t('Меню · идёт загрузка') : t('Меню')}>
+        <button
+          className={cx('icon-btn relative')}
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={() => onToggleView('menu')}
+          style={view === 'menu' ? { background: 'var(--surface-hover)', color: 'var(--text)' } : undefined}
+        >
+          <More />
+          {/* Downloads moved into this menu, so the sign that one is running
+              moved with them — otherwise it would happen out of sight. */}
+          {downloadCount > 0 && (
+            <span
+              className="animate-pulse-soft absolute right-1 top-1 h-[6px] w-[6px] rounded-pill"
+              style={{ background: 'var(--accent)' }}
+            />
+          )}
+        </button>
+      </Tooltip>
+    ),
+  }
+
+  return (
+    <div className="drag flex items-center gap-1 pl-2 pr-0" style={{ height }}>
+      {settings.toolbar.map((id, at) =>
+        id === 'space' ? (
+          <div key={`space${at}`} className="min-w-0 flex-1" />
+        ) : (
+          <div key={id} className={id === 'address' ? 'flex min-w-0 flex-[8]' : 'no-drag shrink-0'}>
+            {parts[id] ?? null}
+          </div>
+        )
+      )}
 
       {/* actions */}
       {incognito && (
@@ -425,91 +600,6 @@ export default function Toolbar({
           </span>
         </Tooltip>
       )}
-
-      {/* Only what has nowhere else to live: a new version worth telling
-          someone about, the profile, and the menu. Bookmarks, downloads, a new
-          tab and the settings all sit in that menu already, and the row of
-          duplicates was just noise beside the address. */}
-      <div className="no-drag flex items-center gap-0.5 pr-1">
-        {/* Only while something is playing, and then it is the answer to the
-            question everyone asks a browser with thirty tabs open. */}
-        <ExtensionButtons />
-
-        <MediaButton onOpen={(x) => void window.browser.setOverlay(`media:${x}`)} />
-
-        {updateBadge && (
-          <Tooltip label={updateLabel}>
-            <button
-              className="icon-btn relative"
-              onClick={() => onToggleView('update')}
-              style={
-                view === 'update'
-                  ? { background: 'var(--surface-hover)', color: 'var(--text)' }
-                  : { color: 'var(--accent)' }
-              }
-            >
-              <UpdateArrow />
-              {/* The hidden download keeps reporting from here: the ring is
-                  the same progress the card was showing. */}
-              {downloadingUpdate && (
-                <svg className="absolute inset-0" width={30} height={30} viewBox="0 0 30 30">
-                  <circle
-                    cx="15"
-                    cy="15"
-                    r="12.5"
-                    fill="none"
-                    stroke="var(--accent)"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeDasharray={2 * Math.PI * 12.5}
-                    strokeDashoffset={2 * Math.PI * 12.5 * (1 - (update?.percent ?? 0) / 100)}
-                    transform="rotate(-90 15 15)"
-                    style={{ transition: 'stroke-dashoffset var(--t-slow) var(--ease-out)' }}
-                  />
-                </svg>
-              )}
-              {update?.stage === 'ready' && (
-                <span
-                  className="animate-pulse-soft absolute right-1 top-1 h-[6px] w-[6px] rounded-pill"
-                  style={{ background: 'var(--accent)' }}
-                />
-              )}
-            </button>
-          </Tooltip>
-        )}
-
-        {!appMode && profile && (
-          <Tooltip label={t('Профиль: {name}', { name: profile.name })}>
-            <button
-              className="icon-btn halo-host"
-              data-open={view === 'profiles' ? 'true' : undefined}
-              onMouseDown={(event) => event.stopPropagation()}
-              onClick={() => onToggleView('profiles')}
-            >
-              <Avatar avatar={profile.avatar} crop={profile.crop} color={profile.color} size={22} halo />
-            </button>
-          </Tooltip>
-        )}
-
-        <Tooltip label={downloadCount > 0 ? t('Меню · идёт загрузка') : t('Меню')}>
-          <button
-            className={cx('icon-btn relative')}
-            onMouseDown={(event) => event.stopPropagation()}
-            onClick={() => onToggleView('menu')}
-            style={view === 'menu' ? { background: 'var(--surface-hover)', color: 'var(--text)' } : undefined}
-          >
-            <More />
-            {/* Downloads moved into this menu, so the sign that one is running
-                moved with them — otherwise it would happen out of sight. */}
-            {downloadCount > 0 && (
-              <span
-                className="animate-pulse-soft absolute right-1 top-1 h-[6px] w-[6px] rounded-pill"
-                style={{ background: 'var(--accent)' }}
-              />
-            )}
-          </button>
-        </Tooltip>
-      </div>
 
       <WindowControls maximized={maximized} />
     </div>

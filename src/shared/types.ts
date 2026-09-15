@@ -10,6 +10,10 @@ export type BackgroundFit = 'cover' | 'contain' | 'tile' | 'center'
 export type BackgroundIntensity = 'subtle' | 'medium' | 'vivid'
 export type PermissionPolicy = 'ask' | 'allow' | 'block'
 export type CloseButtonMode = 'always' | 'hover' | 'active'
+/** What a middle click on a link does with the tab it opens. */
+export type MiddleClick = 'background' | 'foreground'
+/** What a brand-new tab has in it. */
+export type NewTabShows = 'start' | 'home' | 'blank'
 export type WebRtcPolicy = 'default' | 'public_only' | 'proxy_only'
 
 export type SearchEngineId =
@@ -88,6 +92,41 @@ export interface Favorite {
 }
 
 /** Wallpaper: a procedural animation, or the user's own image / video / GIF. */
+/**
+ * A saved look.
+ *
+ * Everything on the appearance page, under a name: somebody's dark evening
+ * setup, the bright high-contrast one for a sunny room, the one their
+ * colour-blind colleague can read. Switching between them is one press, and
+ * the file they export is plain JSON that travels between machines.
+ */
+export interface LookPreset {
+  id: string
+  name: string
+  /** the appearance settings this look carries, and nothing else */
+  look: Partial<Settings>
+}
+
+/** Light by day and dark by night, with the hours the change happens. */
+export interface ThemeSchedule {
+  on: boolean
+  /** "HH:MM" — when the light theme comes on */
+  light: string
+  /** "HH:MM" — when the dark one does */
+  dark: string
+}
+
+/** Wallpapers that take turns by themselves. */
+export interface WallpaperRotation {
+  on: boolean
+  /** how long each one stays up, in minutes */
+  everyMinutes: number
+  /** file names inside the profile's wallpapers folder */
+  files: string[]
+  /** only while the browser is running; the next one comes up on the hour it is due */
+  shuffle: boolean
+}
+
 export interface BackgroundSettings {
   kind: BackgroundKind
   intensity: BackgroundIntensity
@@ -101,6 +140,8 @@ export interface BackgroundSettings {
   speed: number
   /** pause video/animation while a page is open, to save battery */
   pauseWhenBrowsing: boolean
+  /** pictures that change themselves, on a clock */
+  rotate: WallpaperRotation
 }
 
 export interface PermissionSettings {
@@ -433,9 +474,34 @@ export interface Settings {
 
   // ---- appearance
   theme: ThemeMode
+  /** light by day, dark by night — when it is on, it decides the theme */
+  themeSchedule: ThemeSchedule
+  /**
+   * Edges you can see, at the cost of the soft look: full-strength text,
+   * a border on everything that can be clicked, no translucency.
+   */
+  highContrast: boolean
   accent: string
+  /** the accent follows whichever profile is open */
+  accentFromProfile: boolean
   radius: number
   compact: boolean
+  /**
+   * How tightly everything is packed: 0 roomy, 1 as designed, 2 tight. It is
+   * the honest version of the compact switch, which stays because a switch is
+   * what people look for.
+   */
+  density: number
+  /**
+   * How big the whole interface is drawn, 0.8–1.4. Not the page — the page has
+   * its own zoom — but the toolbar, the tabs, the settings and the menus, for
+   * a screen that is too large or eyes that are tired.
+   */
+  uiScale: number
+  /** the interface typeface; '' is whatever the system uses */
+  uiFont: string
+  /** saved looks, switched in one press */
+  looks: LookPreset[]
   /**
    * How opaque the panels are, 0-100: the top bar, the cards on the start page
    * and the ones in the settings. The wallpaper behind them is not affected —
@@ -454,6 +520,10 @@ export interface Settings {
   closeButton: CloseButtonMode
   newTabAfterCurrent: boolean
   middleClickClose: boolean
+  /** where a link opened with the middle button ends up */
+  middleClick: MiddleClick
+  /** what is in a tab that was just opened */
+  newTabShows: NewTabShows
   confirmCloseMultiple: boolean
 
   // ---- start page & search
@@ -559,6 +629,22 @@ export interface Settings {
   mouseGestures: boolean
   /** hovering a tab for a moment shows what is on it */
   tabPreview: boolean
+  /** two fingers on a trackpad, or a pinch on a touchscreen, zoom the page */
+  pinchZoom: boolean
+  /** every link on the page gets a letter to type, on one key */
+  linkHints: boolean
+  /** the key that lights them up */
+  linkHintsKey: string
+  /** a button that was pressed says so, briefly */
+  feedback: boolean
+  /** every tooltip carries the keys that do the same thing */
+  shortcutsInTips: boolean
+  /** which buttons are on the toolbar, in order */
+  toolbar: string[]
+  /** the order of the rows in the main menu */
+  menuOrder: string[]
+  /** the settings page shows everything, rather than what most people change */
+  settingsFull: boolean
 
   // ---- reading
   /** How the reading sheet is set: everything a person changes while reading. */
@@ -733,6 +819,8 @@ export interface WindowState {
 export interface TabGroup {
   id: number
   name: string
+  /** one emoji, or empty: a group you can find without reading it */
+  icon: string
   /** one of GROUP_COLOURS, or any #rrggbb someone picked themselves */
   color: string
   collapsed: boolean

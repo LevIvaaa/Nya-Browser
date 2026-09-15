@@ -8,7 +8,7 @@ import {
   type ReactNode
 } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, ChevronDown, Cross } from './Icons'
+import { Check, ChevronDown, Cross, Eye, Refresh } from './Icons'
 import type { AvatarCrop } from '../../../shared/types'
 import { currentLanguage, t } from '../i18n'
 
@@ -243,15 +243,20 @@ export function Section({
   icon,
   description,
   children,
-  action
+  action,
+  advanced
 }: {
   title: string
   icon?: ReactNode
   description?: string
   children: ReactNode
   action?: ReactNode
+  /** the whole section is gone while the page is in its short form */
+  advanced?: boolean
 }) {
   const looking = useContext(Looking)
+  const full = useContext(FullSettings)
+  if (advanced && !full) return null
   if (looking) {
     const words = [title, description ?? '']
     wordsIn(children, words)
@@ -284,33 +289,102 @@ export function Row({
   hint,
   children,
   danger,
-  icon
+  icon,
+  changed,
+  onRevert,
+  demo,
+  advanced
 }: {
   title: string
   hint?: string
   children?: ReactNode
   danger?: boolean
   icon?: ReactNode
+  /** this one is not what it was when the browser was installed */
+  changed?: boolean
+  /** put this one back, and only this one */
+  onRevert?: () => void
+  /** a small live picture of what the setting does */
+  demo?: ReactNode
+  /** hidden while the settings page is in its short form */
+  advanced?: boolean
 }) {
+  const full = useContext(FullSettings)
+  const [showing, setShowing] = useState(false)
+  if (advanced && !full) return null
   return (
     <div
-      className="flex min-h-[52px] items-center justify-between gap-6 px-4 py-2.5"
+      className="px-4 py-2.5"
       style={{
         borderTop: '1px solid var(--line)',
         transition: 'background var(--t-fast) linear'
       }}
     >
-      <div className="flex min-w-0 items-start gap-3">
-        {icon && <span className="mt-0.5 text-dim">{icon}</span>}
-        <div className="min-w-0">
-          <div className={cx('text-base font-medium', danger && 'text-[var(--bad)]')}>{title}</div>
-          {hint && <div className="mt-0.5 text-sm leading-snug text-dim">{hint}</div>}
+      <div className="flex min-h-[46px] items-center justify-between gap-6">
+        <div className="flex min-w-0 items-start gap-3">
+          {icon && <span className="mt-0.5 text-dim">{icon}</span>}
+          <div className="min-w-0">
+            <div className={cx('flex items-center gap-1.5 text-base font-medium', danger && 'text-[var(--bad)]')}>
+              {title}
+              {/* A dot for "you changed this", and one press to put it back.
+                  Between a page of defaults and a page somebody has been
+                  through twice, this is the difference between finding what
+                  you did and reading all of it again. */}
+              {changed && (
+                <span
+                  className="h-[6px] w-[6px] shrink-0 rounded-pill"
+                  style={{ background: 'var(--accent)' }}
+                  title={t('Изменено')}
+                />
+              )}
+              {changed && onRevert && (
+                <button
+                  className="icon-btn h-6 w-6 shrink-0"
+                  title={t('Вернуть как было')}
+                  aria-label={t('Вернуть как было')}
+                  onClick={onRevert}
+                >
+                  <Refresh width={12} height={12} />
+                </button>
+              )}
+              {/* What this actually does, drawn rather than described. */}
+              {demo && (
+                <button
+                  className="icon-btn h-6 w-6 shrink-0"
+                  title={t('Показать, как это выглядит')}
+                  aria-label={t('Показать, как это выглядит')}
+                  onClick={() => setShowing(!showing)}
+                  style={showing ? { color: 'var(--accent)' } : undefined}
+                >
+                  <Eye width={12} height={12} />
+                </button>
+              )}
+            </div>
+            {hint && <div className="mt-0.5 text-sm leading-snug text-dim">{hint}</div>}
+          </div>
         </div>
+        <div className="shrink-0">{children}</div>
       </div>
-      <div className="shrink-0">{children}</div>
+      {demo && showing && (
+        <div
+          className="animate-fade-up mt-2.5 overflow-hidden rounded-[var(--radius-md)] p-3"
+          style={{ background: 'var(--field-idle)' }}
+        >
+          {demo}
+        </div>
+      )}
     </div>
   )
 }
+
+/**
+ * Whether the settings page is showing everything.
+ *
+ * A row marked advanced is simply not there in the short form — not greyed
+ * out, not behind a disclosure, not there. The short form is meant to be a
+ * page somebody can read all of.
+ */
+export const FullSettings = createContext(true)
 
 export function Pill({
   children,
@@ -614,8 +688,20 @@ export function Avatar({
   )
 }
 
+/**
+ * How the chrome talks to somebody, as two switches the whole interface reads.
+ *
+ * Not a context: tooltips are drawn in a hundred places, several of them
+ * outside any provider this would be worth adding. The look hook sets these
+ * whenever the settings change, and everything re-renders with them.
+ */
+export const chromeManners = { shortcuts: true, feedback: true }
+
 export function Tooltip({ label, children }: { label: string; children: ReactNode }) {
   const [show, setShow] = useState(false)
+  // "Назад · Alt+←" — the keys are the half after the dot, and they go when
+  // somebody has said they do not want them.
+  const said = chromeManners.shortcuts ? label : label.split(' · ')[0]
   return (
     <span
       className="relative inline-flex"
@@ -628,7 +714,7 @@ export function Tooltip({ label, children }: { label: string; children: ReactNod
           className="animate-fade pointer-events-none absolute left-1/2 top-full z-50 mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-[8px] px-2 py-1 text-2xs"
           style={{ background: 'var(--elevated)', border: '1px solid var(--line)', boxShadow: 'var(--shadow-md)' }}
         >
-          {label}
+          {said}
         </span>
       )}
     </span>
