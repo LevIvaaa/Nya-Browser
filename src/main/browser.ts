@@ -813,15 +813,52 @@ export class BrowserWindow {
 
     this.bindSession()
 
+    /*
+     * The browser's own two pages, and another go if the first one fails.
+     *
+     * Measured: the app was relaunched a moment before the dev server was
+     * ready, both views got ERR_CONNECTION_REFUSED, the chrome happened to
+     * recover and the overlay did not — leaving a browser with no menu, no
+     * command palette and no popovers, permanently, with nothing on screen to
+     * say why. Nothing retried, because nothing was watching.
+     *
+     * A handful of tries, half a second apart. These are our own pages: a
+     * failure here is never the network's fault and is always worth another
+     * attempt.
+     */
     const devUrl = process.env['ELECTRON_RENDERER_URL']
-    if (isDev && devUrl) {
-      void this.chrome.webContents.loadURL(devUrl)
-      void this.overlay.webContents.loadURL(`${devUrl}?overlay=1`)
-    } else {
-      const file = join(__dirname, '../renderer/index.html')
-      void this.chrome.webContents.loadFile(file)
-      void this.overlay.webContents.loadFile(file, { query: { overlay: '1' } })
+    const file = join(__dirname, '../renderer/index.html')
+    const loadChrome = () =>
+      isDev && devUrl
+        ? this.chrome.webContents.loadURL(devUrl)
+        : this.chrome.webContents.loadFile(file)
+    const loadOverlay = () =>
+      isDev && devUrl
+        ? this.overlay.webContents.loadURL(`${devUrl}?overlay=1`)
+        : this.overlay.webContents.loadFile(file, { query: { overlay: '1' } })
+
+    const keepTrying = (
+      view: WebContentsView,
+      load: () => Promise<void>,
+      what: string,
+      left = 8
+    ) => {
+      view.webContents.once('did-fail-load', (_e, code, _desc, _url, isMainFrame) => {
+        // -3 is a navigation somebody replaced, not a failure.
+        if (!isMainFrame || code === -3 || left <= 0 || view.webContents.isDestroyed()) return
+        log(`${what}: retrying (${left} left)`)
+        setTimeout(() => {
+          if (view.webContents.isDestroyed()) return
+          keepTrying(view, load, what, left - 1)
+          void load().catch(() => undefined)
+        }, 500)
+      })
     }
+
+    keepTrying(this.chrome, loadChrome, 'chrome')
+    keepTrying(this.overlay, loadOverlay, 'overlay')
+    void loadChrome().catch(() => undefined)
+    void loadOverlay().catch(() => undefined)
 
     // Right-click in the browser's own surfaces: the palette, the find bar,
     // the settings fields. Pages get the richer menu attached per tab.
