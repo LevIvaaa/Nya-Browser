@@ -115,8 +115,16 @@ export function clearFailures() {
 
 /* ------------------------------------------------------------ the network */
 
-/** How long to wait before calling a host unreachable. */
-const PROBE_MS = 4000
+/**
+ * How long to wait before calling a host unreachable.
+ *
+ * Six seconds rather than four. Measured on a cold start, with the resolver
+ * not yet warm: a perfectly good connection answered in five, and the check
+ * reported «интернета нет» next to a browser that was loading pages fine.
+ * A diagnostic that lies is worse than no diagnostic, and two more seconds of
+ * waiting is a price nobody notices.
+ */
+const PROBE_MS = 6000
 
 const probe = async (url: string): Promise<boolean> => {
   const controller = new AbortController()
