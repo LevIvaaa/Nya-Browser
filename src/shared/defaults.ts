@@ -191,6 +191,15 @@ export const DEFAULT_SETTINGS: Settings = {
   drm: false,
 
   hardwareAcceleration: true,
+  batterySaver: true,
+  // A fortnight: long enough that nobody notices, short enough that a cache
+  // gone wrong fixes itself without anybody working out that it had.
+  clearCacheDays: 14,
+  prefetchOnHover: false,
+  prefetchNext: false,
+  fastStart: true,
+  stripClock: false,
+  cacheSweptAt: 0,
   preconnect: true,
   prefetchDns: true,
   dnsProvider: 'system',

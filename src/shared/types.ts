@@ -684,6 +684,24 @@ export interface Settings {
 
   // ---- performance
   hardwareAcceleration: boolean
+  /**
+   * On battery, the browser does less: animations stop, background tabs sleep
+   * sooner, the video wallpaper pauses. It is the one setting that is allowed
+   * to change other settings, and it changes them back when the cable is in.
+   */
+  batterySaver: boolean
+  /** clear the cache every so many days; 0 never does */
+  clearCacheDays: number
+  /** start the next page while the pointer is still on the link */
+  prefetchOnHover: boolean
+  /** follow a page's own "next" link and fetch it quietly */
+  prefetchNext: boolean
+  /** keep a window ready so the first one opens at once */
+  fastStart: boolean
+  /** the clock and the count of open tabs, in the corner of the strip */
+  stripClock: boolean
+  /** when the cache was last swept; not a setting anybody sets, but kept here */
+  cacheSweptAt: number
   preconnect: boolean
   prefetchDns: boolean
   smoothScrolling: boolean
@@ -890,6 +908,12 @@ export interface TabState {
   attention: boolean
   /** put aside deliberately, to come back to */
   unread: boolean
+  /**
+   * When this tab should ask for attention again, as a moment in time; zero
+   * when no timer was set. A tab you are waiting on — a build, a queue, a
+   * kettle — is one you would otherwise check twenty times.
+   */
+  timerAt: number
   /** roughly how much memory this tab's process is using, in megabytes */
   memory: number
 }
@@ -900,6 +924,10 @@ export interface TabError {
   url: string
   /** set when the page failed only because it has no HTTPS endpoint */
   httpsFallbackAvailable?: boolean
+  /** the renderer died rather than the load failing: offer the page back */
+  crashed?: boolean
+  /** what this browser can say about why, in a sentence somebody can act on */
+  reason?: string
   /** set when a certificate is what stopped the page, so it can be answered */
   certificate?: {
     host: string
@@ -1255,6 +1283,40 @@ export interface FilterRefresh {
   unchanged: number
   /** how many network rules there are now, and how many there were */
   rules: { before: number; after: number }
+}
+
+/** What the last run left behind when it did not finish. */
+export interface CrashReport {
+  at: number
+  version: string
+  /** what was open, so it can be offered back */
+  tabs: string[]
+  reason: string
+}
+
+/** One page that would not load. */
+export interface PageFailure {
+  at: number
+  url: string
+  /** Chromium's own number, which is what a search engine actually matches */
+  code: number
+  description: string
+  /** what this browser can say about why, in a sentence */
+  reason: string
+}
+
+/** Whether the trouble is this site or the whole connection. */
+export interface NetworkCheck {
+  at: number
+  /** the machine believes it has a link */
+  online: boolean
+  /** a name resolved */
+  dns: boolean
+  /** somewhere well-known answered */
+  internet: boolean
+  /** the site itself answered; null when none was asked about */
+  site: boolean | null
+  verdict: 'offline' | 'no-internet' | 'no-dns' | 'site-down' | 'fine'
 }
 
 export interface FilterStatus {

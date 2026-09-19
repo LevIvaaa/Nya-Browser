@@ -392,6 +392,10 @@ function TabItem({
         />
       )}
 
+      {/* A timer set on this tab, counting down. It shows minutes because
+          anything finer would be a second hand in the corner of the eye. */}
+      {tab.timerAt > 0 && <TabTimer at={tab.timerAt} />}
+
       {asleep(tab) && <Sleep width={12} height={12} className="shrink-0 text-faint" />}
 
       {tab.pinned && vertical && <Pin width={12} height={12} className="shrink-0 text-faint" />}
@@ -1051,7 +1055,79 @@ export function TabStrip({
         <Plus />
       </button>
       <div className="flex-1" />
+      {settings.stripClock && <StripClock count={tabs.filter((tab) => tab.hasContent).length} />}
     </div>
+  )
+}
+
+/**
+ * The time, and how many tabs there are.
+ *
+ * A browser is what most people have in front of them all day, and a window
+ * with a video full-screen in it or a title bar hidden away has nowhere else
+ * to put a clock. The count beside it is the other thing the strip cannot say
+ * once there are more tabs than fit: forty open is a fact worth knowing before
+ * the machine starts to swap.
+ *
+ * It sits at the far end of the strip, after the space that pushes everything
+ * left, so it never moves as tabs open and close.
+ */
+function StripClock({ count }: { count: number }) {
+  const [now, setNow] = useState(() => new Date())
+
+  useEffect(() => {
+    // Lined up with the minute rather than ticking every second: the clock
+    // shows minutes, and a second's beat would be thirty wake-ups a minute
+    // spent on nothing.
+    let timer = 0
+    const beat = () => {
+      setNow(new Date())
+      timer = window.setTimeout(beat, 60_000 - (Date.now() % 60_000))
+    }
+    timer = window.setTimeout(beat, 60_000 - (Date.now() % 60_000))
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  return (
+    <div
+      className="no-drag flex h-[22px] shrink-0 items-center gap-1.5 rounded-pill px-2 text-2xs tabular-nums"
+      style={{ background: 'var(--field-idle)', color: 'var(--text-dim)' }}
+      title={t('Открыто вкладок: {count}', { count: String(count) })}
+    >
+      <span className="font-medium">
+        {String(now.getHours()).padStart(2, '0')}:{String(now.getMinutes()).padStart(2, '0')}
+      </span>
+      <span style={{ color: 'var(--text-faint)' }}>·</span>
+      <span>{count}</span>
+    </div>
+  )
+}
+
+/**
+ * How long is left on a tab's timer.
+ *
+ * Re-drawn once a minute, like the clock, and rounded up: «1 мин» until the
+ * minute is actually gone is honest, «0 мин» for the last fifty-nine seconds
+ * is not.
+ */
+function TabTimer({ at }: { at: number }) {
+  const [, tick] = useState(0)
+  useEffect(() => {
+    const timer = window.setInterval(() => tick((n) => n + 1), 30_000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  const left = Math.max(0, Math.ceil((at - Date.now()) / 60_000))
+  const label = left >= 60 ? `${Math.floor(left / 60)} ч` : `${left} м`
+
+  return (
+    <span
+      className="pointer-events-none shrink-0 rounded-pill px-1 text-[9px] font-medium tabular-nums"
+      style={{ background: 'color-mix(in srgb, var(--accent) 22%, transparent)', color: 'var(--accent)' }}
+      title={t('Напоминание через {left}', { left: label })}
+    >
+      {label}
+    </span>
   )
 }
 

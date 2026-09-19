@@ -484,6 +484,13 @@ export function sanitize(input: Partial<Settings>): Settings {
     drm: bool(input.drm, d.drm),
 
     hardwareAcceleration: bool(input.hardwareAcceleration, d.hardwareAcceleration),
+    batterySaver: bool(input.batterySaver, d.batterySaver),
+    clearCacheDays: Math.round(clamp(input.clearCacheDays, 0, 365, d.clearCacheDays)),
+    prefetchOnHover: bool(input.prefetchOnHover, d.prefetchOnHover),
+    prefetchNext: bool(input.prefetchNext, d.prefetchNext),
+    fastStart: bool(input.fastStart, d.fastStart),
+    stripClock: bool(input.stripClock, d.stripClock),
+    cacheSweptAt: clamp(input.cacheSweptAt, 0, Number.MAX_SAFE_INTEGER, d.cacheSweptAt),
     preconnect: bool(input.preconnect, d.preconnect),
     prefetchDns: bool(input.prefetchDns, d.prefetchDns),
     dnsProvider: DNS_PROVIDERS.includes(input.dnsProvider as DnsProvider)

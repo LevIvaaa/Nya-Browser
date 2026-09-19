@@ -1,7 +1,8 @@
 import { t } from '../i18n'
 import { useState } from 'react'
 import type { TabGroup, TabSpace, TabState } from '../../../shared/types'
-import { ChevronDown, ChevronRight, Cross, Globe, Pencil, Pin, Plus, Tabs } from './Icons'
+import { ChevronDown, ChevronRight, Clock, Cross, Globe, Pencil, Pin, Plus, Tabs } from './Icons'
+import { cx } from './ui'
 
 /** The same seven a small group can wear, so the two kinds match. */
 const SPACE_COLOURS = ['#7c6cff', '#2fbf71', '#f5a524', '#e5484d', '#38bdf8', '#e879f9', '#94a3b8']
@@ -75,6 +76,25 @@ export default function TabsPanel({
         >
           {tab.title || t('Новая вкладка')}
         </span>
+      </button>
+      {/* A tab you are waiting on. One press adds a quarter of an hour, and
+          pressing it when a timer is already running takes it off again —
+          the same button both ways round, the way a toggle should be. The
+          right-click menu has the longer intervals. */}
+      <button
+        className={cx(
+          'flex h-6 shrink-0 items-center justify-center rounded-[7px] px-1.5 hover:bg-[var(--line)]',
+          tab.timerAt > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+        )}
+        title={
+          tab.timerAt > 0
+            ? t('Убрать напоминание')
+            : `${t('Напомнить через')} ${t('15 минут')}`
+        }
+        style={tab.timerAt > 0 ? { color: 'var(--accent)' } : undefined}
+        onClick={() => void window.browser.setTabTimer(tab.id, tab.timerAt > 0 ? 0 : 15)}
+      >
+        <Clock width={12} height={12} />
       </button>
       <button
         className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] opacity-0 hover:bg-[var(--line)] group-hover:opacity-100"

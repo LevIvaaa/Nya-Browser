@@ -327,6 +327,24 @@ export function tabContextMenu(browser: BrowserWindow, tabId: number) {
       enabled: tabId !== browser.activeId && tab.hasContent,
       click: () => browser.markUnread(tabId, true)
     },
+    {
+      // A tab you are waiting on is one you would otherwise check twenty
+      // times. Set a time and it comes back to you instead.
+      label: t('Напомнить через'),
+      submenu: [
+        { label: t('5 минут'), click: () => browser.setTabTimer(tabId, 5) },
+        { label: t('15 минут'), click: () => browser.setTabTimer(tabId, 15) },
+        { label: t('30 минут'), click: () => browser.setTabTimer(tabId, 30) },
+        { label: t('1 час'), click: () => browser.setTabTimer(tabId, 60) },
+        { label: t('3 часа'), click: () => browser.setTabTimer(tabId, 180) },
+        ...(tab.timerAt
+          ? [
+              { type: 'separator' as const },
+              { label: t('Убрать напоминание'), click: () => browser.setTabTimer(tabId, 0) }
+            ]
+          : [])
+      ]
+    },
     { type: 'separator' },
     { label: t('В закладки'), enabled: tab.hasContent, click: () => browser.bookmarkTab(tabId) },
     {

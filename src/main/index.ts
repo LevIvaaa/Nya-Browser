@@ -22,6 +22,16 @@ import { playback } from './playback'
 import { applyBackup, makeBackup, readBackup } from './backup'
 import { initLog, log } from './log'
 import { readerToPdf } from './readerpdf'
+import { safeStart } from './startup'
+import {
+  checkNetwork,
+  clearFailures,
+  closeHealth,
+  dismissCrash,
+  lastCrash,
+  openHealth,
+  pageFailures
+} from './health'
 import { flushAll, installExitHooks } from './store'
 import { registerProtocols, registerSchemes } from './protocol'
 import { helloAvailable, helloVerify } from './hello'
@@ -132,10 +142,30 @@ function writeLanguageHandoff(code: string) {
   )
 }
 
+/**
+ * Whether the browser starts itself at login and waits out of sight.
+ *
+ * The flag is what tells the next run to stay hidden; the setting is only ever
+ * read here, at start and whenever it is changed. Linux is left out: there the
+ * autostart convention is a .desktop file the package owns, and writing one
+ * from inside the running app is not ours to do.
+ */
+function applyQuickStart() {
+  if (process.platform === 'linux') return
+  try {
+    app.setLoginItemSettings({ openAtLogin: settings.get().fastStart, args: ['--quick-start'] })
+  } catch (error) {
+    log('quick start', String(error))
+  }
+}
+
 function applyStartupSwitches() {
   const s = settings.get()
 
-  if (!s.hardwareAcceleration) {
+  if (safeStart) {
+    // One switch, and the rest of the file reads it rather than the setting.
+    app.disableHardwareAcceleration()
+  } else if (!s.hardwareAcceleration) {
     app.disableHardwareAcceleration()
   } else {
     app.commandLine.appendSwitch('enable-gpu-rasterization')
@@ -311,6 +341,9 @@ if (!app.requestSingleInstanceLock()) {
       return
     }
     if (!browser) return
+    // A window quick start built at login has never been shown; this is the
+    // moment it was waiting for.
+    browser.reveal()
     if (browser.win.isMinimized()) browser.win.restore()
     browser.win.focus()
     const url = urlFromArgv(argv)
@@ -321,6 +354,10 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform === 'win32') app.setAppUserModelId('com.nya.browser')
 
     initLog()
+    // Before anything else that could itself go wrong: whether the last run
+    // ended properly is a question only the file left behind can answer.
+    openHealth(app.getVersion())
+    if (safeStart) log('safe start: extensions, GPU, filters and session restore are off')
     // Installed apps belong to the machine, not to a profile: a shortcut on the
     // desktop cannot know which profile was last used, and should not care.
     apps.load(app.getPath('userData'))
@@ -351,7 +388,7 @@ if (!app.requestSingleInstanceLock()) {
     // engine is armed from the on-disk cache and refreshes stale lists in the
     // background. This is what makes the first request of the first tab
     // already go through the full blocker instead of slipping past it.
-    if (settings.get().filterLists) await loadFilters()
+    if (settings.get().filterLists && !safeStart) await loadFilters()
 
     // Pages ask for their anti-flicker CSS synchronously at document-start, so
     // the answer must never block: whatever the engine knows right now, or
@@ -416,7 +453,10 @@ if (!app.requestSingleInstanceLock()) {
       // A cold start from "open link in Nya Browser" must land on that link
       // rather than on whatever the restored session had open.
       const launchUrl = urlFromArgv(process.argv)
-      const restored = b.restoreSession()
+      // Safe start opens one empty tab: restoring forty pages is itself one of
+      // the things that could be making the browser unusable, and the session
+      // is left on disk untouched so the next ordinary start brings it back.
+      const restored = !safeStart && b.restoreSession()
       if (launchUrl) b.newTab(launchUrl)
       else if (!restored) b.newTab()
     })
@@ -441,7 +481,10 @@ if (!app.requestSingleInstanceLock()) {
       }
     })
 
+    applyQuickStart()
+
     app.on('activate', () => {
+      browser?.reveal()
       if (windows.size === 0) {
         const win = openWindow()
         buildMenu(win)
@@ -834,6 +877,7 @@ function registerIpc() {
       writeLanguageHandoff(next.language)
     }
     applyEverywhere()
+    applyQuickStart()
     if (next.filterLists && !engine.ready) void loadFilters()
     return next
   })
@@ -1514,6 +1558,15 @@ function registerIpc() {
     drafts.keep(str(data.url, 2000), clean)
   })
   ipcMain.on('page:gesture', (event) => downloads.noteGesture(event.sender.id))
+  // A page only ever offers an address; whether it is worth fetching is
+  // decided by the window, which knows about the setting, private mode and
+  // the battery.
+  ipcMain.on('page:prefetch', (event, url: unknown) => {
+    current(event).prefetch(str(url, 2000))
+  })
+  ipcMain.on('page:prefetch-next', (event, url: unknown) => {
+    if (settings.get().prefetchNext) current(event).prefetch(str(url, 2000), true)
+  })
   /* ---- media: 1.6 ---- */
   ipcMain.on('media:position', (event, payload: unknown) => {
     const data = (payload ?? {}) as { url?: unknown; at?: unknown; of?: unknown }
@@ -1760,6 +1813,28 @@ function registerIpc() {
   })
   ipcMain.handle('ext:reveal', (event, path: unknown) => revealExtension(str(path, 600)))
 
+  /* ---- health: why it will not open, and what died last time ---- */
+  ipcMain.handle('health:safe-start', () => safeStart)
+  ipcMain.handle('health:restart', (event, safe: unknown) => {
+    // Relaunch carries the flag, or deliberately does not: the same button
+    // gets both into safe start and back out of it.
+    const args = process.argv.slice(1).filter((one) => one !== '--safe' && one !== '--safe-mode')
+    app.relaunch({ args: safe === true ? [...args, '--safe'] : args })
+    app.exit(0)
+  })
+  ipcMain.handle('tab:timer', (event, id: unknown, minutes: unknown) => {
+    current(event).setTabTimer(num(id), num(minutes))
+  })
+  ipcMain.handle('health:failures', () => pageFailures())
+  ipcMain.handle('health:clear-failures', () => {
+    clearFailures()
+  })
+  ipcMain.handle('health:network', (event, host: unknown) => checkNetwork(str(host, 300)))
+  ipcMain.handle('health:crash', () => lastCrash())
+  ipcMain.handle('health:dismiss-crash', () => {
+    dismissCrash()
+  })
+
   /* ---- filter lists ---- */
   ipcMain.handle('filters:status', (event) => filterStatus())
   ipcMain.handle('filters:refresh', (event) => loadFilters(true))
@@ -1959,6 +2034,8 @@ let quitting = false
 
 app.on('before-quit', async (event) => {
   browser?.dispose()
+  // The marker goes on the way out, so the next run knows this one finished.
+  closeHealth()
   flushAll()
   if (settings.get().clearOnExit && !quitting) {
     quitting = true

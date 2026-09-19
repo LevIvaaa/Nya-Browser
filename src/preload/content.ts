@@ -4170,3 +4170,91 @@ if (httpOrigin) {
     }
   }
 }
+
+/* ==========================================================================
+ * A head start
+ *
+ * Two small habits that cost nothing and save a second each time they are
+ * right.
+ *
+ * The pointer resting on a link is the best guess anybody has about the next
+ * page: by the time the click lands, the connection is open and the document
+ * is on its way. A page that names its own next page — `rel="next"`, which
+ * search results, forum threads and documentation all set — is the other.
+ *
+ * Both only send an address. The main process decides whether to fetch it at
+ * all: it knows whether the setting is on, whether this is a private window
+ * and whether the machine is on battery, and none of those are the page's
+ * business.
+ * ====================================================================== */
+if (isTop && httpOrigin) {
+  const sent = new Set<string>()
+  const offer = (url: string) => {
+    if (!url || sent.has(url) || !/^https:/i.test(url)) return
+    if (sent.size > 120) sent.clear()
+    sent.add(url)
+    ipcRenderer.send('page:prefetch', url)
+  }
+
+  // A quarter of a second: long enough that sweeping the pointer across a
+  // paragraph of links does not fetch all of them, short enough to still be
+  // ahead of the click.
+  let timer: ReturnType<typeof setTimeout> | null = null
+  document.addEventListener(
+    'mouseover',
+    (event) => {
+      const link = (event.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null
+      if (!link) return
+      const href = link.href
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => offer(href), 250)
+    },
+    { capture: true, passive: true }
+  )
+  document.addEventListener('mouseout', () => {
+    if (timer) clearTimeout(timer)
+    timer = null
+  }, { capture: true, passive: true })
+
+  // The page's own idea of what comes after it, once it has finished saying so.
+  window.addEventListener('load', () => {
+    setTimeout(() => {
+      const next =
+        document.querySelector<HTMLLinkElement>('link[rel~="next"][href]') ??
+        document.querySelector<HTMLAnchorElement>('a[rel~="next"][href]')
+      if (next) ipcRenderer.send('page:prefetch-next', next.href)
+    }, 1200)
+  })
+}
+
+/* ==========================================================================
+ * Still, on battery
+ *
+ * The browser says when the machine is running off its battery and the saver
+ * is on. What a page does about it is one stylesheet: animations and
+ * transitions stop, and anything the page marked as decorative motion stops
+ * with them. Nothing is hidden and nothing is resized — a page that looks
+ * different on battery would be a worse trade than the battery it saved.
+ *
+ * `prefers-reduced-motion` is deliberately not touched: that is somebody's
+ * standing preference about motion and not ours to answer on their behalf.
+ * ====================================================================== */
+if (isTop && httpOrigin) {
+  const ID = 'nya-power-saver'
+  ipcRenderer.on('page:power', (_event, saving: boolean) => {
+    const root = document.documentElement
+    if (!root) return
+    const existing = document.getElementById(ID)
+    if (!saving) {
+      existing?.remove()
+      return
+    }
+    if (existing) return
+    const style = document.createElement('style')
+    style.id = ID
+    style.textContent =
+      '*, *::before, *::after { animation-duration: 0s !important;' +
+      ' animation-iteration-count: 1 !important; transition-duration: 0s !important }'
+    root.appendChild(style)
+  })
+}

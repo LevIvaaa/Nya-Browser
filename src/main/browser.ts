@@ -10,6 +10,7 @@ import {
   globalShortcut,
   nativeImage,
   nativeTheme,
+  powerMonitor,
   screen,
   session,
   shell,
@@ -33,6 +34,17 @@ import { downloads } from './downloads'
 import { attachLog, log } from './log'
 import { looksLikePdf, pdfSource, pdfViewerUrl } from './pdf'
 import { docSource, docViewerUrl, looksLikeDoc } from './docview'
+import { safeStart, startedHidden } from './startup'
+import {
+  checkNetwork,
+  clearFailures,
+  dismissCrash,
+  lastCrash,
+  noteFailure,
+  noteOpenTabs,
+  pageFailures,
+  reasonFor
+} from './health'
 
 /**
  * Where an address actually goes.
@@ -250,6 +262,8 @@ class Tab {
   attention = false
   /** set aside on purpose, to come back to */
   unread = false
+  /** when this tab should come forward again, or zero */
+  timerAt = 0
   /** the container this tab drinks from; empty is the ordinary one */
   container = ''
   private pendingUrl: string | null = null
@@ -425,6 +439,7 @@ class Tab {
       badge: this.badge,
       attention: this.attention,
       unread: this.unread,
+      timerAt: this.timerAt,
       memory
     }
   }
@@ -795,6 +810,11 @@ export class BrowserWindow {
 
     this.chrome.webContents.once('did-finish-load', () => {
       if (this.win.isDestroyed()) return
+      // Quick start builds this window at login and leaves it where nobody can
+      // see it. `reveal()` is what the launcher calls when somebody finally
+      // asks for a browser, and from then on the window behaves like any other.
+      if (startedHidden && !this.shown) return
+      this.shown = true
       this.win.show()
       this.win.focus()
       this.chrome.webContents.focus()
@@ -890,8 +910,12 @@ export class BrowserWindow {
     })
 
     this.startSleepLoop()
+    this.startStateSave()
     this.startEdgeWatch()
-    this.timeTimer = setInterval(() => this.countTime(), 15_000)
+    this.timeTimer = setInterval(() => {
+      this.countTime()
+      this.ringTimers()
+    }, 15_000)
     this.win.on('closed', () => {
       if (this.timeTimer) clearInterval(this.timeTimer)
       this.timeTimer = null
@@ -967,7 +991,7 @@ export class BrowserWindow {
     // so every launch and every profile switch loads them again. A private
     // window loads none: an extension sees every page, and the point here is
     // that nothing does.
-    if (!this.incognito) {
+    if (!this.incognito && !safeStart) {
       setExtensionSession(this.ses)
       void loadExtensions(this.ses)
     }
@@ -1012,7 +1036,8 @@ export class BrowserWindow {
     // The saved session belongs to the browser, not to every window of it: a
     // second window starts empty rather than cloning the first.
     if (this.appMode) this.newTab(this.appMode.startUrl)
-    else if (this.incognito || this.offsetFromFirst || !this.restoreSession()) this.newTab()
+    else if (this.incognito || this.offsetFromFirst || safeStart || !this.restoreSession())
+      this.newTab()
     this.broadcast()
   }
 
@@ -1360,6 +1385,8 @@ export class BrowserWindow {
     refreshCustomLists()
     hardenSession(this.ses)
     this.win.setAlwaysOnTop(s.alwaysOnTop)
+    this.watchPower()
+    this.startCacheSweep()
     this.applyProxyTo(this.ses)
     for (const box of this.containerSessions.values()) this.applyProxyTo(box)
     this.tellPagesAboutGestures()
@@ -1418,7 +1445,11 @@ export class BrowserWindow {
     const rotate = settings.get().background.rotate
     // Only the first window does the turning: two windows with one timer each
     // would race, and the picture would change twice as often as asked.
+    // On battery the picture stays put: decoding a photograph every ten
+    // minutes to change something nobody asked to change is the definition of
+    // what a saver is for.
     if (!rotate.on || rotate.files.length < 2 || this.offsetFromFirst || this.incognito) return
+    if (this.savingPower()) return
     this.wallpaperTimer = setInterval(
       () => this.nextWallpaper(),
       Math.max(15, rotate.everyMinutes) * 60_000
@@ -1643,6 +1674,118 @@ export class BrowserWindow {
     }
   }
 
+  /*
+   * ---------------------------------------------------------------- battery
+   *
+   * Doing less when there is no cable.
+   *
+   * Not a mode anybody switches into: the machine already knows whether it is
+   * plugged in, and a browser that keeps a video wallpaper turning and forty
+   * tabs awake on a train costs an hour of battery to no purpose. Everything
+   * it changes, it changes back.
+   */
+  private onBattery = false
+  private powerWatched = false
+
+  private watchPower() {
+    const look = () => {
+      const now = powerMonitor.isOnBatteryPower()
+      if (now === this.onBattery && this.powerWatched) return
+      this.onBattery = now
+      this.tellPagesAboutPower()
+      // Two of the settings change what they do rather than whether they are
+      // on, so they are restarted rather than told.
+      this.startWallpaperTurns()
+    }
+    if (!this.powerWatched) {
+      this.powerWatched = true
+      powerMonitor.on('on-battery', look)
+      powerMonitor.on('on-ac', look)
+    }
+    look()
+  }
+
+  /** True when the browser should be doing less because it is on battery. */
+  savingPower(): boolean {
+    return this.onBattery && settings.get().batterySaver
+  }
+
+  /** How long a background tab may sit before it is put to sleep. */
+  private sleepDelay(): number {
+    const s = settings.get()
+    return this.savingPower() ? Math.min(s.sleepAfterMinutes, 5) : s.sleepAfterMinutes
+  }
+
+  /** Pages stop their own animations when the cable is out. */
+  private tellPagesAboutPower() {
+    for (const tab of this.tabs) {
+      const wc = tab.wc
+      if (wc && !wc.isDestroyed()) wc.send('page:power', this.savingPower())
+    }
+  }
+
+  /*
+   * ------------------------------------------------------------- the cache
+   *
+   * A cache that has been growing for a year is the reason a page shows
+   * yesterday's stylesheet and nobody can work out why. Sweeping it on a
+   * schedule costs one slow load and quietly fixes a class of trouble that
+   * otherwise gets diagnosed as «the browser is broken».
+   */
+  private cacheTimer: NodeJS.Timeout | null = null
+
+  private startCacheSweep() {
+    if (this.cacheTimer) {
+      clearInterval(this.cacheTimer)
+      this.cacheTimer = null
+    }
+    if (this.offsetFromFirst || this.incognito) return
+    const sweep = () => {
+      const s = settings.get()
+      if (s.clearCacheDays <= 0) return
+      const last = s.cacheSweptAt || 0
+      if (last && Date.now() - last < s.clearCacheDays * 86_400_000) return
+      void this.ses
+        .clearCache()
+        .then(() => {
+          settings.patch({ cacheSweptAt: Date.now() })
+          log('cache swept on schedule')
+        })
+        .catch((error) => log('cache sweep failed', String(error)))
+    }
+    // Once shortly after start, and once an hour after that: a window left
+    // open for a week should still get its sweep.
+    setTimeout(sweep, 20_000)
+    this.cacheTimer = setInterval(sweep, 60 * 60 * 1000)
+  }
+
+  /*
+   * ---------------------------------------------------------------- ahead
+   *
+   * The page under the pointer, started early.
+   *
+   * A link hovered over for a moment is a link about to be clicked, and the
+   * couple of hundred milliseconds between the hover and the click are enough
+   * to have the connection open and the document on its way. Https only, one
+   * request per address, and nothing at all on battery or in a private window:
+   * this is a head start, not a crawler.
+   */
+  private prefetched = new Set<string>()
+
+  prefetch(url: string, fromPage = false) {
+    const s = settings.get()
+    // `fromPage` is the page's own rel="next", which has its own setting: it
+    // is a different promise — one page, chosen by the site — from following
+    // whatever the pointer happens to rest on.
+    if (!(fromPage ? s.prefetchNext : s.prefetchOnHover)) return
+    if (this.incognito || this.savingPower()) return
+    if (!/^https:/i.test(url)) return
+    if (this.prefetched.has(url)) return
+    if (this.prefetched.size > 200) this.prefetched.clear()
+    this.prefetched.add(url)
+    void this.ses.fetch(url, { method: 'GET' }).catch(() => undefined)
+  }
+
   /** Every open page has to know whether a right-drag means anything. */
   private tellPagesAboutGestures() {
     const s = settings.get()
@@ -1716,6 +1859,7 @@ export class BrowserWindow {
       const s = settings.get()
       wc.send('gesture:on', s.mouseGestures)
       wc.send('hints:on', { on: s.linkHints, key: s.linkHintsKey })
+      wc.send('page:power', this.savingPower())
       this.tellPageAboutShield(tab)
     })
 
@@ -1856,12 +2000,19 @@ export class BrowserWindow {
         // The site simply has no HTTPS endpoint: offer plain HTTP instead of
         // silently downgrading.
         tab.loading = false
+        const why = reasonFor(code)
         tab.error = {
           code,
           description: description || t('Сайт не отвечает по HTTPS'),
           url,
+          reason: why || undefined,
           httpsFallbackAvailable: url.startsWith('https://')
         }
+        // This is a failure like any other and belongs in the log: a name that
+        // does not resolve arrives here first, and leaving it out was the
+        // difference between a log that answers «why did nothing open» and one
+        // that is empty exactly when it is needed.
+        noteFailure({ url, code, description, reason: why })
         this.broadcast()
         return
       }
@@ -1869,21 +2020,43 @@ export class BrowserWindow {
       // A certificate is the one failure someone can answer for themselves, so
       // the page is told what was wrong with it and offers the choice.
       const certificate = host ? refusedCertificate(host) : null
+      const reason = reasonFor(code)
       tab.error = {
         code,
         description: description || t('Не удалось загрузить страницу'),
         url,
+        reason: reason || undefined,
         certificate: certificate ?? undefined
       }
+      // Written down, so that «it worked yesterday» has an answer and the
+      // diagnostics page has something to show.
+      noteFailure({ url, code, description, reason })
       this.broadcast()
     })
     wc.on('render-process-gone', (_e, details) => {
       tab.loading = false
+      /*
+       * A tab that died, and the way back into it.
+       *
+       * Chromium kills a renderer for its own reasons — memory, a bad frame, a
+       * crash inside the page — and what is left is a blank tab with an
+       * address in it. The address is kept and marked, so the error page can
+       * offer to load it again, which is the only thing anybody wants at that
+       * moment.
+       */
       tab.error = {
         code: -1,
         description: t('Страница неожиданно завершила работу ({reason})', { reason: details.reason }),
-        url: tab.url
+        url: tab.url,
+        crashed: true,
+        reason: t('Странице не хватило памяти или движок столкнулся с ошибкой внутри неё')
       }
+      noteFailure({
+        url: tab.url,
+        code: -1,
+        description: details.reason,
+        reason: t('Странице не хватило памяти или движок столкнулся с ошибкой внутри неё')
+      })
       this.broadcast()
     })
     // Whichever page you are working in is the one the browser is «on»: click
@@ -2647,6 +2820,36 @@ export class BrowserWindow {
     tab.unread = unread
     if (!unread) tab.attention = false
     this.broadcast()
+  }
+
+  /*
+   * A timer on a tab.
+   *
+   * Half the reason anybody keeps checking a tab is that there is nothing else
+   * to do with the waiting. Set a time on it and the tab says so in the strip;
+   * when it runs out the tab comes forward on its own with a note of what it
+   * was. Nothing is closed and nothing is lost — the timer is a reminder, not
+   * a rule.
+   */
+  setTabTimer(id: number, minutes: number) {
+    const tab = this.tabs.find((t) => t.id === id)
+    if (!tab) return
+    tab.timerAt = minutes > 0 ? Date.now() + Math.min(minutes, 24 * 60) * 60_000 : 0
+    this.broadcast()
+  }
+
+  /** Called on the same beat as everything else that watches the clock. */
+  private ringTimers() {
+    const now = Date.now()
+    for (const tab of this.tabs) {
+      if (!tab.timerAt || tab.timerAt > now) continue
+      tab.timerAt = 0
+      // Forward, not merely flagged: a timer that only left a dot would be a
+      // thing to check, which is what it was set to avoid.
+      this.switchTab(tab.id)
+      this.win.show()
+      this.toast(t('Время вышло: {name}', { name: tab.title || tab.url }))
+    }
   }
 
   /** The window above everything else, for a video or a reference while working. */
@@ -5681,12 +5884,41 @@ export class BrowserWindow {
     return name
   }
 
+  /*
+   * ------------------------------------------------------- state, on a clock
+   *
+   * Everything already writes the session down when it changes — a tab opened,
+   * a group renamed, a window closed. What that misses is the run that never
+   * gets to the end: a machine that loses power halfway through an afternoon
+   * has no event to hang a save on. Half a minute is short enough that nothing
+   * meaningful is lost and long enough that the disk does not notice.
+   *
+   * The same beat keeps the crash marker's idea of what was open current, so a
+   * run that ends badly can offer those pages back.
+   */
+  private stateTimer: NodeJS.Timeout | null = null
+
+  private startStateSave() {
+    if (this.stateTimer) clearInterval(this.stateTimer)
+    if (this.incognito) return
+    this.stateTimer = setInterval(() => {
+      this.persistSession()
+      if (this.offsetFromFirst) return
+      noteOpenTabs(
+        this.tabs.filter((tab) => tab.hasContent && /^https?:/i.test(tab.url)).map((tab) => tab.url),
+        app.getVersion()
+      )
+    }, 30_000)
+  }
+
   /* ------------------------------------------------------------ sleep loop */
   private startSleepLoop() {
     this.sleepTimer = setInterval(() => {
       const s = settings.get()
       if (!s.sleepBackgroundTabs) return
-      const cutoff = Date.now() - s.sleepAfterMinutes * 60_000
+      // On battery this comes down to five minutes: sleeping sooner is the
+      // one thing in the saver that actually buys any power back.
+      const cutoff = Date.now() - this.sleepDelay() * 60_000
       let changed = false
       for (const tab of this.tabs) {
         if (tab.id === this.activeId || tab.sleeping || !tab.hasContent) continue
@@ -5915,6 +6147,24 @@ export class BrowserWindow {
     this.broadcast()
   }
 
+  /**
+   * Bring a window built ahead of time into the world.
+   *
+   * Everything about it is already done — chrome painted, session restored,
+   * extensions loaded — so this is the whole of what was deferred.
+   */
+  reveal() {
+    if (this.shown || this.win.isDestroyed()) return
+    this.shown = true
+    this.win.show()
+    this.win.focus()
+    this.chrome.webContents.focus()
+    this.sendWindowState()
+  }
+
+  /** False only for a window quick start built before anybody asked for one. */
+  private shown = false
+
   /** True when this window owns the view a message came from. */
   owns(sender: WebContents): boolean {
     if (this.chrome.webContents === sender || this.overlay.webContents === sender) return true
@@ -5923,6 +6173,8 @@ export class BrowserWindow {
 
   dispose() {
     if (this.sleepTimer) clearInterval(this.sleepTimer)
+    if (this.stateTimer) clearInterval(this.stateTimer)
+    if (this.cacheTimer) clearInterval(this.cacheTimer)
     if (this.edgeTimer) clearInterval(this.edgeTimer)
     if (this.wallpaperTimer) clearInterval(this.wallpaperTimer)
     this.persistSession()

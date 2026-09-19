@@ -29,6 +29,7 @@ import logoUrl from '../assets/logo.png'
 import { Shortcuts } from '../components/Shortcuts'
 import { Wellbeing } from '../components/Wellbeing'
 import { Backup } from '../components/Backup'
+import { Diagnostics } from '../components/Diagnostics'
 import {
   Alert,
   Clock,
@@ -1833,6 +1834,66 @@ export default function SettingsPage({
                   <Toggle checked={settings.lazyRestore} onChange={(v) => onPatch({ lazyRestore: v })} />
                 </Row>
               </Section>
+
+              <Section
+                title={t('Вперёд и в запас')}
+                icon={<Zap width={15} height={15} />}
+                description={t('Страница начинает грузиться до того, как вы по ней кликнете')}
+              >
+                <Row
+                  title={t('Начинать загрузку при наведении')}
+                  hint={t('Пока вы ведёте курсор к ссылке, соединение уже открыто')}
+                  {...of('prefetchOnHover')}
+                >
+                  <Toggle checked={settings.prefetchOnHover} onChange={(v) => onPatch({ prefetchOnHover: v })} />
+                </Row>
+                <Row
+                  title={t('Подгружать следующую страницу')}
+                  hint={t('Если сайт сам указывает, какая страница идёт за этой')}
+                  {...of('prefetchNext')}
+                >
+                  <Toggle checked={settings.prefetchNext} onChange={(v) => onPatch({ prefetchNext: v })} />
+                </Row>
+                <Row
+                  title={t('Быстрый старт')}
+                  hint={t('Браузер запускается вместе с системой и ждёт свёрнутым — первое окно открывается мгновенно')}
+                  {...of('fastStart')}
+                >
+                  <Toggle checked={settings.fastStart} onChange={(v) => onPatch({ fastStart: v })} />
+                </Row>
+                <Row
+                  title={t('Экономия от батареи')}
+                  hint={t('Без розетки вкладки засыпают быстрее, обои перестают меняться, предзагрузка выключается')}
+                  {...of('batterySaver')}
+                >
+                  <Toggle checked={settings.batterySaver} onChange={(v) => onPatch({ batterySaver: v })} />
+                </Row>
+                <Row
+                  title={t('Очищать кэш каждые')}
+                  hint={t('Кэш, которому год, — самая частая причина «у меня показывается старая версия»')}
+                  {...of('clearCacheDays')}
+                  advanced
+                >
+                  <Slider
+                    value={settings.clearCacheDays}
+                    min={0}
+                    max={90}
+                    step={1}
+                    width={160}
+                    format={(v) => (v === 0 ? t('никогда') : `${v} дн.`)}
+                    onChange={(clearCacheDays) => onPatch({ clearCacheDays })}
+                  />
+                </Row>
+                <Row
+                  title={t('Часы и счётчик вкладок')}
+                  hint={t('В правом углу строки вкладок')}
+                  {...of('stripClock')}
+                >
+                  <Toggle checked={settings.stripClock} onChange={(v) => onPatch({ stripClock: v })} />
+                </Row>
+              </Section>
+
+              <Diagnostics flash={flash} />
             </>
           )}
 
