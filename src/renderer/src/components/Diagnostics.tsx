@@ -22,8 +22,23 @@ export function Diagnostics({ flash }: { flash: (message: string) => void }) {
   const [safe, setSafe] = useState(false)
 
   useEffect(() => {
-    void window.browser.pageFailures().then(setFailures)
     void window.browser.safeStart().then(setSafe)
+  }, [])
+
+  /*
+   * The log has to keep up with what is failing.
+   *
+   * Reading it once when the page mounts was wrong in the only case that
+   * matters: somebody opens the settings, goes and finds a page that will not
+   * load, comes back — and is told «ни одна страница не упала» while the
+   * browser is holding two failures. Every failure also changes a tab (it is
+   * what puts the error on it), so the tab broadcast is exactly the beat to
+   * re-read on, and it costs nothing when nothing is failing.
+   */
+  useEffect(() => {
+    const read = () => void window.browser.pageFailures().then(setFailures)
+    read()
+    return window.browser.onTabs(read)
   }, [])
 
   const run = async () => {

@@ -121,12 +121,15 @@ export default function PageFiles({
             className="max-h-[340px] overflow-y-auto rounded-[var(--radius-md)]"
             style={{ border: '1px solid var(--line)' }}
           >
-            {shown.map((file) => {
+            {shown.map((file, index) => {
               const on = picked.has(file.url)
               const Mark = MARKS[(file.kind as Group) in MARKS ? (file.kind as Group) : 'file']
               return (
                 <button
-                  key={file.url}
+                  // A page can offer the same address twice — the same photo
+                  // linked from two places — and two rows with one key is one
+                  // row on screen.
+                  key={`${file.url}#${index}`}
                   className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-[var(--surface-hover)]"
                   style={{ transition: 'background var(--t-fast) linear' }}
                   onClick={() => toggle(file.url)}

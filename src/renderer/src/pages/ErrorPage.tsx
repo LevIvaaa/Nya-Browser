@@ -55,6 +55,13 @@ export default function ErrorPage({ error }: { error: TabError }) {
   // the details below are the ones it refused, not a guess from the code.
   const refused = error.certificate
 
+  // What is already said in large type under the heading. The card below
+  // repeats the code and the address on purpose — they are there to be copied
+  // — but repeating the one sentence a person actually reads, word for word,
+  // twelve lines apart, made the page look like it had a bug in it.
+  const said = NET_HINTS[error.code] ? t(NET_HINTS[error.code]) : error.description
+  const extra = error.reason && error.reason !== said ? error.reason : ''
+
   const [check, setCheck] = useState<NetworkCheck | null>(null)
   const [checking, setChecking] = useState(false)
   const diagnose = async () => {
@@ -84,7 +91,7 @@ export default function ErrorPage({ error }: { error: TabError }) {
           {certificate ? t('Соединение не защищено') : t('Страница не открылась')}
         </h1>
         <p className="mx-auto mt-2 max-w-[440px] text-base text-dim">
-          {NET_HINTS[error.code] ? t(NET_HINTS[error.code]) : error.description}
+          {said}
         </p>
 
         <div
@@ -97,12 +104,12 @@ export default function ErrorPage({ error }: { error: TabError }) {
           <div className="font-mono text-xs text-dim">
             {error.code} · {error.description}
           </div>
-          {error.reason && (
+          {extra && (
             <>
               <div className="mt-2 text-2xs uppercase tracking-wider text-faint">
                 {t('Что это значит')}
               </div>
-              <div className="text-sm text-dim">{error.reason}</div>
+              <div className="text-sm text-dim">{extra}</div>
             </>
           )}
 

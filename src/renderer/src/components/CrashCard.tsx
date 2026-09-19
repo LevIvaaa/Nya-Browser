@@ -17,11 +17,32 @@ export default function CrashCard() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      void window.browser.lastCrash().then((found) => {
-        // A run that crashed before it opened anything has nothing to offer
-        // back, and a bare «we crashed» is a worry with no action in it.
-        if (found && found.tabs.length > 0) setReport(found)
-      })
+      void (async () => {
+        const found = await window.browser.lastCrash()
+        if (!found || found.tabs.length === 0) return
+
+        /*
+         * Only what is not already back.
+         *
+         * Restoring the session is on by default, so after a crash the tabs
+         * are usually open again before this card appears — and offering to
+         * open them a second time is how somebody ends up with eleven tabs
+         * where they had six. Measured exactly that. What is left after the
+         * filter is the genuinely lost: whatever was open in a window that
+         * the session did not cover.
+         */
+        const open = new Set((await window.browser.snapshot()).tabs.map((tab) => tab.url))
+        // Distinct: two tabs on one address were two entries in the marker,
+        // and the card offered to open the same page twice.
+        const lost = [...new Set(found.tabs)].filter((url) => !open.has(url))
+        if (lost.length === 0) {
+          // Nothing was lost, so there is nothing to say. The marker is
+          // answered so the card does not come back on the next start.
+          void window.browser.dismissCrash()
+          return
+        }
+        setReport({ ...found, tabs: lost })
+      })()
     }, 2500)
     return () => clearTimeout(timer)
   }, [])

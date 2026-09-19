@@ -60,8 +60,12 @@ export function verdictOf(
   // Nothing at all got out. Naming DNS here would be wrong — a name that
   // cannot be looked up because nothing leaves the machine is a symptom.
   if (!internet && !dns) return 'no-internet'
-  // Something got out, but names do not turn into numbers.
+  // Names do not turn into numbers, though something else got through.
   if (!dns) return 'no-dns'
+  // Names resolve and still nothing answers: something between this machine
+  // and the world is dropping the traffic. Saying «всё в порядке» here — as
+  // an earlier version did — put a tick beside a cross on the same row.
+  if (!internet) return 'no-internet'
   if (site === false) return 'site-down'
   return 'fine'
 }

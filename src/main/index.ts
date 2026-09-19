@@ -153,7 +153,18 @@ function writeLanguageHandoff(code: string) {
 function applyQuickStart() {
   if (process.platform === 'linux') return
   try {
-    app.setLoginItemSettings({ openAtLogin: settings.get().fastStart, args: ['--quick-start'] })
+    /*
+     * Only an installed browser may put itself in the startup list.
+     *
+     * A development run registered `node_modules/electron/dist/electron.exe
+     * --quick-start`, which is not this browser at all: it is the bare
+     * Electron binary with no app to run, pointed at a path that stops
+     * existing the next time the dependencies are reinstalled. So a dev run
+     * now clears the entry rather than writing one, which also cleans up
+     * after the runs that wrote it.
+     */
+    const wanted = app.isPackaged && settings.get().fastStart
+    app.setLoginItemSettings({ openAtLogin: wanted, args: ['--quick-start'] })
   } catch (error) {
     log('quick start', String(error))
   }

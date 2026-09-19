@@ -417,9 +417,12 @@ export default function StartPage({
         return (
           <Card icon={<Star width={13} height={13} />} title={t('Недавно закрытые')} shape={page.shape}>
             <div className="flex flex-col">
-              {closed.slice(0, 5).map((tab) => (
+              {/* Keyed by position as well as address: closing the same page
+                  twice puts two rows here with the same address, and React
+                  answers a duplicate key by dropping one of the two rows. */}
+              {closed.slice(0, 5).map((tab, index) => (
                 <button
-                  key={tab.url}
+                  key={`${tab.url}#${index}`}
                   onClick={() => open(tab.url)}
                   className="flex items-center gap-2 truncate rounded-[9px] px-2 py-1.5 text-left text-sm hover:bg-[var(--surface-hover)]"
                   style={{ transition: 'background var(--t-fast) linear' }}

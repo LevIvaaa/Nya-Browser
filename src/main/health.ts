@@ -140,21 +140,44 @@ const probe = async (url: string): Promise<boolean> => {
 }
 
 /**
+ * Does a name turn into a number.
+ *
+ * Chromium's own resolver, not an HTTPS request to a DNS service: asking
+ * dns.google over HTTPS was the first version of this, and it was wrong in
+ * the exact case it exists for — a machine whose resolver is broken cannot
+ * look up `dns.google` either, so the DNS check failed for want of DNS and
+ * the answer said nothing about DNS.
+ */
+const resolves = async (host: string) => {
+  try {
+    const found = await net.resolveHost(host)
+    return (found?.endpoints?.length ?? 0) > 0
+  } catch {
+    return false
+  }
+}
+
+/**
  * Whether the trouble is this site or the whole connection.
  *
  * Three questions, in the order that narrows things fastest: is there a link
- * at all, does a name resolve, and does the site itself answer. The hosts are
- * ones this browser already talks to — the wallpaper service and the search
- * engine's own domain — so the check adds no new party to the list of people
- * who learn that this machine exists.
+ * at all, does a name resolve, and does anything out there answer. The last
+ * asks two hosts and is content with either — one site being slow on a cold
+ * connection is not the same as having no internet, and the first version of
+ * this said «интернета нет» next to a browser that was loading pages fine.
+ *
+ * Both hosts are ones this browser already talks to, so the check adds nobody
+ * new to the list of people who learn that this machine exists.
  */
 export async function checkNetwork(host = ''): Promise<NetworkCheck> {
   const online = net.isOnline()
 
-  const [dns, internet] = await Promise.all([
-    probe('https://dns.google/resolve?name=example.com&type=A'),
-    probe('https://duckduckgo.com/')
+  const [dns, ddg, wiki] = await Promise.all([
+    resolves('example.com'),
+    probe('https://duckduckgo.com/'),
+    probe('https://www.wikipedia.org/')
   ])
+  const internet = ddg || wiki
 
   let site: boolean | null = null
   if (host) site = await probe(`https://${host}/`)

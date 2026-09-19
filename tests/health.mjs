@@ -60,11 +60,12 @@ check('only the site is down', verdictOf(true, true, true, false), 'site-down')
 check('all well, no site asked about', verdictOf(true, true, true, null), 'fine')
 check('all well, site answered', verdictOf(true, true, true, true), 'fine')
 
-// DNS working while nothing else does is a combination the probes can produce
-// (a cached answer, a resolver on the local network): names resolve, so it is
-// not a DNS fault, and the site itself was never asked.
-check('names resolve but nothing else answers', verdictOf(true, true, false, null), 'fine')
-check('names resolve, the site does not', verdictOf(true, true, false, false), 'site-down')
+// Names resolve — a resolver on the local network will do that all day — and
+// still nothing out there answers. That is not «fine»: it is traffic being
+// dropped somewhere past this machine, and the row on screen said as much
+// with a cross while the verdict above it said everything was in order.
+check('names resolve but nothing else answers', verdictOf(true, true, false, null), 'no-internet')
+check('and the site is no comfort either', verdictOf(true, true, false, false), 'no-internet')
 
 /* --------------------------------------------------------------- the hints */
 

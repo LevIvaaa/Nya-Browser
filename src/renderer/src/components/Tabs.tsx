@@ -1055,7 +1055,12 @@ export function TabStrip({
         <Plus />
       </button>
       <div className="flex-1" />
-      {settings.stripClock && <StripClock count={tabs.filter((tab) => tab.hasContent).length} />}
+      {/* The same tabs the strip is drawing, counted. Counting only the ones
+          with a page in them put «3» beside a group chip that said «19»: two
+          numbers about the same thing, on the same strip, disagreeing. */}
+      {settings.stripClock && (
+        <StripClock count={rows.filter((row) => row.kind === 'tab').length} />
+      )}
     </div>
   )
 }

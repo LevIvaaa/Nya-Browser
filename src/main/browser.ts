@@ -402,12 +402,36 @@ class Tab {
     } catch {
       origin = ''
     }
+    /*
+     * A padlock is a statement about a connection that happened.
+     *
+     * The address alone was deciding it, so a page that never loaded at all —
+     * a name that would not resolve, a certificate refused — was shown behind
+     * a closed padlock, which is the one thing in a browser that must never
+     * say something it cannot back. A tab with an error made no connection,
+     * so it gets no padlock.
+     */
+    if (this.error) secure = false
+    /*
+     * A tab that never loaded still has a name.
+     *
+     * The default title is a real string, so it always won over the host and
+     * three failed tabs in a row all read «Новая вкладка» — indistinguishable,
+     * which is the opposite of what a strip of tabs is for. A page that got a
+     * title of its own keeps it; one that never got that far is called by
+     * where it was going.
+     */
+    const named =
+      this.title && this.title !== t('Новая вкладка')
+        ? this.title
+        : origin || this.title || t('Новая вкладка')
+
     return {
       id: this.id,
       internal: this.internal,
       pinned: this.pinned,
       groupId: this.groupId,
-      title: this.title || origin || t('Новая вкладка'),
+      title: named,
       // Our own pages leave the address bar empty: it is a place to type, and
       // "nya://settings" is not an address anyone needs to see or return to.
       url: this.url === START_URL || this.internal ? '' : this.url,
@@ -6192,8 +6216,14 @@ function appIcon(): string | undefined {
 
 /**
  * Chromium net errors that mean "this host has no working HTTPS endpoint":
- * refused/reset/timed-out connections plus TLS and certificate failures.
+ * refused, reset and timed-out connections plus TLS and certificate failures.
+ *
+ * ERR_NAME_NOT_RESOLVED (-105) was in here and should not have been. A name
+ * that does not resolve does not resolve for http either, so the browser was
+ * telling somebody who had mistyped an address that the site «has no secure
+ * version» and offering to fetch it unencrypted — an offer that cannot work,
+ * attached to a lesson nobody should be taught.
  */
 const HTTPS_UNAVAILABLE = new Set([
-  -100, -101, -102, -105, -107, -118, -200, -201, -202, -207, -501
+  -100, -101, -102, -107, -118, -200, -201, -202, -207, -501
 ])
