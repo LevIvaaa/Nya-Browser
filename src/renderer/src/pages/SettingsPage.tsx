@@ -142,7 +142,7 @@ function drmHint(state: (WidevineState & { needsRestart: boolean }) | null, want
   if (!state) return t('Проверяем состояние…')
   if (!state.supported) return state.error || t('Эта сборка без поддержки Widevine')
   if (!wanted) {
-    return t('Выключено. При включении Chromium один раз скачает модуль Widevine с серверов Google — это единственная причина, по которой пункт не включён сразу')
+    return t('При включении один раз скачается модуль Widevine от Google')
   }
   if (state.error) return t('Не удалось установить модуль: {e}', { e: state.error })
   if (state.ready) return t('Модуль Widevine {v} готов', { v: state.version })

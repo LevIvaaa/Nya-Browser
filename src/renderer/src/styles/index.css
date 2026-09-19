@@ -539,6 +539,53 @@ button {
     color: #fff;
   }
 
+  /*
+   * Our own tick box.
+   *
+   * Everything else in this browser is drawn by it — the toggles, the pills,
+   * the segmented rows — and then the site panel had five of Windows' own
+   * checkboxes in a column, in Windows' blue, at Windows' size. They are the
+   * one control that was still borrowed.
+   */
+  input[type='checkbox'] {
+    appearance: none;
+    flex: none;
+    width: 17px;
+    height: 17px;
+    border-radius: 6px;
+    border: 1.5px solid color-mix(in srgb, var(--ink) 26%, transparent);
+    background: transparent;
+    cursor: pointer;
+    display: grid;
+    place-content: center;
+    transition: background var(--t-fast) linear, border-color var(--t-fast) linear;
+  }
+  input[type='checkbox']:hover {
+    border-color: color-mix(in srgb, var(--ink) 42%, transparent);
+  }
+  input[type='checkbox']::after {
+    content: '';
+    width: 9px;
+    height: 9px;
+    transform: scale(0);
+    transition: transform var(--t-fast) var(--ease-spring);
+    background: #fff;
+    /* A tick, as a shape rather than as a glyph: a character would be a
+       different tick in every font the system might pick. */
+    clip-path: polygon(14% 47%, 0 61%, 39% 100%, 100% 22%, 86% 9%, 39% 72%);
+  }
+  input[type='checkbox']:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  input[type='checkbox']:checked::after {
+    transform: scale(1);
+  }
+  input[type='checkbox']:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+    outline-offset: 2px;
+  }
+
   .card {
     background: var(--surface);
     border: 1px solid var(--line);

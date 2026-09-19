@@ -196,10 +196,10 @@ export default function PasswordsPage() {
             </div>
             <div className="text-sm text-dim">
               {state?.mode === 'password'
-                ? t('Ключ выводится из мастер-пароля (scrypt) и живёт только в памяти.')
+                ? t('Ключ выводится из мастер-пароля и живёт только в памяти')
                 : state?.osEncryption
-                  ? t('Ключ запечатан средствами Windows (DPAPI) — файл нельзя открыть на другом компьютере.')
-                  : t('Системное шифрование недоступно — задайте мастер-пароль.')}
+                  ? t('Ключ хранит Windows: файл не открыть на другом компьютере')
+                  : t('Системное шифрование недоступно — задайте мастер-пароль')}
             </div>
           </div>
           {state?.mode === 'password' && !locked && (
@@ -331,7 +331,7 @@ export default function PasswordsPage() {
           <EmptyState
             icon={<Key width={26} height={26} />}
             title={t('Сохранённых паролей нет')}
-            hint={t('Войдите на сайт — браузер предложит сохранить пароль. Или добавьте запись вручную.')}
+            hint={t('Войдите на сайт — браузер предложит сохранить пароль')}
           />
         ) : (
           /* A list of sites, and nothing else until one is opened. Every row
@@ -438,9 +438,12 @@ export default function PasswordsPage() {
         </div>
 
         {section === 'passwords' && (
+          /* One line. The paragraph that was here named its cipher and its
+             authenticated-data scheme in small grey type at the bottom of an
+             empty page — a lecture where a reassurance belonged. */
           <p className="mt-4 flex items-center gap-2 text-sm text-faint">
-            <Shield width={14} height={14} />
-            {t('Пароли шифруются по отдельности (AES-256-GCM); сайт и имя пользователя входят в аутентифицируемые данные, поэтому запись нельзя подставить другому сайту.')}
+            <Shield width={14} height={14} className="shrink-0" />
+            {t('Каждый пароль зашифрован отдельно и привязан к своему сайту')}
           </p>
         )}
         {note && <p className="mt-2 text-sm" style={{ color: 'var(--good)' }}>{note}</p>}

@@ -148,7 +148,10 @@ function viewerPage(src: string, kind: DocKind): string {
     encoding: t('Кодировка'),
     collapse: t('Свернуть всё'),
     expand: t('Развернуть всё'),
-    saveCsv: t('Сохранить как CSV')
+    saveCsv: t('Сохранить как CSV'),
+    bytes: t('байт'),
+    kb: t('КБ'),
+    mb: t('МБ')
   }
 
   return `<!doctype html>
@@ -450,7 +453,17 @@ fetch('nya://doc/data?src=' + encodeURIComponent(SRC))
   .then((response) => (response.ok ? response.text() : Promise.reject(new Error(String(response.status)))))
   .then((body) => {
     text = body
-    if (KIND !== 'csv') meta.textContent = new Intl.NumberFormat().format(body.length) + ' B'
+    // «6 362 B» is a unit from another language in a Russian window. Two
+    // significant figures and the unit somebody actually says.
+    if (KIND !== 'csv') {
+      const kb = body.length / 1024
+      meta.textContent =
+        kb < 1
+          ? new Intl.NumberFormat().format(body.length) + ' ' + WORDS.bytes
+          : kb < 1024
+            ? kb.toFixed(kb < 10 ? 1 : 0) + ' ' + WORDS.kb
+            : (kb / 1024).toFixed(1) + ' ' + WORDS.mb
+    }
     paint()
   })
   .catch(() => {

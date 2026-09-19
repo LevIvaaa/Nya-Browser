@@ -1,7 +1,7 @@
 import { t } from '../i18n'
 import { useState } from 'react'
 import type { Profile, ProfilesState } from '../../../shared/types'
-import { Doc, Clock, Download, Eraser, Gear, Incognito, Keyboard, Plus, Printer, Search, Shield, Star, Users, Wallet, Zap } from './Icons'
+import { Doc, Clock, Download, Eraser, Gear, Grid, Incognito, Keyboard, Monitor, Plus, Printer, Search, Shield, Star, Users, Wallet, Zap } from './Icons'
 import { Avatar, Modal, Popover, TextField } from './ui'
 
 type View = 'settings' | 'history' | 'passwords' | 'downloads' | 'bookmarks' | 'security' | 'tasks'
@@ -40,7 +40,7 @@ export function AppMenu({
     'new-tab': item(<Plus width={15} height={15} />, t('Новая вкладка'), 'Ctrl+T', () =>
       void window.browser.newTab()
     ),
-    'new-window': item(<Plus width={15} height={15} />, t('Новое окно'), 'Ctrl+N', () =>
+    'new-window': item(<Monitor width={15} height={15} />, t('Новое окно'), 'Ctrl+N', () =>
       void window.browser.newWindow()
     ),
     'new-private-window': item(<Incognito width={15} height={15} />, t('Приватное окно'), 'Ctrl+Shift+N', () =>
@@ -58,7 +58,7 @@ export function AppMenu({
       window.browser.setOverlay('print')
     ),
     merge: item(<Doc width={15} height={15} />, t('Склеить PDF'), '', () => void window.browser.mergePdfs()),
-    zoom: item(<Search width={15} height={15} />, t('Масштаб страницы'), 'Ctrl+0', () =>
+    zoom: item(<Grid width={15} height={15} />, t('Масштаб страницы'), 'Ctrl+0', () =>
       void window.browser.zoom('reset')
     ),
     settings: item(<Gear width={15} height={15} />, t('Настройки'), 'Ctrl+,', () => onOpen('settings'))
@@ -72,7 +72,7 @@ export function AppMenu({
         {item(<Shield width={15} height={15} />, t('Проверка безопасности'), '', () =>
           window.browser.newTab('nya://security')
         )}
-        {item(<Eraser width={15} height={15} />, t('Очистить данные сайтов'), 'Ctrl+Shift+Del', () =>
+        {item(<Eraser width={15} height={15} />, t('Очистить данные'), 'Ctrl+Shift+Del', () =>
           window.browser.clearBrowsingData()
         )}
         {item(<Keyboard width={15} height={15} />, t('Инструменты разработчика'), 'F12', () =>
@@ -188,7 +188,7 @@ export function ProfileMenu({
         >
           <div className="flex flex-col gap-2">
             <span className="text-sm text-dim">
-              {t('У профиля свои cookies, история, закладки, пароли и настройки. Данные не пересекаются.')}
+              {t('У профиля свои cookies, история, закладки, пароли и настройки')}
             </span>
             <TextField value={name} onChange={setName} placeholder={t('Например, Работа')} width="100%" autoFocus />
           </div>

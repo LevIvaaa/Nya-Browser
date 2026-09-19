@@ -71,7 +71,7 @@ export function Diagnostics({ flash }: { flash: (message: string) => void }) {
           hint={
             check
               ? VERDICT[check.verdict]
-              : t('Связь, DNS и доступ наружу — по очереди, чтобы стало видно, что именно сломалось')
+              : t('Связь, имена и доступ наружу — по очереди')
           }
         >
           <button className="btn" onClick={run} disabled={checking}>

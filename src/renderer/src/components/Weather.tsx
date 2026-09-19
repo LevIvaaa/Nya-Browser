@@ -476,7 +476,7 @@ function PlaceDialog({
         </div>
 
         <p className="text-2xs text-faint">
-          {t('Погода приходит с open-meteo.com: поиск города и погода для него, без ключей и без вашего точного адреса — координаты округляются.')}
+          {t('Погода с open-meteo.com; координаты округляются')}
         </p>
       </div>
     </Modal>

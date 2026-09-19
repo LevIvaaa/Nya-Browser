@@ -2790,13 +2790,30 @@ if (isTop && httpOrigin) {
       `pre, code { font-family: ui-monospace, Consolas, monospace; font-size: .9em }`,
       `pre { overflow-x: auto; padding: 1em; border-radius: 10px; background: ${dark ? '#1d1d25' : sepia ? '#ece0c6' : '#f1f1f6'} }`,
       `blockquote { margin: 1.4em 0; padding-left: 1.2em; border-left: 3px solid ${line}; color: ${dim} }`,
+      /*
+       * Tables, made to look deliberate.
+       *
+       * Readability keeps an article's infobox, and an unstyled one renders as
+       * bold right-aligned labels floating beside their values — which reads
+       * as a page that broke rather than as a table. Rows get a hairline, the
+       * label column gets the left edge and the dim colour it deserves, and a
+       * table too wide for the column scrolls instead of pushing the article
+       * sideways.
+       */
+      `table { width: 100%; border-collapse: collapse; font-size: .92em; display: block; overflow-x: auto }`,
+      `th, td { padding: .5em .7em; text-align: left; vertical-align: top; border-bottom: 1px solid ${line} }`,
+      `th { color: ${dim}; font-weight: 600; white-space: nowrap }`,
+      `table img { margin: .4em 0 }`,
+      `caption { color: ${dim}; font-size: .9em; padding-bottom: .5em; text-align: left }`,
       `hr { border: 0; border-top: 1px solid ${line}; margin: 2em 0 }`,
       // ---- the bar across the top, and the two panels that drop out of it
       `.bar { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 6px;`,
       `  padding: 8px 14px; background: ${paper}; border-bottom: 1px solid ${line};`,
       `  font: 13px system-ui, -apple-system, "Segoe UI", sans-serif }`,
-      `.btn { font: 600 12px system-ui; color: ${ink}; background: transparent; border: 0;`,
-      `  border-radius: 8px; padding: 6px 9px; cursor: pointer; white-space: nowrap }`,
+      `.btn { font: 600 12px system-ui; color: ${ink}; border: 0; cursor: pointer;`,
+      `  background: color-mix(in srgb, ${ink} 7%, transparent);`,
+      `  border-radius: 9px; padding: 6px 10px; white-space: nowrap;`,
+      `  transition: background .12s linear }`,
       `.btn:hover { background: color-mix(in srgb, ${ink} 10%, transparent) }`,
       `.btn.on { color: ${accent}; background: color-mix(in srgb, ${accent} 16%, transparent) }`,
       `.grow { flex: 1 }`,
@@ -2846,7 +2863,23 @@ if (isTop && httpOrigin) {
     const title = document.createElement('h1')
     title.textContent = article.title || document.title
     wrap.appendChild(title)
-    const by = [article.byline, article.siteName, readingTime(article.textContent ?? '')]
+    /*
+     * Who wrote it, where it is from, how long it takes.
+     *
+     * Readability's byline is whatever the page put in an author field, and
+     * on a wiki that is «Contributors to Wikimedia projects» — a string that
+     * tells a reader nothing and looks like a bug beside a Russian title. A
+     * byline that is not a name, or that simply repeats the site, is dropped.
+     */
+    const site = (article.siteName ?? '').trim()
+    const author = (article.byline ?? '').trim()
+    const looksLikeName =
+      author.length > 0 &&
+      author.length < 60 &&
+      author.toLowerCase() !== site.toLowerCase() &&
+      !/contributors|authors|редакция|editorial|staff/i.test(author)
+
+    const by = [looksLikeName ? author : '', site, readingTime(article.textContent ?? '')]
       .filter(Boolean)
       .join(' · ')
     if (by) {
@@ -2917,8 +2950,22 @@ if (isTop && httpOrigin) {
     if (headings.length < 2) tocButton.remove()
 
     const gist = shorten(article.textContent ?? '')
+    /*
+     * The gist, and the words it is built from marked in the text.
+     *
+     * The marking used to happen the moment reading mode opened, which is
+     * a highlighter emptied over an article somebody sat down to read. It
+     * belongs here instead: this is the skimming mode, and the marks are how
+     * you get from the summary back to the place it came from. Done once —
+     * a second press just shows the panel again.
+     */
+    let markedAlready = false
     const gistButton = button(words.summary, () =>
       openPanel(gistButton, (into) => {
+        if (!markedAlready) {
+          markedAlready = true
+          markWords(wrap, keywords(article.textContent ?? ''))
+        }
         const list = document.createElement('ul')
         list.className = 'gist'
         for (const sentence of gist) {
@@ -3045,8 +3092,6 @@ if (isTop && httpOrigin) {
     hidden = document.documentElement.style.overflow
     document.documentElement.style.overflow = 'hidden'
 
-    // The words worth finding, underlined where they are.
-    markWords(wrap, keywords(article.textContent ?? ''))
 
     // How far down the article you are, along the bottom of the bar.
     const trackProgress = () => {

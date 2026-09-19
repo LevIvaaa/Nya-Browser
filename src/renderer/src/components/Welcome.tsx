@@ -291,7 +291,7 @@ function Hello() {
         {t('Добро пожаловать в Nya Browser')}
       </h1>
       <p className="mt-3 max-w-[440px] text-base text-dim">
-        {t('Несколько шагов — и браузер будет выглядеть и вести себя так, как нужно вам. Всё, что выберете, можно поменять потом в настройках.')}
+        {t('Несколько шагов — и браузер будет вашим. Всё можно поменять потом')}
       </p>
       <div className="mt-7 flex flex-wrap items-center justify-center gap-2">
         {badges.map((item) => (
@@ -341,7 +341,7 @@ function ProfileStep({ profile }: { profile: Profile | null }) {
         <div className="flex-1">
           <TextField value={name} onChange={setName} placeholder={t('Имя профиля')} width="100%" autoFocus />
           <p className="mt-1.5 text-sm text-faint">
-            {t('Позже сюда можно поставить свою картинку или анимацию.')}
+            {t('Позже сюда можно поставить свою картинку')}
           </p>
         </div>
       </div>
