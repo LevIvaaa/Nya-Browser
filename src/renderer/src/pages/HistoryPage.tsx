@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from 'react'
 import type { TextHit } from '../../../preload/index'
 import type { HistoryEntry } from '../../../shared/types'
 import { Clock, Cross, Search, Trash } from '../components/Icons'
+import { DangerButton } from '../components/ui'
+import { readable } from '../url'
 import { EmptyState, TextField, formatDate } from '../components/ui'
 
 /** Midnight at the start of the day `days` ago. */
@@ -132,16 +134,16 @@ export default function HistoryPage() {
               style={{ width: 260 }}
             />
           </div>
-          <button
-            className="btn btn-danger"
-            onClick={async () => {
+          <DangerButton
+            icon={<Trash width={15} height={15} />}
+            confirm={t('Точно очистить?')}
+            onConfirm={async () => {
               await window.browser.clearHistory()
               load()
             }}
           >
-            <Trash width={15} height={15} />
             {t('Очистить')}
-          </button>
+          </DangerButton>
         </header>
 
         {/* When: the spans people ask for as one click, and a pair of dates
@@ -242,7 +244,11 @@ export default function HistoryPage() {
         )}
 
         {groups.length === 0 && deeper.length === 0 ? (
-          <EmptyState icon={<Clock width={26} height={26} />} title={t('Пока ничего нет')} hint={t('Посещённые страницы появятся здесь.')} />
+          <EmptyState
+            icon={<Clock width={24} height={24} />}
+            title={t('Пока ничего нет')}
+            hint={t('Посещённые страницы появятся здесь')}
+          />
         ) : groups.length === 0 ? null : (
           groups.map(([day, list]) => (
             <section key={day} className="animate-fade-up mb-6">
@@ -263,7 +269,7 @@ export default function HistoryPage() {
                       onMouseEnter={() => void window.browser.preconnect(entry.url)}
                     >
                       <span className="block truncate text-base">{entry.title}</span>
-                      <span className="block truncate text-sm text-faint">{entry.url}</span>
+                      <span className="block truncate text-sm text-faint">{readable(entry.url)}</span>
                     </button>
                     {entry.visits > 1 && <span className="shrink-0 text-2xs text-faint">{entry.visits}×</span>}
                     <button

@@ -145,9 +145,9 @@ export default function DownloadsPage({ items }: { items: DownloadItem[] }) {
 
         {shown.length === 0 ? (
           <EmptyState
-            icon={<Download width={26} height={26} />}
+            icon={<Download width={24} height={24} />}
             title={looking || kind !== 'all' ? t('Ничего не найдено') : t('Загрузок пока нет')}
-            hint={looking || kind !== 'all' ? '' : t('Скачанные файлы появятся здесь.')}
+            hint={looking || kind !== 'all' ? t('Попробуйте другой запрос или другой вид') : t('Скачанные файлы появятся здесь')}
           />
         ) : (
           <div className="card stagger overflow-hidden">

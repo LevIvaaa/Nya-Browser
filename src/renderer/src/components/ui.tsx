@@ -596,12 +596,44 @@ export function Popover({
 }
 
 /* ------------------------------------------------------------------- misc */
-export function EmptyState({ icon, title, hint }: { icon?: ReactNode; title: string; hint?: string }) {
+/**
+ * Nothing here yet, said properly.
+ *
+ * The first version was a hairline icon and two lines of grey text adrift in
+ * a screenful of empty — which reads as a page that failed to load rather
+ * than as a page with nothing in it. An empty state is a small piece of
+ * design: the icon gets weight and a tinted disc to sit in, the title is the
+ * only thing at full contrast, and where there is something to press it is
+ * offered rather than described.
+ */
+export function EmptyState({
+  icon,
+  title,
+  hint,
+  action
+}: {
+  icon?: ReactNode
+  title: string
+  hint?: string
+  /** the one thing worth doing from here, when there is one */
+  action?: ReactNode
+}) {
   return (
-    <div className="animate-fade flex flex-col items-center gap-2 px-6 py-14 text-center">
-      {icon && <span className="text-faint">{icon}</span>}
-      <div className="text-base font-medium">{title}</div>
-      {hint && <div className="max-w-[340px] text-sm text-dim">{hint}</div>}
+    <div className="animate-fade-up flex flex-col items-center px-6 py-16 text-center">
+      {icon && (
+        <span
+          className="mb-4 flex h-14 w-14 items-center justify-center rounded-[20px]"
+          style={{
+            background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
+            color: 'var(--accent)'
+          }}
+        >
+          {icon}
+        </span>
+      )}
+      <div className="text-lg font-semibold tracking-[-0.01em]">{title}</div>
+      {hint && <div className="mt-1.5 max-w-[360px] text-sm leading-relaxed text-dim">{hint}</div>}
+      {action && <div className="mt-5">{action}</div>}
     </div>
   )
 }
@@ -738,4 +770,57 @@ export const formatDate = (ms: number) => {
         minute: '2-digit'
       })
     : date.toLocaleDateString(currentLanguage() || undefined, { day: 'numeric', month: 'short' })
+}
+
+/**
+ * A button for something that cannot be undone.
+ *
+ * Clearing a history, wiping every profile: these were single presses of a
+ * bright red button, which is the loudest thing on the page and the one thing
+ * on it you least want to hit by accident. Now the red only appears once it
+ * has been asked for — the button is quiet until pressed, and the second
+ * press within a few seconds is the one that does it.
+ *
+ * No modal on purpose. A dialogue for every destructive action trains people
+ * to dismiss dialogues, and this asks in the same place the answer is given.
+ */
+export function DangerButton({
+  children,
+  confirm,
+  onConfirm,
+  icon
+}: {
+  children: ReactNode
+  /** what the button says once it is waiting for the second press */
+  confirm: string
+  onConfirm: () => void
+  icon?: ReactNode
+}) {
+  const [asked, setAsked] = useState(false)
+
+  useEffect(() => {
+    if (!asked) return
+    // Forgotten after a few seconds: a button left sitting in its armed state
+    // is a trap for the next person who walks past the keyboard.
+    const timer = window.setTimeout(() => setAsked(false), 4000)
+    return () => window.clearTimeout(timer)
+  }, [asked])
+
+  return (
+    <button
+      className={cx('btn', asked && 'btn-danger')}
+      style={asked ? undefined : { color: 'var(--bad)' }}
+      onClick={() => {
+        if (!asked) {
+          setAsked(true)
+          return
+        }
+        setAsked(false)
+        onConfirm()
+      }}
+    >
+      {icon}
+      {asked ? confirm : children}
+    </button>
+  )
 }

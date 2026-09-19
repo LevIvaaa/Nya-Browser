@@ -424,7 +424,10 @@ class Tab {
     const named =
       this.title && this.title !== t('Новая вкладка')
         ? this.title
-        : origin || this.title || t('Новая вкладка')
+        : // Only a real page falls back to its host. The start page's own
+          // address has «start» for a hostname, and calling the new-tab page
+          // «start» is worse than the plain name it had.
+          (this.hasContent && origin) || this.title || t('Новая вкладка')
 
     return {
       id: this.id,

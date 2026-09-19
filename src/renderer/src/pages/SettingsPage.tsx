@@ -67,6 +67,7 @@ import {
 import {
   Avatar,
   ChoiceCard,
+  DangerButton,
   FullSettings,
   Looking,
   Modal,
@@ -951,148 +952,81 @@ export default function SettingsPage({
 
           {/* --------------------------------------------------------- start */}
           {which === 'start' && (
-            <Section title={t('Главная страница')} icon={<Sparkles width={15} height={15} />} description={t('Что показывать на стартовом экране')}>
-              <Row title={t('Приветствие')}><Toggle checked={settings.startPage.greeting} onChange={(v) => onPatch({ startPage: { ...settings.startPage, greeting: v } })} /></Row>
-              <Row title={t('Часы')}><Toggle checked={settings.startPage.clock} onChange={(v) => onPatch({ startPage: { ...settings.startPage, clock: v } })} /></Row>
-              <Row title={t('Плитки избранного')}><Toggle checked={settings.startPage.favorites} onChange={(v) => onPatch({ startPage: { ...settings.startPage, favorites: v } })} /></Row>
-              <Row title={t('Колонок в избранном')} {...of('startPage')}>
-                <Slider value={settings.startPage.columns} min={4} max={12} onChange={(v) => onPatch({ startPage: { ...settings.startPage, columns: v } })} width={120} />
-              </Row>
-              <Row title={t('Недавние страницы')}><Toggle checked={settings.startPage.recent} onChange={(v) => onPatch({ startPage: { ...settings.startPage, recent: v } })} /></Row>
-              <Row title={t('Недавно закрытые вкладки')}><Toggle checked={settings.startPage.closed} onChange={(v) => onPatch({ startPage: { ...settings.startPage, closed: v } })} /></Row>
-              <Row title={t('Счётчик защиты')}><Toggle checked={settings.startPage.stats} onChange={(v) => onPatch({ startPage: { ...settings.startPage, stats: v } })} /></Row>
-              <Row title={t('Погода')} hint={t('Город выбирается в самом виджете; без него никуда ничего не уходит')} {...of('startPage')}>
-                <Toggle checked={settings.startPage.weather} onChange={(v) => onPatch({ startPage: { ...settings.startPage, weather: v } })} />
-              </Row>
-              {/* The eight that came later. Every one is off until somebody
-                  asks for it, and two of them say plainly what they cost. */}
-              <Row title={t('Последние загрузки')} hint={t('Пять последних файлов, каждый — нажатие до папки')}>
-                <Toggle checked={settings.startPage.downloads} onChange={(v) => onPatch({ startPage: { ...settings.startPage, downloads: v } })} />
-              </Row>
-              <Row title={t('Календарь')} hint={t('Этот месяц с отмеченным сегодня — ни с чем не связан и никуда не ходит')}>
-                <Toggle checked={settings.startPage.calendar} onChange={(v) => onPatch({ startPage: { ...settings.startPage, calendar: v } })} />
-              </Row>
-              <Row title={t('Стикеры')} hint={t('Заметки лежат в папке этого профиля и никуда не отправляются')}>
-                <Toggle checked={settings.startPage.notes} onChange={(v) => onPatch({ startPage: { ...settings.startPage, notes: v } })} />
-              </Row>
-              <Row title={t('Список дел')}>
-                <Toggle checked={settings.startPage.todo} onChange={(v) => onPatch({ startPage: { ...settings.startPage, todo: v } })} />
-              </Row>
-              <Row title={t('График заблокированного')} hint={t('Две недели по дням — видно, становится ли тише')}>
-                <Toggle checked={settings.startPage.chart} onChange={(v) => onPatch({ startPage: { ...settings.startPage, chart: v } })} />
-              </Row>
-              <Row title={t('Частое в это время')} hint={t('Что вы обычно открываете примерно сейчас; хранятся только домены и часы')}>
-                <Toggle checked={settings.startPage.habits} onChange={(v) => onPatch({ startPage: { ...settings.startPage, habits: v } })} />
-              </Row>
-              <Row title={t('Сейчас играет')}>
-                <Toggle checked={settings.startPage.playing} onChange={(v) => onPatch({ startPage: { ...settings.startPage, playing: v } })} />
-              </Row>
-              <Row
-                title={t('Курс валют')}
-                hint={t('Единственное, кроме погоды, что ходит в сеть: три кода валют, без ключа и учётной записи')}
+            <>
+              {/* Three groups rather than one column of sixteen switches, and
+                  a subtitle only where the title does not already say it.
+                  «Заметки лежат в папке этого профиля и никуда не
+                  отправляются» under a row called «Стикеры» was a sentence
+                  nobody read twice. */}
+              <Section
+                title={t('Наверху страницы')}
+                icon={<Sparkles width={15} height={15} />}
+                description={t('Что показывать на стартовом экране')}
               >
-                <Toggle checked={settings.startPage.rates} onChange={(v) => onPatch({ startPage: { ...settings.startPage, rates: v } })} />
-              </Row>
-              {settings.startPage.rates && (
-                <Row title={t('Какие валюты')} hint={t('Из чего и во что — трёхбуквенными кодами')}>
-                  <div className="flex items-center gap-2">
-                    <TextField
-                      value={settings.startPage.ratesBase}
-                      onChange={(v) => onPatch({ startPage: { ...settings.startPage, ratesBase: v.toUpperCase().slice(0, 3) } })}
-                      width={64}
-                      mono
-                    />
-                    <span className="text-sm text-faint">→</span>
-                    <TextField
-                      value={settings.startPage.ratesTo.join(' ')}
-                      onChange={(v) =>
-                        onPatch({
-                          startPage: {
-                            ...settings.startPage,
-                            ratesTo: v.toUpperCase().split(/[s,]+/).filter(Boolean).slice(0, 6)
-                          }
-                        })
-                      }
-                      placeholder="EUR RUB"
-                      width={160}
-                      mono
-                    />
-                  </div>
+                <Row title={t('Приветствие')}>
+                  <Toggle checked={settings.startPage.greeting} onChange={(v) => onPatch({ startPage: { ...settings.startPage, greeting: v } })} />
                 </Row>
-              )}
+                <Row title={t('Часы')}>
+                  <Toggle checked={settings.startPage.clock} onChange={(v) => onPatch({ startPage: { ...settings.startPage, clock: v } })} />
+                </Row>
+              </Section>
 
-              <Row title={t('Шрифт главной')} {...of('startPage')}>
-                <Select
-                  value={settings.startPage.font}
-                  options={[
-                    { value: 'system', label: t('Системный') },
-                    { value: 'rounded', label: t('Округлый') },
-                    { value: 'serif', label: t('С засечками') },
-                    { value: 'mono', label: t('Моноширинный') }
-                  ]}
-                  onChange={(v) => onPatch({ startPage: { ...settings.startPage, font: v as StartPageFont } })}
-                />
-              </Row>
-              <Row title={t('Вид плиток')} {...of('startPage')}>
-                <Segmented
-                  value={settings.startPage.tiles}
-                  options={[
-                    { value: 'card', label: t('Карточки') },
-                    { value: 'icon', label: t('Значки') }
-                  ]}
-                  onChange={(v) => onPatch({ startPage: { ...settings.startPage, tiles: v as TileStyle } })}
-                />
-              </Row>
-              <Row title={t('Форма плиток и карточек')} {...of('startPage')}>
-                <Select
-                  value={settings.startPage.shape}
-                  options={[
-                    { value: 'rounded', label: t('Скруглённые') },
-                    { value: 'soft', label: t('Мягкие') },
-                    { value: 'circle', label: t('Круглые') },
-                    { value: 'square', label: t('Прямые') }
-                  ]}
-                  onChange={(v) => onPatch({ startPage: { ...settings.startPage, shape: v as TileShape } })}
-                />
-              </Row>
-              <Row title={t('Подписи под значками')} hint={t('Выключите, чтобы на плитке остался только логотип сайта')} {...of('startPage')}>
-                <Toggle
-                  checked={settings.startPage.tileLabels}
-                  onChange={(v) => onPatch({ startPage: { ...settings.startPage, tileLabels: v } })}
-                />
-              </Row>
-              <Row title={t('Цвет текста')} hint={settings.startPage.ink || t('По теме — тёмный на светлой, светлый на тёмной')} {...of('startPage')}>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    className="h-8 w-10 cursor-pointer rounded-[9px] border-0 bg-transparent p-0"
-                    value={settings.startPage.ink || '#ffffff'}
-                    onChange={(event) =>
-                      onPatch({ startPage: { ...settings.startPage, ink: event.target.value } })
-                    }
-                  />
-                  {settings.startPage.ink && (
-                    <button
-                      className="btn"
-                      onClick={() => onPatch({ startPage: { ...settings.startPage, ink: '' } })}
-                    >
-                      {t('По теме')}
-                    </button>
-                  )}
-                </div>
-              </Row>
-              <Row title={t('Расположение виджетов')} hint={t('Двигать и менять размер можно прямо на главной — кнопка «Настроить» в углу')} {...of('startPage')}>
-                <button
-                  className="btn"
-                  onClick={() => onPatch({ startPage: { ...settings.startPage, layout: { ...DEFAULT_LAYOUT } } })}
-                >
-                  {t('Сбросить')}
-                </button>
-              </Row>
-            </Section>
+              <Section title={t('Плитки')} icon={<Grid width={15} height={15} />}>
+                <Row title={t('Плитки избранного')}>
+                  <Toggle checked={settings.startPage.favorites} onChange={(v) => onPatch({ startPage: { ...settings.startPage, favorites: v } })} />
+                </Row>
+                {settings.startPage.favorites && (
+                  <Row title={t('Колонок в избранном')} {...of('startPage')}>
+                    <Slider value={settings.startPage.columns} min={4} max={12} onChange={(v) => onPatch({ startPage: { ...settings.startPage, columns: v } })} width={120} />
+                  </Row>
+                )}
+              </Section>
+
+              <Section
+                title={t('Виджеты')}
+                icon={<LayoutTop width={15} height={15} />}
+                description={t('Карточки под плитками; порядок и размер меняются на самой странице')}
+              >
+                <Row title={t('Недавние страницы')}>
+                  <Toggle checked={settings.startPage.recent} onChange={(v) => onPatch({ startPage: { ...settings.startPage, recent: v } })} />
+                </Row>
+                <Row title={t('Недавно закрытые вкладки')}>
+                  <Toggle checked={settings.startPage.closed} onChange={(v) => onPatch({ startPage: { ...settings.startPage, closed: v } })} />
+                </Row>
+                <Row title={t('Счётчик защиты')}>
+                  <Toggle checked={settings.startPage.stats} onChange={(v) => onPatch({ startPage: { ...settings.startPage, stats: v } })} />
+                </Row>
+                <Row title={t('Погода')} hint={t('Город выбирается в самом виджете')} {...of('startPage')}>
+                  <Toggle checked={settings.startPage.weather} onChange={(v) => onPatch({ startPage: { ...settings.startPage, weather: v } })} />
+                </Row>
+                <Row title={t('Последние загрузки')} hint={t('Пять последних файлов')}>
+                  <Toggle checked={settings.startPage.downloads} onChange={(v) => onPatch({ startPage: { ...settings.startPage, downloads: v } })} />
+                </Row>
+                <Row title={t('Календарь')} hint={t('Месяц с отмеченным сегодня')}>
+                  <Toggle checked={settings.startPage.calendar} onChange={(v) => onPatch({ startPage: { ...settings.startPage, calendar: v } })} />
+                </Row>
+                <Row title={t('Стикеры')} hint={t('Короткие заметки')}>
+                  <Toggle checked={settings.startPage.notes} onChange={(v) => onPatch({ startPage: { ...settings.startPage, notes: v } })} />
+                </Row>
+                <Row title={t('Список дел')}>
+                  <Toggle checked={settings.startPage.todo} onChange={(v) => onPatch({ startPage: { ...settings.startPage, todo: v } })} />
+                </Row>
+                <Row title={t('График заблокированного')} hint={t('Две недели по дням')}>
+                  <Toggle checked={settings.startPage.chart} onChange={(v) => onPatch({ startPage: { ...settings.startPage, chart: v } })} />
+                </Row>
+                <Row title={t('Частое в это время')} hint={t('Что вы обычно открываете примерно сейчас')}>
+                  <Toggle checked={settings.startPage.habits} onChange={(v) => onPatch({ startPage: { ...settings.startPage, habits: v } })} />
+                </Row>
+                <Row title={t('Сейчас играет')}>
+                  <Toggle checked={settings.startPage.playing} onChange={(v) => onPatch({ startPage: { ...settings.startPage, playing: v } })} />
+                </Row>
+                <Row title={t('Курс валют')} hint={t('Кроме погоды — единственный виджет, который ходит в сеть')}>
+                  <Toggle checked={settings.startPage.rates} onChange={(v) => onPatch({ startPage: { ...settings.startPage, rates: v } })} />
+                </Row>
+              </Section>
+            </>
           )}
 
-          {/* -------------------------------------------------------- search */}
           {which === 'search' && (
             <>
               <Section title={t('Поисковая система')} icon={<Search width={15} height={15} />} description={t('Используется для запросов из адресной строки')}>
@@ -1215,7 +1149,7 @@ export default function SettingsPage({
               </Section>
 
               <Section title={t('Адресная строка')} icon={<Search width={15} height={15} />}>
-                <Row title={t('Подсказки из истории')} hint={t('Подсказки строятся локально и никуда не отправляются')} {...of('historySuggestions')}>
+                <Row title={t('Подсказки из истории')} {...of('historySuggestions')}>
                   <Toggle checked={settings.historySuggestions} onChange={(v) => onPatch({ historySuggestions: v })} />
                 </Row>
                 <Row title={t('Подсказки')} hint={t('Строки под тем, что вы печатаете')} {...of('suggestions')}>
@@ -1337,8 +1271,8 @@ export default function SettingsPage({
 
               <Section
                 title={t('Списки фильтров')}
-                icon={<Shield width={15} height={15} />}
-                description={t('EasyList и другие правила поверх встроенного списка доменов — без них реклама на YouTube и баннеры на сайтах остаются')}
+                icon={<Eraser width={15} height={15} />}
+                description={t('EasyList и другие правила поверх встроенного списка доменов')}
               >
                 <Row
                   {...of('filterLists')} advanced
@@ -1395,7 +1329,12 @@ export default function SettingsPage({
                       refreshed.changed.length > 0
                         ? `${refreshed.changed.map((one) => one.name).join(', ')} · ${t(
                             'Правил было {before}, стало {after}',
-                            { before: refreshed.rules.before, after: refreshed.rules.after }
+                            {
+                              // Grouped the way the line above groups it: one
+                              // screen was showing «128 054» and «128054».
+                              before: refreshed.rules.before.toLocaleString(),
+                              after: refreshed.rules.after.toLocaleString()
+                            }
                           )}`
                         : t('Проверено списков: {n}', { n: refreshed.unchanged })
                     }
@@ -1411,7 +1350,7 @@ export default function SettingsPage({
                         : t('нет данных')
                     }
                   >
-                    <span className="text-sm text-dim">{Math.round(list.bytes / 1024)} КБ</span>
+                    <span className="text-sm text-dim">{formatBytes(list.bytes)}</span>
                   </Row>
                 ))}
               </Section>
@@ -1942,7 +1881,10 @@ export default function SettingsPage({
               </Row>
               <Row
                 title={t('Имя файла по правилу')}
-                hint={t('Пусто — как назвал сайт')}
+                // The tokens stay outside the translated string: braces in a
+                // phrase are what the translator machinery substitutes, and
+                // these are meant to be read literally.
+                hint={`{name} {ext} {host} {date} {time} · ${t('пусто — как назвал сайт')}`}
               >
                 <TextField
                   value={settings.downloadNameRule}
@@ -1985,19 +1927,28 @@ export default function SettingsPage({
 
               <Section title={t('Очистка')} icon={<Trash width={15} height={15} />}>
                 <Row title={t('История просмотров')} hint={t('Локальные подсказки адресной строки')}>
-                  <button className="btn" onClick={async () => { await window.browser.clearHistory(); flash(t('История очищена')) }}>
+                  <DangerButton
+                    confirm={t('Точно очистить?')}
+                    onConfirm={async () => { await window.browser.clearHistory(); flash(t('История очищена')) }}
+                  >
                     {t('Очистить')}
-                  </button>
+                  </DangerButton>
                 </Row>
                 <Row title={t('Данные сайтов')} hint={t('Cookies, кэш, localStorage, service workers')} danger>
-                  <button className="btn btn-danger" onClick={async () => { await window.browser.clearBrowsingData(); flash(t('Данные удалены')) }}>
+                  <DangerButton
+                    confirm={t('Точно удалить?')}
+                    onConfirm={async () => { await window.browser.clearBrowsingData(); flash(t('Данные удалены')) }}
+                  >
                     {t('Удалить')}
-                  </button>
+                  </DangerButton>
                 </Row>
                 <Row title={t('Данные всех профилей')} hint={t('То же самое, но для каждого профиля сразу')} danger>
-                  <button className="btn btn-danger" onClick={async () => { await window.browser.clearAllProfiles(); flash(t('Все профили очищены')) }}>
+                  <DangerButton
+                    confirm={t('Точно удалить всё?')}
+                    onConfirm={async () => { await window.browser.clearAllProfiles(); flash(t('Все профили очищены')) }}
+                  >
                     {t('Удалить всё')}
-                  </button>
+                  </DangerButton>
                 </Row>
               </Section>
 

@@ -1,4 +1,5 @@
 import { t } from '../i18n'
+import { readable } from '../url'
 import { useMemo, useState } from 'react'
 import type { Bookmark } from '../../../preload/index'
 import { Cross, Folder, Pencil, Search, Star, StarFilled } from '../components/Icons'
@@ -53,9 +54,9 @@ export default function BookmarksPage({
 
         {groups.length === 0 ? (
           <EmptyState
-            icon={<Star width={26} height={26} />}
+            icon={<Star width={24} height={24} />}
             title={t('Закладок пока нет')}
-            hint={t('Нажмите звёздочку в адресной строке или Ctrl+D, чтобы сохранить страницу.')}
+            hint={t('Звёздочка в адресной строке или Ctrl+D сохраняет страницу сюда')}
           />
         ) : (
           groups.map(([folder, list]) => (
@@ -82,7 +83,7 @@ export default function BookmarksPage({
                       onMouseEnter={() => void window.browser.preconnect(item.url)}
                     >
                       <span className="block truncate text-base">{item.title}</span>
-                      <span className="block truncate text-sm text-faint">{item.url}</span>
+                      <span className="block truncate text-sm text-faint">{readable(item.url)}</span>
                     </button>
                     <button className="icon-btn h-7 w-7 opacity-0 group-hover:opacity-100" title={t('Изменить')} onClick={() => setEditing(item)}>
                       <Pencil width={13} height={13} />

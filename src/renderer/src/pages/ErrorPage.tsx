@@ -3,6 +3,7 @@ import { t } from '../i18n'
 import type { NetworkCheck, TabError } from '../../../shared/types'
 import { NET_HINTS } from '../../../shared/neterrors'
 import { Alert, Reload, Shield } from '../components/Icons'
+import { Checks } from '../components/Checks'
 
 /**
  * What the check found, said as one sentence with something to do in it.
@@ -138,12 +139,7 @@ export default function ErrorPage({ error }: { error: TabError }) {
           >
             <div className="text-sm font-semibold">{words.title}</div>
             <p className="mt-1 text-sm text-dim">{words.detail}</p>
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-2xs text-faint">
-              <span>{t('связь')}: {check?.online ? '✓' : '✗'}</span>
-              <span>{t('имена')}: {check?.dns ? '✓' : '✗'}</span>
-              <span>{t('интернет')}: {check?.internet ? '✓' : '✗'}</span>
-              {check?.site !== null && <span>{t('сайт')}: {check?.site ? '✓' : '✗'}</span>}
-            </div>
+            <div className="mt-2.5">{check && <Checks check={check} />}</div>
           </div>
         )}
 

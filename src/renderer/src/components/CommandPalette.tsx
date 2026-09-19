@@ -269,7 +269,9 @@ export default function CommandPalette({
                   >
                     {item.title}
                   </span>
-                  <span className="block truncate text-sm text-faint">{item.subtitle ?? item.url}</span>
+                  <span className="block truncate text-sm text-faint">
+                    {item.subtitle ?? readable(item.url)}
+                  </span>
                 </span>
                 {item.visits && item.visits > 1 && (
                   <span className="shrink-0 text-2xs text-faint">{item.visits}×</span>
@@ -296,14 +298,35 @@ export default function CommandPalette({
           </div>
         )}
 
-        <div
-          className="flex items-center justify-between border-t px-4 py-2 text-2xs text-faint"
-          style={{ borderColor: 'var(--line)' }}
-        >
-          <span>{hint}</span>
-          <span>{t('Подсказки только из локального профиля')}</span>
-        </div>
+        {/* One line, and only while it says something: what Enter will do.
+            «Введите адрес или запрос» under an empty field with that very
+            placeholder, and a note that the suggestions are local, were two
+            labels nobody ever needed to read twice. */}
+        {value.trim() && (
+          <div
+            className="border-t px-4 py-2 text-2xs text-faint"
+            style={{ borderColor: 'var(--line)' }}
+          >
+            {hint}
+          </div>
+        )}
       </div>
     </div>
   )
+}
+
+/**
+ * An address as it was written rather than as it is sent.
+ *
+ * A Russian Wikipedia link is two thirds percent-escapes on the wire, and
+ * showing that in a list of suggestions is showing a wall of `%D0%97%D0%B0`
+ * where the title of the page should be. Decoding is display-only: what is
+ * opened is always the original.
+ */
+function readable(url: string): string {
+  try {
+    return decodeURI(url)
+  } catch {
+    return url
+  }
 }
