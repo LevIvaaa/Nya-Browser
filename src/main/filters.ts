@@ -19,9 +19,10 @@ import { app, net } from 'electron'
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { log } from './log'
-import type { FilterStatus } from '../shared/types'
+import type {
+  FilterRefresh, FilterStatus } from '../shared/types'
 
-export type FilterCategory = 'ad' | 'tracker'
+export type FilterCategory = 'ad' | 'tracker' | 'cookie'
 
 export interface FilterList {
   id: string
@@ -61,6 +62,21 @@ export const FILTER_LISTS: FilterList[] = [
     name: 'uBlock privacy',
     url: 'https://ublockorigin.github.io/uAssets/filters/privacy.txt',
     category: 'tracker'
+  },
+  /*
+   * The banners that ask about cookies.
+   *
+   * They are not adverts and not trackers, which is why the other lists leave
+   * them alone, and they are the single most-complained-about thing on the
+   * web. This list hides them; it does not click "accept" on anybody's behalf,
+   * because accepting on somebody's behalf is the thing the banners are
+   * nominally there to prevent.
+   */
+  {
+    id: 'cookie-banners',
+    name: 'EasyList Cookie',
+    url: 'https://secure.fanboy.co.nz/fanboy-cookiemonster.txt',
+    category: 'cookie'
   }
 ]
 
@@ -787,6 +803,14 @@ let startupRefreshDone = false
 
 export const filterStatus = () => lastStatus
 
+/**
+ * What the last refresh did — the shape lives in shared/types, because the
+ * settings page reads it.
+ */
+let lastRefresh: FilterRefresh | null = null
+
+export const filterRefresh = () => lastRefresh
+
 /** Reads one cached list from disk, or null when it is not there. */
 function readCached(id: string): string | null {
   const file = cacheFile(id)
@@ -876,6 +900,9 @@ async function run(force: boolean): Promise<FilterStatus> {
   const update = (async () => {
     let changed = false
     let fetched = false
+    const before = lastStatus.rules
+    const moved: FilterRefresh['changed'] = []
+    let same = 0
     for (const list of refresh) {
       const text = await download(list)
       if (text === null) continue
@@ -885,12 +912,24 @@ async function run(force: boolean): Promise<FilterStatus> {
       if (text !== texts.get(list.id)) {
         texts.set(list.id, text)
         changed = true
+        moved.push({ id: list.id, name: list.name, bytes: text.length })
+      } else {
+        same += 1
       }
       meta[list.id] = { updated: Date.now(), bytes: text.length }
+    }
+    if (fetched) {
+      lastRefresh = {
+        at: Date.now(),
+        changed: moved,
+        unchanged: same,
+        rules: { before, after: lastStatus.rules }
+      }
     }
     // A forced refresh rebuilds regardless: it skipped phase one, and its
     // caller is waiting to be told what the engine now holds.
     if (changed || (force && fetched)) build(texts, meta)
+    if (lastRefresh) lastRefresh.rules.after = lastStatus.rules
     if (fetched) writeMeta(meta)
     return lastStatus
   })()

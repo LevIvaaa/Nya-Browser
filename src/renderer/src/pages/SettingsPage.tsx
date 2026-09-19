@@ -1,6 +1,7 @@
 import { availableLanguages, currentLanguage, t } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
 import type {
+  FilterRefresh,
   AppInfo,
   AvatarCrop,
   InstalledApp,
@@ -82,6 +83,7 @@ import {
   formatBytes
 } from '../components/ui'
 import { Arrangement, DensityDemo } from '../components/Arrangement'
+import { ProtectionReportPanel } from '../components/Shield'
 import { DEFAULT_SETTINGS, LOOK_KEYS } from '../../../shared/defaults'
 import { MENU_ROWS, TOOLBAR_BUTTONS, TOOLBAR_REQUIRED } from '../../../shared/chrome'
 
@@ -212,6 +214,8 @@ export default function SettingsPage({
   const [sources, setSources] = useState<ImportSource[] | null>(null)
   const [filters, setFilters] = useState<FilterStatus | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  /** what the last refresh of the lists actually changed */
+  const [refreshed, setRefreshed] = useState<FilterRefresh | null>(null)
   const [extensions, setExtensions] = useState<InstalledExtension[] | null>(null)
   /** What is being looked for, as typed and as compared. */
   const [query, setQuery] = useState('')
@@ -240,7 +244,10 @@ export default function SettingsPage({
       void window.browser.drmState().then(setDrm)
       void window.browser.installedApps().then(setInstalledApps)
     }
-    if (tab === 'privacy') void window.browser.filterStatus().then(setFilters)
+    if (tab === 'privacy') {
+      void window.browser.filterStatus().then(setFilters)
+      void window.browser.filterRefresh().then(setRefreshed)
+    }
     if (tab === 'wallpaper') void window.browser.wallpapers().then(setPictures)
   }, [tab])
 
@@ -1364,6 +1371,7 @@ export default function SettingsPage({
                       setRefreshing(true)
                       try {
                         setFilters(await window.browser.refreshFilters())
+                        setRefreshed(await window.browser.filterRefresh())
                         flash(t('Списки обновлены'))
                       } finally {
                         setRefreshing(false)
@@ -1373,6 +1381,25 @@ export default function SettingsPage({
                     {refreshing ? t('Обновляем…') : t('Обновить сейчас')}
                   </button>
                 </Row>
+                {/* What that refresh actually did. A timestamp says a check
+                    happened; this says whether anything changed. */}
+                {refreshed && (
+                  <Row
+                    title={
+                      refreshed.changed.length > 0
+                        ? t('Обновилось списков: {n}', { n: refreshed.changed.length })
+                        : t('Всё уже было свежим')
+                    }
+                    hint={
+                      refreshed.changed.length > 0
+                        ? `${refreshed.changed.map((one) => one.name).join(', ')} · ${t(
+                            'Правил было {before}, стало {after}',
+                            { before: refreshed.rules.before, after: refreshed.rules.after }
+                          )}`
+                        : t('Проверено списков: {n}', { n: refreshed.unchanged })
+                    }
+                  />
+                )}
                 {filters?.lists.map((list) => (
                   <Row
                     key={list.id}
@@ -1451,6 +1478,155 @@ export default function SettingsPage({
                     ))}
                   </div>
                 )}
+              </Section>
+
+              {/* The things a site does to work out which machine it is
+                  talking to, and what is done about them. */}
+              <Section
+                title={t('Слежка и отпечаток')}
+                icon={<Eye width={15} height={15} />}
+                description={t('Чем сайт узнаёт именно вашу машину — и что с этим делается')}
+              >
+                <Row
+                  title={t('Притуплять отпечаток')}
+                  hint={t('Холст и звук читаются с еле заметным шумом, счётчики ядер и памяти округляются. Шум свой для каждого сайта и на один сеанс')}
+                  {...of('fingerprintGuard')}
+                >
+                  <Toggle checked={settings.fingerprintGuard} onChange={(v) => onPatch({ fingerprintGuard: v })} />
+                </Row>
+                <Row
+                  title={t('Не давать читать буфер обмена')}
+                  hint={t('Страница узнаёт скопированное, только когда вы сами вставляете')}
+                  {...of('clipboardGuard')}
+                >
+                  <Toggle checked={settings.clipboardGuard} onChange={(v) => onPatch({ clipboardGuard: v })} />
+                </Row>
+                <Row
+                  title={t('Предупреждать о похожих адресах')}
+                  hint={t('Проверка идёт на этой машине: ни списка, ни запроса наружу')}
+                  {...of('phishingGuard')}
+                >
+                  <Toggle checked={settings.phishingGuard} onChange={(v) => onPatch({ phishingGuard: v })} />
+                </Row>
+                <Row
+                  title={t('Прятать баннеры о куках')}
+                  hint={t('Скрывает окна согласия, но ни на что за вас не соглашается')}
+                  {...of('cookieBanners')}
+                >
+                  <Toggle checked={settings.cookieBanners} onChange={(v) => onPatch({ cookieBanners: v })} />
+                </Row>
+                <Row
+                  title={t('Снова спрашивать про место')}
+                  hint={t('Разрешение на геопозицию перестаёт действовать через столько дней; 0 — не переспрашивать')}
+                  {...of('reaskLocationDays')}
+                  advanced
+                >
+                  <Slider
+                    value={settings.reaskLocationDays}
+                    min={0}
+                    max={180}
+                    step={5}
+                    format={(v) => (v === 0 ? t('Никогда') : t('{n} дн.', { n: v }))}
+                    onChange={(value) => onPatch({ reaskLocationDays: value })}
+                  />
+                </Row>
+              </Section>
+
+              {/* Jars of cookies with names on them. */}
+              <Section
+                title={t('Контейнеры')}
+                icon={<Grid width={15} height={15} />}
+                description={t('Отдельная банка с cookie: два аккаунта на одном сайте, работа рядом с личным')}
+                action={
+                  <button
+                    className="btn"
+                    onClick={() =>
+                      onPatch({
+                        containers: [
+                          ...settings.containers,
+                          {
+                            id: String(Date.now()).slice(-8),
+                            name: t('Контейнер {n}', { n: settings.containers.length + 1 }),
+                            colour: '#7c6cff',
+                            icon: '📦'
+                          }
+                        ]
+                      })
+                    }
+                  >
+                    <Plus width={15} height={15} />
+                    {t('Добавить')}
+                  </button>
+                }
+              >
+                {settings.containers.length === 0 && (
+                  <div className="px-4 py-3 text-sm text-faint">
+                    {t('Контейнеров нет. У каждого свои cookie и свои входы — сайт в одном не знает о другом')}
+                  </div>
+                )}
+                {settings.containers.map((one, index) => (
+                  <div
+                    key={one.id}
+                    className="flex items-center gap-2 px-4 py-2.5"
+                    style={{ borderTop: '1px solid var(--line)' }}
+                  >
+                    <TextField
+                      value={one.icon}
+                      onChange={(icon) =>
+                        onPatch({
+                          containers: settings.containers.map((row, at) =>
+                            at === index ? { ...row, icon: [...icon].slice(0, 2).join('') } : row
+                          )
+                        })
+                      }
+                      width={52}
+                    />
+                    <TextField
+                      value={one.name}
+                      onChange={(name) =>
+                        onPatch({
+                          containers: settings.containers.map((row, at) =>
+                            at === index ? { ...row, name } : row
+                          )
+                        })
+                      }
+                      width={200}
+                    />
+                    <input
+                      type="color"
+                      value={one.colour}
+                      onChange={(event) =>
+                        onPatch({
+                          containers: settings.containers.map((row, at) =>
+                            at === index ? { ...row, colour: event.target.value } : row
+                          )
+                        })
+                      }
+                      className="h-[24px] w-[30px] cursor-pointer rounded-[7px] border-0 bg-transparent p-0"
+                      title={t('Цвет')}
+                    />
+                    <button
+                      className="icon-btn shrink-0"
+                      aria-label={t('Удалить')}
+                      onClick={() =>
+                        onPatch({ containers: settings.containers.filter((_row, at) => at !== index) })
+                      }
+                    >
+                      <Cross width={14} height={14} />
+                    </button>
+                  </div>
+                ))}
+              </Section>
+
+              {/* One report instead of one number. */}
+              <Section
+                title={t('Отчёт о защите')}
+                icon={<Shield width={15} height={15} />}
+                description={t('Что из этого вышло за две недели')}
+              >
+                <div className="px-4 py-3">
+                  <ProtectionReportPanel />
+                </div>
               </Section>
 
               <Section title={t('Соединение и данные')} icon={<Shield width={15} height={15} />}>

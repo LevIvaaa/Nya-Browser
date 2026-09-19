@@ -2219,6 +2219,195 @@ if (isTop && httpOrigin) {
   window.addEventListener('blur', () => showing && hide())
 }
 
+/* ==========================================================================
+ * Making this browser look like every other one.
+ *
+ * A fingerprint is not one thing a site reads; it is fifty small true answers
+ * that together identify one machine out of a million. The usual answer is to
+ * lie about all of them, which fails twice over: a machine whose answers are
+ * impossible is *more* identifiable, not less, and half the web breaks.
+ *
+ * So this changes as little as possible. Canvas and audio readings get noise
+ * that is stable for one site and one session — enough that the number cannot
+ * be matched against another site, small enough that nothing looks wrong. The
+ * two counters that are pure bragging (how many cores, how much memory) are
+ * rounded to the commonest answer. Everything else is left alone.
+ *
+ * It has to run in the page's own world. A preload lives in an isolated one,
+ * and a canvas patched there is a canvas the page never sees — which is why
+ * this goes through executeInMainWorld and why the answer about whether to do
+ * it at all is asked for synchronously: by the time a message could arrive,
+ * the page's own scripts have already read what they came for.
+ * ====================================================================== */
+{
+  const guard = ipcRenderer.sendSync('shield:ask') as
+    | { fingerprint?: boolean; clipboard?: boolean }
+    | undefined
+
+  /**
+   * One number per site per session, from the address and a random start.
+   *
+   * Per site, so two sites cannot compare notes; per session, so the same site
+   * cannot follow one machine across a restart. It is a number, not a fresh
+   * random value each call: a canvas that reads differently every time is a
+   * canvas every fingerprinting script notices immediately.
+   */
+  const seed = (() => {
+    let hash = Math.floor(Math.random() * 0xffffffff)
+    for (const ch of location.host) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
+    return hash
+  })()
+
+  if (guard?.fingerprint) {
+    try {
+      contextBridge.executeInMainWorld({
+        args: [seed],
+        // Self-contained on purpose: this function is serialised across into
+        // the page's world, so it can close over nothing at all.
+        func: (SEED: number) => {
+          const wobble = (at: number) => (((SEED ^ (at * 2654435761)) >>> 0) % 3) - 1
+
+          const readCanvas = HTMLCanvasElement.prototype.toDataURL
+          const readBlob = HTMLCanvasElement.prototype.toBlob
+          const readPixels = CanvasRenderingContext2D.prototype.getImageData
+
+          const smudge = (canvas: HTMLCanvasElement) => {
+            try {
+              const context = canvas.getContext('2d')
+              if (!context) return
+              const size = Math.min(canvas.width, 8)
+              if (size < 1 || canvas.height < 1) return
+              const pixels = readPixels.call(context, 0, 0, size, 1)
+              for (let at = 0; at < pixels.data.length; at += 4) {
+                pixels.data[at] = Math.max(0, Math.min(255, pixels.data[at] + wobble(at)))
+              }
+              context.putImageData(pixels, 0, 0)
+            } catch {
+              /* a tainted canvas can be neither read nor written */
+            }
+          }
+
+          /* eslint-disable @typescript-eslint/no-explicit-any */
+          HTMLCanvasElement.prototype.toDataURL = function (this: HTMLCanvasElement, ...args: any[]) {
+            smudge(this)
+            return (readCanvas as any).apply(this, args)
+          }
+          HTMLCanvasElement.prototype.toBlob = function (this: HTMLCanvasElement, ...args: any[]) {
+            smudge(this)
+            return (readBlob as any).apply(this, args)
+          }
+          CanvasRenderingContext2D.prototype.getImageData = function (
+            this: CanvasRenderingContext2D,
+            ...args: any[]
+          ) {
+            const pixels = (readPixels as any).apply(this, args) as ImageData
+            for (let at = 0; at < pixels.data.length; at += 997 * 4) {
+              pixels.data[at] = Math.max(0, Math.min(255, pixels.data[at] + wobble(at)))
+            }
+            return pixels
+          }
+
+          if (typeof AnalyserNode !== 'undefined') {
+            const readFloat = AnalyserNode.prototype.getFloatFrequencyData
+            AnalyserNode.prototype.getFloatFrequencyData = function (
+              this: AnalyserNode,
+              array: Float32Array
+            ) {
+              ;(readFloat as (a: Float32Array) => void).call(this, array)
+              for (let at = 0; at < array.length; at += 101) array[at] += wobble(at) * 0.0001
+            }
+          }
+
+          // Eight cores and eight gigabytes is the commonest pair on the
+          // desktop, so saying it puts this browser in the crowd rather than
+          // beside it.
+          const flatten = (object: object, name: string, value: unknown) => {
+            try {
+              Object.defineProperty(object, name, { get: () => value, configurable: true })
+            } catch {
+              /* a page that froze navigator first keeps its own answer */
+            }
+          }
+          flatten(Navigator.prototype, 'hardwareConcurrency', 8)
+          if ('deviceMemory' in navigator) flatten(Navigator.prototype, 'deviceMemory', 8)
+          /* eslint-enable @typescript-eslint/no-explicit-any */
+        }
+      })
+    } catch {
+      /* an older runtime without executeInMainWorld leaves the page as it was */
+    }
+  }
+
+  /*
+   * The clipboard.
+   *
+   * Reading what somebody copied is a permission in every browser and a
+   * formality in most: the prompt appears, it is accepted once, and the site
+   * can read the clipboard for as long as it is open. A page has no business
+   * knowing what is in there unless a person pastes it — which is a gesture
+   * the page is told about anyway.
+   */
+  if (guard?.clipboard) {
+    try {
+      contextBridge.executeInMainWorld({
+        func: () => {
+          if (!navigator.clipboard) return
+          const refuse = () =>
+            Promise.reject(new DOMException('Read permission denied.', 'NotAllowedError'))
+          try {
+            Object.defineProperty(navigator.clipboard, 'readText', {
+              value: refuse,
+              configurable: true
+            })
+            Object.defineProperty(navigator.clipboard, 'read', { value: refuse, configurable: true })
+          } catch {
+            /* the page got there first; the permission prompt is still the gate */
+          }
+        }
+      })
+    } catch {
+      /* same as above */
+    }
+  }
+}
+
+/* ==========================================================================
+ * A password box on a page that is not encrypted.
+ *
+ * Chromium says "not secure" in the address bar, which is next to the address
+ * and not next to the box somebody is about to type a password into. This
+ * marks the box itself, where the typing happens.
+ * ====================================================================== */
+{
+  const mark = () => {
+    if (location.protocol === 'https:' && !document.querySelector('form[action^="http:"]')) return
+    const boxes = document.querySelectorAll<HTMLInputElement>('input[type="password"]')
+    if (boxes.length === 0) return
+    for (const box of boxes) {
+      if (box.dataset.nyaWarned) continue
+      box.dataset.nyaWarned = '1'
+      box.style.outline = '2px solid #d97706'
+      box.style.outlineOffset = '1px'
+      box.title = INSECURE_FORM
+    }
+    ipcRenderer.send('shield:insecure-form', location.href)
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mark, { once: true })
+  } else {
+    mark()
+  }
+  // Forms arrive late on half the web, so this watches rather than looks once.
+  new MutationObserver(mark).observe(document.documentElement, { childList: true, subtree: true })
+}
+
+/** What the outline on an unencrypted password box says, in the browser's language. */
+let INSECURE_FORM = 'Пароль на этой странице уйдёт незашифрованным'
+ipcRenderer.on('shield:words', (_event, words: { insecureForm?: string }) => {
+  if (typeof words?.insecureForm === 'string') INSECURE_FORM = words.insecureForm
+})
+
 /** The word for minutes, handed over by the browser in the reader's language. */
 let MINUTES = 'мин'
 const NEWLINE = String.fromCharCode(10)

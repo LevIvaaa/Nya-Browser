@@ -28,7 +28,7 @@ import { sites } from './sites'
 import { blockedDays, BLOCKLIST_SIZE, blockedLog, clearBrowsingData, hardenApp, hardenSession, resetStats, stats } from './security'
 import { detectSources, importBookmarks, importHistory, importPasswordsCsv } from './import'
 import { translateBatch } from './translate'
-import { engine, filterStatus, hideCss, loadFilters } from './filters'
+import { filterRefresh, engine, filterStatus, hideCss, loadFilters } from './filters'
 import {
   addExtension,
   listExtensions,
@@ -943,6 +943,77 @@ function registerIpc() {
 
   /* ---- history ---- */
   ipcMain.handle('history:all', (event) => history.all())
+
+  /* ---- what is watching, what is known, what was guarded ---- */
+
+  /** Who was watching the page in front of you, by the host they went to. */
+  /** What the last refresh of the filter lists actually changed. */
+  ipcMain.handle('filters:refresh-summary', () => filterRefresh())
+  /*
+   * What this page is guarded against, answered on the spot.
+   *
+   * Every other message in this browser is asynchronous, and this one cannot
+   * be: the page asks at document start, before its own scripts have run, and
+   * a canvas patched after the fingerprinting script has read it is a canvas
+   * patched for nothing. A trusted site gets no guards, which is what trusting
+   * it means.
+   */
+  ipcMain.on('shield:ask', (event) => {
+    const s = settings.get()
+    let host = ''
+    try {
+      host = new URL(event.senderFrame?.url ?? '').hostname.replace(/^www./, '')
+    } catch {
+      /* about:blank and friends get the ordinary answer */
+    }
+    const trusted = host ? sites.get(host).trusted === true : false
+    event.returnValue = {
+      fingerprint: s.fingerprintGuard && !trusted,
+      clipboard: s.clipboardGuard && !trusted
+    }
+  })
+
+  /** A page that was refused the clipboard, worth one line in the log. */
+  ipcMain.on('shield:clipboard-refused', (_event, host: unknown) =>
+    log('clipboard refused for', str(host, 200))
+  )
+  /** A password box about to travel in the clear, worth one line too. */
+  ipcMain.on('shield:insecure-form', (_event, url: unknown) =>
+    log('insecure form on', str(url, 300))
+  )
+
+  ipcMain.handle('shield:watchers', (event) => current(event).watchers())
+  /** What this site can work out about the machine. */
+  ipcMain.handle('shield:knows', (event) => current(event).siteKnows())
+  /** A month of protection, as something a person can act on. */
+  ipcMain.handle('shield:report', (event) => current(event).protectionReport())
+  /** What is wrong with the address in front of you, worked out on this machine. */
+  ipcMain.handle('shield:warnings', (event) => current(event).addressWarnings())
+  /** Opens one address in a jar of its own. */
+  ipcMain.handle('shield:container', (event, url: unknown, container: unknown) =>
+    current(event).openInContainer(str(url, 2048), str(container, 32))
+  )
+  /** Opens one address in another profile, in a window of its own. */
+  /*
+   * One link, opened as somebody else.
+   *
+   * A window per profile is what a profile is, so this switches profiles the
+   * ordinary way and then opens the address in the window that comes back.
+   * Nothing is shared across: different cookies, different logins, different
+   * history — which is the entire point of doing it rather than opening a tab.
+   */
+  ipcMain.handle('shield:other-profile', (event, url: unknown, profileId: unknown) => {
+    const where = str(url, 2048)
+    const id = str(profileId, 64)
+    if (!/^https?:/i.test(where) || !profiles.state.profiles.some((one) => one.id === id)) return false
+    // The window does the switching, because it owns the session the tabs sit
+    // in; once it has, the address opens in it.
+    const win = current(event)
+    win.switchProfile(id)
+    win.newTab(where)
+    profilesEverywhere()
+    return true
+  })
 
   /* ---- what the start page keeps of its own ---- */
 

@@ -22,6 +22,7 @@ export const DNS_PROVIDERS: DnsProvider[] = [
 ]
 import type {
   BackgroundSettings,
+  Container,
   CustomEngine,
   LookPreset,
   DnsProvider,
@@ -182,6 +183,28 @@ function sanitizeSchedule(v: unknown, d: Settings['themeSchedule']): Settings['t
  * to turn the ad blocker off or point the browser at somebody's search engine,
  * so anything outside this list is dropped on the way in.
  */
+
+/** Jars of cookies with names on them, as far as they can be trusted. */
+function sanitizeContainers(v: unknown): Container[] {
+  if (!Array.isArray(v)) return []
+  const out: Container[] = []
+  const taken = new Set<string>()
+  for (const row of v.slice(0, 20)) {
+    const one = (row ?? {}) as Partial<Container>
+    // The id becomes part of a session partition name, so it is letters and
+    // digits or it is nothing.
+    const id = String(one.id ?? '').replace(/[^a-z0-9-]/gi, '').slice(0, 32)
+    if (!id || taken.has(id)) continue
+    taken.add(id)
+    out.push({
+      id,
+      name: String(one.name ?? id).slice(0, 40),
+      colour: /^#[0-9a-f]{6}$/i.test(String(one.colour)) ? String(one.colour) : '#7c6cff',
+      icon: [...String(one.icon ?? '')].slice(0, 2).join('')
+    })
+  }
+  return out
+}
 
 function sanitizeLooks(v: unknown, d: LookPreset[]): LookPreset[] {
   if (!Array.isArray(v)) return d
@@ -442,6 +465,20 @@ export function sanitize(input: Partial<Settings>): Settings {
     passwordsAskOnStart: bool(input.passwordsAskOnStart, d.passwordsAskOnStart),
     passwordsHello: bool(input.passwordsHello, d.passwordsHello),
     webrtcPolicy: oneOf(input.webrtcPolicy, ['default', 'public_only', 'proxy_only'] as const, d.webrtcPolicy),
+    fingerprintGuard: bool(input.fingerprintGuard, d.fingerprintGuard),
+    clipboardGuard: bool(input.clipboardGuard, d.clipboardGuard),
+    phishingGuard: bool(input.phishingGuard, d.phishingGuard),
+    cookieBanners: bool(input.cookieBanners, d.cookieBanners),
+    containers: sanitizeContainers(input.containers),
+    /*
+     * A Chromium proxy rule string, and only that shape.
+     *
+     * This is handed to the session as-is, so it is checked before it gets
+     * there: schemes, hosts, ports and the separators between them. Anything
+     * else means no proxy rather than a guess.
+     */
+    proxy: /^[w.:/;=@[]-]{0,300}$/.test(String(input.proxy ?? '')) ? String(input.proxy ?? '') : d.proxy,
+    reaskLocationDays: Math.round(clamp(input.reaskLocationDays, 0, 365, d.reaskLocationDays)),
     spellcheck: bool(input.spellcheck, d.spellcheck),
     spellcheckLanguages: localeList(input.spellcheckLanguages, d.spellcheckLanguages),
     drm: bool(input.drm, d.drm),

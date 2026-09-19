@@ -3,6 +3,8 @@ import { swapLayout } from '../shared/layout'
 import { Menu, clipboard, shell, type MenuItemConstructorOptions, type WebContents } from 'electron'
 import { GROUP_COLOURS, type BrowserWindow } from './browser'
 import { ocrAvailable } from './ocr'
+import { profiles } from './profiles'
+import { settings } from './settings'
 
 /** Colour names for the group menu; the palette itself lives in browser.ts. */
 const GROUP_COLOUR_NAMES: Record<string, string> = {
@@ -57,14 +59,51 @@ export function pageContextMenu(
   const items: MenuItemConstructorOptions[] = []
   const has = (value?: string) => typeof value === 'string' && value.length > 0
 
+/** One address, opened as somebody else — the window switches, then loads. */
+const openLinkAsProfile = (browser: BrowserWindow, url: string, profileId: string) => {
+  browser.switchProfile(profileId)
+  browser.newTab(url)
+}
+
   if (has(params.linkURL)) {
     items.push(
       { label: t('Открыть в новой вкладке'), click: () => browser.newTab(params.linkURL, true) },
       { label: t('Открыть в новой вкладке и перейти'), click: () => browser.newTab(params.linkURL) },
       { label: t('Копировать ссылку'), click: () => clipboard.writeText(params.linkURL) },
-      { label: t('Открыть во внешнем браузере'), click: () => void shell.openExternal(params.linkURL) },
-      { type: 'separator' }
+      { label: t('Открыть во внешнем браузере'), click: () => void shell.openExternal(params.linkURL) }
     )
+
+    /*
+     * The same link, somewhere separate.
+     *
+     * A container is a different jar of cookies in the same window; another
+     * profile is a different everything in a window of its own. Both answer
+     * the same question — "open this without the rest of my browsing being
+     * attached to it" — at two different strengths.
+     */
+    const containers = settings.get().containers
+    if (containers.length > 0) {
+      items.push({
+        label: t('Открыть в контейнере'),
+        submenu: containers.map((box) => ({
+          label: `${box.icon} ${box.name}`.trim(),
+          click: () => browser.openInContainer(params.linkURL, box.id)
+        }))
+      })
+    }
+
+    const others = profiles.state.profiles.filter((one) => one.id !== profiles.activeId)
+    if (others.length > 0) {
+      items.push({
+        label: t('Открыть в другом профиле'),
+        submenu: others.map((one) => ({
+          label: one.name,
+          click: () => openLinkAsProfile(browser, params.linkURL, one.id)
+        }))
+      })
+    }
+
+    items.push({ type: 'separator' })
   }
 
   if (params.mediaType === 'image' && has(params.srcURL)) {

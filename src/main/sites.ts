@@ -38,6 +38,32 @@ function cleanRules(input: unknown): SiteRules {
     rules.zoom = Math.max(-3, Math.min(4, raw.zoom))
   }
   if (raw.blocking === 'off') rules.blocking = 'off'
+  if (raw.trusted === true) rules.trusted = true
+  if (raw.strict === true) rules.strict = true
+  if (typeof raw.container === 'string') {
+    const id = raw.container.replace(/[^a-z0-9-]/gi, '').slice(0, 32)
+    if (id) rules.container = id
+  }
+  const grantedAt = raw.grantedAt as Record<string, unknown> | undefined
+  if (grantedAt && typeof grantedAt === 'object') {
+    const kept: NonNullable<SiteRules['grantedAt']> = {}
+    for (const [key, value] of Object.entries(grantedAt)) {
+      const at = Number(value)
+      if (Number.isFinite(at) && at > 0) kept[key as PermissionKey] = at
+    }
+    if (Object.keys(kept).length > 0) rules.grantedAt = kept
+  }
+  // Permissions given until a moment rather than for ever. One that has run
+  // out is simply not kept: an expired promise is not a rule.
+  const until = raw.until as Record<string, unknown> | undefined
+  if (until && typeof until === 'object') {
+    const kept: NonNullable<SiteRules['until']> = {}
+    for (const [key, value] of Object.entries(until)) {
+      const at = Number(value)
+      if (Number.isFinite(at) && at > Date.now()) kept[key as PermissionKey] = at
+    }
+    if (Object.keys(kept).length > 0) rules.until = kept
+  }
   if (raw.reader === true) rules.reader = true
   if (raw.translate === 'always' || raw.translate === 'never') rules.translate = raw.translate
   const media = raw.media as Record<string, unknown> | undefined
@@ -106,7 +132,13 @@ class Sites {
       blocking: patch.blocking === undefined ? current.blocking : patch.blocking,
       reader: patch.reader === undefined ? current.reader : patch.reader,
       translate: patch.translate === undefined ? current.translate : patch.translate,
-      media: patch.media === undefined ? current.media : { ...current.media, ...patch.media }
+      media: patch.media === undefined ? current.media : { ...current.media, ...patch.media },
+      trusted: patch.trusted === undefined ? current.trusted : patch.trusted,
+      strict: patch.strict === undefined ? current.strict : patch.strict,
+      container: patch.container === undefined ? current.container : patch.container,
+      until: patch.until === undefined ? current.until : { ...current.until, ...patch.until },
+      grantedAt:
+        patch.grantedAt === undefined ? current.grantedAt : { ...current.grantedAt, ...patch.grantedAt }
     })
     // An exception that says nothing is not kept: the list is meant to be a
     // list of decisions, not of hosts that were once visited.

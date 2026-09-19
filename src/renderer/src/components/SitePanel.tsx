@@ -1,7 +1,8 @@
 import { t } from '../i18n'
 import { useEffect, useState } from 'react'
 import type { PermissionKey, PermissionPolicy, SiteInfo, SiteRules } from '../../../shared/types'
-import { Lock, Scroll, Shield, Translate, Unlock, Volume } from './Icons'
+import { ChevronDown, Eye, Info, Shield, Lock, Scroll, Translate, Unlock, Volume } from './Icons'
+import { SiteKnowsPanel, Watchers } from './Shield'
 import { cx } from './ui'
 
 /** The permissions worth a row, in the order they are usually thought about. */
@@ -33,6 +34,8 @@ const POLICY_LABEL: Record<PermissionPolicy, string> = {
  */
 export default function SitePanel({ onClose }: { onClose: () => void }) {
   const [info, setInfo] = useState<SiteInfo | null>(null)
+  /** which of the two long panels is open, when either is */
+  const [open, setOpen] = useState<'watchers' | 'knows' | null>(null)
 
   const refresh = () => window.browser.siteInfo().then(setInfo)
   useEffect(() => {
@@ -159,6 +162,88 @@ export default function SitePanel({ onClose }: { onClose: () => void }) {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* --------------------------------------- what this site is trusted with */}
+        <div className="border-t px-4 py-3" style={{ borderColor: 'var(--line)' }}>
+          <div className="flex items-center gap-2.5">
+            <Shield width={15} height={15} style={{ color: 'var(--faint)' }} />
+            <span className="min-w-0 flex-1 text-sm text-ink">{t('Защита на этом сайте')}</span>
+          </div>
+
+          <label className="mt-2 flex cursor-pointer items-center gap-2.5">
+            <input
+              type="checkbox"
+              className="h-4 w-4 shrink-0 accent-[var(--accent)]"
+              checked={info.rules.strict === true}
+              onChange={(event) => void set({ strict: event.target.checked || undefined }, true)}
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm text-ink">{t('Строгий режим')}</span>
+              <span className="block text-2xs leading-snug text-faint">
+                {t('Ничего стороннего: ни скриптов, ни рамок, ни картинок с других сайтов. Многое сломается')}
+              </span>
+            </span>
+          </label>
+
+          <label className="mt-2 flex cursor-pointer items-center gap-2.5">
+            <input
+              type="checkbox"
+              className="h-4 w-4 shrink-0 accent-[var(--accent)]"
+              checked={info.rules.trusted === true}
+              onChange={(event) => void set({ trusted: event.target.checked || undefined }, true)}
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm text-ink">{t('Я доверяю этому сайту')}</span>
+              <span className="block text-2xs leading-snug text-faint">
+                {t('Предупреждения об адресе молчат, а защиты, которые ломают страницы, здесь не работают')}
+              </span>
+            </span>
+          </label>
+        </div>
+
+        {/* ------------------------------------------------- who was watching */}
+        <div className="border-t px-4 py-3" style={{ borderColor: 'var(--line)' }}>
+          <button
+            className="flex w-full items-center gap-2.5 text-left"
+            onClick={() => setOpen(open === 'watchers' ? null : 'watchers')}
+          >
+            <Eye width={15} height={15} style={{ color: 'var(--faint)' }} />
+            <span className="min-w-0 flex-1 text-sm text-ink">{t('Кто следил на этой странице')}</span>
+            <ChevronDown
+              width={13}
+              height={13}
+              className="shrink-0 text-faint"
+              style={{ transform: open === 'watchers' ? 'rotate(180deg)' : undefined }}
+            />
+          </button>
+          {open === 'watchers' && (
+            <div className="mt-2">
+              <Watchers />
+            </div>
+          )}
+        </div>
+
+        {/* --------------------------------------------- what this site knows */}
+        <div className="border-t px-4 py-3" style={{ borderColor: 'var(--line)' }}>
+          <button
+            className="flex w-full items-center gap-2.5 text-left"
+            onClick={() => setOpen(open === 'knows' ? null : 'knows')}
+          >
+            <Info width={15} height={15} style={{ color: 'var(--faint)' }} />
+            <span className="min-w-0 flex-1 text-sm text-ink">{t('Что сайт знает о вас')}</span>
+            <ChevronDown
+              width={13}
+              height={13}
+              className="shrink-0 text-faint"
+              style={{ transform: open === 'knows' ? 'rotate(180deg)' : undefined }}
+            />
+          </button>
+          {open === 'knows' && (
+            <div className="mt-2">
+              <SiteKnowsPanel />
+            </div>
+          )}
         </div>
 
         {/* ---------------------------------------------- how this site sounds */}

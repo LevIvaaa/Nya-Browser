@@ -1,5 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
+  FilterRefresh,
+  Watcher,
+  SiteKnows,
+  ProtectionReport,
   Todo,
   Rates,
   Note,
@@ -44,6 +48,7 @@ import type {
   Weather,
   WindowState
 } from '../shared/types'
+import type { Warning } from '../shared/phishing'
 
 export interface Credential {
   id: string
@@ -353,6 +358,24 @@ const api = {
 
   /* ---- history ---- */
   history: (): Promise<HistoryEntry[]> => ipcRenderer.invoke('history:all'),
+
+  /* ---- what is watching, what is known, what was guarded ---- */
+  /** Who was watching this page, by the host the requests went to. */
+  /** What the last refresh of the filter lists changed, or null if none ran. */
+  filterRefresh: (): Promise<FilterRefresh | null> => ipcRenderer.invoke('filters:refresh-summary'),
+  watchers: (): Promise<Watcher[]> => ipcRenderer.invoke('shield:watchers'),
+  /** What this site can work out about the machine. */
+  siteKnows: (): Promise<SiteKnows | null> => ipcRenderer.invoke('shield:knows'),
+  /** A month of protection, as a report. */
+  protectionReport: (): Promise<ProtectionReport> => ipcRenderer.invoke('shield:report'),
+  /** What is wrong with the address in front of you. */
+  addressWarnings: (): Promise<Warning[]> => ipcRenderer.invoke('shield:warnings'),
+  /** Opens one address in a jar of its own. */
+  openInContainer: (url: string, container: string): Promise<void> =>
+    ipcRenderer.invoke('shield:container', url, container),
+  /** Opens one address in another profile, in a window of its own. */
+  openInProfile: (url: string, profileId: string): Promise<void> =>
+    ipcRenderer.invoke('shield:other-profile', url, profileId),
 
   /* ---- the start page's own things ---- */
   /** Notes and the to-do list, as this profile has them. */

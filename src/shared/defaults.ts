@@ -7,6 +7,7 @@
  */
 import type {
   BackgroundSettings,
+  Container,
   MiddleClick,
   NewTabShows,
   CustomEngine,
@@ -175,6 +176,15 @@ export const DEFAULT_SETTINGS: Settings = {
   passwordsAskOnStart: false,
   passwordsHello: false,
   webrtcPolicy: 'public_only',
+  fingerprintGuard: false,
+  clipboardGuard: true,
+  phishingGuard: true,
+  cookieBanners: true,
+  containers: [],
+  proxy: '',
+  // A month: long enough not to nag, short enough that a permission given for
+  // one errand does not last a year.
+  reaskLocationDays: 30,
   spellcheck: true,
   spellcheckLanguages: ['ru', 'en-US'],
   drm: false,

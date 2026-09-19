@@ -136,6 +136,8 @@ function TabItem({
   onDrop
 }: ItemProps) {
   const [hover, setHover] = useState(false)
+  // The container this tab belongs to, when it belongs to one.
+  const box = tab.container ? settings.containers.find((one) => one.id === tab.container) : undefined
   /** where the pointer is, once it has stayed long enough to mean it */
   const [peek, setPeek] = useState<{ x: number; y: number } | null>(null)
   const peekTimer = useRef<number | null>(null)
@@ -303,6 +305,15 @@ function TabItem({
         <span
           className="absolute -left-[7px] top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-pill"
           style={{ background: 'var(--accent)', transition: 'height var(--t-base) var(--ease-spring)' }}
+        />
+      )}
+
+      {/* A different jar of cookies, said in colour along the top edge. */}
+      {box && (
+        <span
+          className="pointer-events-none absolute left-2 right-2 top-[2px] h-[2px] rounded-pill"
+          style={{ background: box.colour }}
+          title={box.name}
         />
       )}
 

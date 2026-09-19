@@ -18,6 +18,7 @@ import { basename, extname, join } from 'path'
 import { randomUUID } from 'crypto'
 import { URL } from 'url'
 import { settings } from './settings'
+import { inspect, type Warning } from '../shared/phishing'
 import { desk } from './desk'
 import { habits } from './habits'
 import { history } from './history'
@@ -51,13 +52,16 @@ import {
   refreshCustomLists,
   resetStats,
   setPermissionPrompt,
-  stats, isBlockedPopup, restoreBlockedDays } from './security'
-import { engine, hideCss } from './filters'
+  stats, isBlockedPopup, restoreBlockedDays, blockedLog, blockedDays } from './security'
+import { filterStatus, engine, hideCss } from './filters'
 import { comboOf, shortcutMap } from '../shared/shortcuts'
 import { extensionActions, loadExtensions, setExtensionSession } from './extensions'
 import { aimed, normalizeInput } from '../shared/search'
 import { answer } from '../shared/answer'
 import type {
+  ProtectionReport,
+  Watcher,
+  SiteKnows,
   ContentLayout,
   InternalPage,
   PermissionRequest,
@@ -229,6 +233,8 @@ class Tab {
   attention = false
   /** set aside on purpose, to come back to */
   unread = false
+  /** the container this tab drinks from; empty is the ordinary one */
+  container = ''
   private pendingUrl: string | null = null
 
   constructor(id: number, private readonly ses: Session) {
@@ -386,6 +392,7 @@ class Tab {
       secure,
       upgraded: this.upgraded,
       blocked: wc ? perTabBlocked.get(wc.id) ?? 0 : 0,
+      container: this.container,
       sleeping: this.sleeping,
       muted: this.muted,
       audible: wc ? wc.isCurrentlyAudible() : false,
@@ -1336,6 +1343,8 @@ export class BrowserWindow {
     refreshCustomLists()
     hardenSession(this.ses)
     this.win.setAlwaysOnTop(s.alwaysOnTop)
+    this.applyProxyTo(this.ses)
+    for (const box of this.containerSessions.values()) this.applyProxyTo(box)
     this.tellPagesAboutGestures()
     this.drawChromeAt(s.uiScale)
     this.tellPagesAboutPinch()
@@ -1412,6 +1421,172 @@ export class BrowserWindow {
     settings.patch({ background: { ...background, kind: 'image', file: next } })
   }
 
+  /**
+   * One month of protection, as a report rather than a number.
+   *
+   * The counter in the corner says "14 312 blocked" and means nothing to
+   * anybody. What this says instead is which hosts tried hardest, whether it
+   * is getting quieter, and how many sites have rules of their own — the
+   * things somebody could act on.
+   */
+  protectionReport(): ProtectionReport {
+    const worst = new Map<string, number>()
+    for (const one of blockedLog()) {
+      worst.set(one.host, (worst.get(one.host) ?? 0) + 1)
+    }
+    return {
+      days: blockedDays(),
+      worst: [...worst.entries()]
+        .map(([host, count]) => ({ host, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10),
+      totals: { ...stats },
+      sites: sites.all().length,
+      filtersUpdated: filterStatus().updated
+    }
+  }
+
+  /**
+   * What is wrong with the address of the page in front of you.
+   *
+   * Worked out here rather than sent anywhere: the check reads the address and
+   * the hosts this profile already visits, and nothing leaves the machine. A
+   * site somebody has marked as trusted is left alone.
+   */
+  addressWarnings(): Warning[] {
+    const tab = this.getActive()
+    if (!tab || !settings.get().phishingGuard) return []
+    let host = ''
+    try {
+      host = new URL(tab.url).hostname.replace(/^www\./, '')
+    } catch {
+      return []
+    }
+    if (sites.get(host).trusted) return []
+    // The places this profile actually goes are the strongest signal there is:
+    // the address somebody is fooled by is a near-miss of one they use.
+    /*
+     * Which hosts count as "somewhere this profile goes".
+     *
+     * Visited more than twice, not visited at all: one accidental click on a
+     * phishing link would otherwise make that very domain a place you go, and
+     * the warning would never appear again — on exactly the site it exists for.
+     */
+    const known = this.incognito
+      ? []
+      : [
+          ...new Set(
+            history
+              .all()
+              .filter((entry) => entry.visits >= 3)
+              .slice(0, 400)
+              .map((entry) => {
+                try {
+                  return new URL(entry.url).hostname.replace(/^www\./, '')
+                } catch {
+                  return ''
+                }
+              })
+              .filter(Boolean)
+          )
+        ]
+    return inspect(tab.url, known)
+  }
+
+  /** Opens one address in a container, as a new tab beside this one. */
+  openInContainer(url: string, container: string) {
+    if (!/^https?:/i.test(url)) return
+    this.newTab(url, false, this.activeId, container)
+  }
+
+  /**
+   * Who was watching this page.
+   *
+   * Grouped by the host the requests were going to, because that is the thing
+   * a person can recognise: "doubleclick.net, forty-one requests" says more
+   * than forty-one lines each naming a different URL on it.
+   */
+  watchers(): Watcher[] {
+    const here = this.getActive()?.url ?? ''
+    let page = ''
+    try {
+      page = new URL(here).hostname
+    } catch {
+      return []
+    }
+    const counts = new Map<string, Watcher>()
+    for (const one of blockedLog()) {
+      if (one.page !== page) continue
+      const key = `${one.host}|${one.kind}`
+      const known = counts.get(key)
+      if (known) known.blocked += 1
+      else counts.set(key, { host: one.host, blocked: 1, kind: one.kind })
+    }
+    return [...counts.values()].sort((a, b) => b.blocked - a.blocked).slice(0, 40)
+  }
+
+  /**
+   * What this site can work out about the machine.
+   *
+   * Everything here is something the page could read for itself; the point is
+   * that a person cannot, and "this site has forty-one cookies and knows your
+   * screen size and time zone" is the sentence that makes the abstract real.
+   */
+  async siteKnows(): Promise<SiteKnows | null> {
+    const tab = this.getActive()
+    const wc = tab?.wc
+    if (!tab || !wc || wc.isDestroyed() || !/^https?:/i.test(tab.url)) return null
+    let host = ''
+    try {
+      host = new URL(tab.url).hostname
+    } catch {
+      return null
+    }
+
+    const cookies = await this.sessionFor(tab.container || undefined)
+      .cookies.get({ domain: host })
+      .catch(() => [])
+
+    // Asked of the page itself, because these are the exact answers it gets.
+    const told = (await wc
+      .executeJavaScript(
+        `(() => {
+          let bytes = 0
+          try {
+            for (let i = 0; i < localStorage.length; i++) {
+              const key = localStorage.key(i) ?? ''
+              bytes += key.length + (localStorage.getItem(key) ?? '').length
+            }
+          } catch {}
+          return {
+            screen: screen.width + '×' + screen.height,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+            languages: navigator.languages.join(', '),
+            storage: bytes * 2
+          }
+        })()`,
+        true
+      )
+      .catch(() => null)) as { screen: string; timezone: string; languages: string; storage: number } | null
+
+    const rules = sites.get(host)
+    const granted = Object.entries(rules.permissions)
+      .filter(([, value]) => value === 'allow')
+      .map(([key]) => key)
+
+    return {
+      host,
+      cookies: cookies.length,
+      storage: told?.storage ?? 0,
+      screen: told?.screen ?? '',
+      timezone: told?.timezone ?? '',
+      languages: told?.languages ?? '',
+      blocked: wc ? perTabBlocked.get(wc.id) ?? 0 : 0,
+      granted,
+      blunted: settings.get().fingerprintGuard && !rules.trusted
+    }
+  }
+
   /** Every open page has to know whether a right-drag means anything. */
   private tellPagesAboutGestures() {
     const s = settings.get()
@@ -1420,7 +1595,33 @@ export class BrowserWindow {
       if (!wc || wc.isDestroyed()) continue
       wc.send('gesture:on', s.mouseGestures)
       wc.send('hints:on', { on: s.linkHints, key: s.linkHintsKey })
+      this.tellPageAboutShield(tab)
     }
+  }
+
+  /**
+   * What one page is guarded against.
+   *
+   * A trusted site is left alone: somebody said they trust it, and the point
+   * of saying so is that the protections which break things stop breaking
+   * them there.
+   */
+  private tellPageAboutShield(tab: Tab) {
+    const wc = tab.wc
+    if (!wc || wc.isDestroyed()) return
+    const s = settings.get()
+    let host = ''
+    try {
+      host = new URL(tab.url).hostname.replace(/^www\./, '')
+    } catch {
+      /* about:blank and friends get the ordinary answer */
+    }
+    const trusted = host ? sites.get(host).trusted === true : false
+    wc.send('shield:on', {
+      fingerprint: s.fingerprintGuard && !trusted,
+      clipboard: s.clipboardGuard && !trusted
+    })
+    wc.send('shield:words', { insecureForm: t('Пароль на этой странице уйдёт незашифрованным') })
   }
 
   /* ---------------------------------------------------------- tab wiring */
@@ -1454,6 +1655,7 @@ export class BrowserWindow {
       const s = settings.get()
       wc.send('gesture:on', s.mouseGestures)
       wc.send('hints:on', { on: s.linkHints, key: s.linkHintsKey })
+      this.tellPageAboutShield(tab)
     })
 
     wc.on('page-title-updated', (_e, title) => {
@@ -1952,8 +2154,17 @@ export class BrowserWindow {
   }
 
   /* -------------------------------------------------------------- actions */
-  newTab(url?: string, background = false, openerId?: number): number {
-    const tab = new Tab(++this.seq, this.ses)
+  newTab(url?: string, background = false, openerId?: number, container?: string): number {
+    /*
+     * Which jar this tab drinks from.
+     *
+     * Either it was asked for, or the site has a container of its own in the
+     * site rules — "this shop always opens in the shopping container" is the
+     * thing people set once and never think about again.
+     */
+    const wanted = container ?? (url ? sites.get(hostOf(url)).container : undefined)
+    const tab = new Tab(++this.seq, this.sessionFor(wanted))
+    tab.container = wanted ?? ''
     tab.space = this.spaceId
     // Where this tab came from, when it came from somewhere: a link opened in
     // the background belongs to the page that offered it.
@@ -2474,6 +2685,49 @@ export class BrowserWindow {
   }
 
   /* --------------------------------------------------------------- groups */
+
+  /**
+   * The session one container browses in.
+   *
+   * A container is a separate jar of cookies with a name on it: two accounts
+   * on one site, work beside personal, a shop that has no business seeing
+   * anything else. Chromium gives every partition its own cookies, storage and
+   * logins, so a container is a partition and nothing more — which is why it
+   * costs nothing until somebody makes one.
+   *
+   * Made on demand and hardened exactly like the ordinary one: a container
+   * that skipped the ad blocker or the certificate pinning would be a hole
+   * with a friendly name.
+   */
+  private containerSessions = new Map<string, Session>()
+
+  sessionFor(container?: string): Session {
+    if (!container || this.incognito) return this.ses
+    const known = this.containerSessions.get(container)
+    if (known) return known
+    const made = session.fromPartition(`${profiles.partition()}-box-${container}`)
+    registerProtocols(made)
+    installCertificateTrust(made)
+    hardenSession(made)
+    this.applyProxyTo(made)
+    this.containerSessions.set(container, made)
+    return made
+  }
+
+  /**
+   * Where this profile's traffic goes.
+   *
+   * Per profile rather than per browser, because that is the unit people think
+   * in: this profile through the company's proxy, that one straight out. Every
+   * container follows its profile, since a container is a jar of cookies and
+   * not a different network.
+   */
+  private applyProxyTo(target: Session) {
+    const rules = settings.get().proxy.trim()
+    void target
+      .setProxy(rules ? { proxyRules: rules, proxyBypassRules: '<local>' } : { mode: 'system' })
+      .catch((error) => log('proxy', String(error)))
+  }
 
   /** A new group around one tab, ready to be renamed. */
   createGroup(tabId: number, name?: string) {

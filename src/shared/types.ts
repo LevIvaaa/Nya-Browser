@@ -164,6 +164,26 @@ export type PermissionKey = keyof PermissionSettings
  */
 export interface SiteRules {
   permissions: Partial<Record<PermissionKey, PermissionPolicy>>
+  /** when each permission was granted, so one can be asked about again */
+  grantedAt?: Partial<Record<PermissionKey, number>>
+  /**
+   * Permissions given for this visit only, as key → when they run out.
+   * "Allow, but not forever" is what people mean nine times in ten, and no
+   * browser offers it.
+   */
+  until?: Partial<Record<PermissionKey, number>>
+  /**
+   * This site is trusted: the warnings about it are quietened and the
+   * protections that break things are relaxed. Somebody said so on purpose.
+   */
+  trusted?: boolean
+  /**
+   * Everything third-party refused here: no third-party frames, no
+   * third-party scripts, no cookies but this site's own.
+   */
+  strict?: boolean
+  /** the container this site opens in, when it is not the ordinary one */
+  container?: string
   /** the zoom this site opens at, in Chromium's zoom levels */
   zoom?: number
   /** 'off' turns the ad and tracker blocker off for this host */
@@ -633,6 +653,27 @@ export interface Settings {
   dohCustom: string
   /** fall back to the system resolver when the secure one cannot answer */
   dohFallback: boolean
+  /**
+   * Blunts the readings a site uses to tell one machine from another: canvas,
+   * audio, and the two counters that say how big the machine is.
+   */
+  fingerprintGuard: boolean
+  /** a page may not read what you copied unless you paste it */
+  clipboardGuard: boolean
+  /** an address that looks like somewhere else is warned about */
+  phishingGuard: boolean
+  /** hide the banners that ask about cookies, using a list of rules for them */
+  cookieBanners: boolean
+  /** the jars of cookies somebody has made */
+  containers: Container[]
+  /**
+   * Where a profile's traffic goes, as a Chromium proxy rule string. Empty is
+   * the ordinary route. It is per profile because that is the unit people
+   * think in: this profile through the company's proxy, that one not.
+   */
+  proxy: string
+  /** ask again about the location after this many days; 0 never asks again */
+  reaskLocationDays: number
   /** off by default costs nothing; on, Chromium downloads dictionaries from Google */
   spellcheck: boolean
   spellcheckLanguages: string[]
@@ -793,6 +834,8 @@ export type InternalPage =
 
 export interface TabState {
   id: number
+  /** the container this tab drinks from; empty is the ordinary one */
+  container: string
   /** set when this tab holds one of the browser's own pages instead of a site */
   internal: InternalPage | null
   /** pinned tabs sit at the front of the strip, narrow and without a close button */
@@ -1135,6 +1178,83 @@ export interface AddExtensionResult {
 }
 
 /** State of the downloadable EasyList-style filter lists. */
+/**
+ * A separate jar of cookies with a name on it.
+ *
+ * Two accounts on one site, work and personal side by side, a shop that has
+ * no business seeing anything else you do. Every container is its own
+ * Chromium session: its own cookies, its own storage, its own logins.
+ */
+export interface Container {
+  id: string
+  name: string
+  /** a colour for the stripe on the tab */
+  colour: string
+  /** one emoji, so it can be picked out of a row */
+  icon: string
+}
+
+/** What one site can work out about the machine, as the page sees it. */
+export interface SiteKnows {
+  host: string
+  /** how many cookies this site has set */
+  cookies: number
+  /** roughly how much it has kept in local storage, in bytes */
+  storage: number
+  /** the screen it was told about */
+  screen: string
+  /** the time zone it was told about */
+  timezone: string
+  /** the languages it was told about */
+  languages: string
+  /** how many requests were blocked on this page */
+  blocked: number
+  /** the permissions it has been given */
+  granted: string[]
+  /** fingerprinting is blunted for this page */
+  blunted: boolean
+}
+
+/** Who was watching one page, by the company behind the requests. */
+export interface Watcher {
+  /** the host the requests went to */
+  host: string
+  /** how many were blocked */
+  blocked: number
+  /** what kind of thing it was */
+  kind: 'ad' | 'tracker' | 'crypto' | 'param' | 'upgrade'
+}
+
+/** One month of protection, as a line per day and a few totals. */
+export interface ProtectionReport {
+  /** the fortnight or month of counts, oldest first */
+  days: Array<{ day: string; count: number }>
+  /** the hosts that tried most often */
+  worst: Array<{ host: string; count: number }>
+  totals: SecurityStats
+  /** how many sites have rules of their own */
+  sites: number
+  /** when the filter lists were last refreshed */
+  filtersUpdated: number
+}
+
+/**
+ * What the last refresh of the filter lists did.
+ *
+ * "Updated 3 days ago" says nothing about whether anything changed. This says
+ * which lists came back different and how many rules there are now against
+ * how many there were — the two things somebody wants after pressing refresh.
+ */
+export interface FilterRefresh {
+  at: number
+  /** the lists that came back different from what was on disk */
+  changed: Array<{ id: string; name: string; bytes: number }>
+  /** the lists that were checked and were already current */
+  unchanged: number
+  /** how many network rules there are now, and how many there were */
+  rules: { before: number; after: number }
+}
+
 export interface FilterStatus {
   enabled: boolean
   rules: number

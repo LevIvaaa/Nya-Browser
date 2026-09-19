@@ -1,6 +1,17 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useBrowser } from './state/useBrowser'
 import { useLook } from './look'
+import { AddressWarning } from './components/Shield'
+import type { Warning } from '../../shared/phishing'
+
+/** The host of an origin, the way the site rules are keyed. */
+const hostOf = (origin: string) => {
+  try {
+    return new URL(origin).hostname.replace(/^www./, '')
+  } catch {
+    return ''
+  }
+}
 import Wallpaper from './components/Wallpaper'
 import Toolbar from './components/Toolbar'
 import BookmarksBar from './components/BookmarksBar'
@@ -59,6 +70,25 @@ export default function App() {
     if (settings) void applyLanguage(settings.language)
   }, [settings?.language])
   const [revealed, setRevealed] = useState(false)
+  /** what is wrong with the address in front of us, and whether it was waved away */
+  const [warnings, setWarnings] = useState<Warning[]>([])
+  const [dismissed, setDismissed] = useState(false)
+
+  /*
+   * Asked once per address.
+   *
+   * The check is local and cheap, but it reads the history, so it is not
+   * something to do on every repaint. The address changing is exactly when the
+   * answer can change, and it is also when a warning waved away stops applying.
+   */
+  useEffect(() => {
+    setDismissed(false)
+    if (!active?.url || !/^https?:/i.test(active.url)) {
+      setWarnings([])
+      return
+    }
+    void window.browser.addressWarnings().then(setWarnings)
+  }, [active?.url])
 
   useEffect(() => {
     void window.browser.updateState().then(setUpdate)
@@ -384,6 +414,24 @@ export default function App() {
           )}
         </div>
       </div>
+
+      {/* What is wrong with this address, worked out on this machine from the
+          address itself and from where this profile goes. It sits in the
+          corner with the other notices; the page is read around it. */}
+      {warnings.length > 0 && !dismissed && (
+        <AddressWarning
+          warnings={warnings}
+          onLeave={() => {
+            setWarnings([])
+            void window.browser.back()
+          }}
+          onTrust={() => {
+            setWarnings([])
+            if (active?.origin) void window.browser.setSite(hostOf(active.origin), { trusted: true }, false)
+          }}
+          onClose={() => setDismissed(true)}
+        />
+      )}
 
       <DownloadPlate items={downloads} onOpenList={() => toggleView('downloads')} />
 

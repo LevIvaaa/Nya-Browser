@@ -9,11 +9,13 @@ import {
   TRACKING_PARAMS
 } from './blocklist'
 import { settings } from './settings'
-import { engine } from './filters'
+import { type FilterCategory, engine } from './filters'
 import { looksLikePdf } from './pdf'
 import { sites } from './sites'
 import { siteOf } from './vault'
-import type { PermissionRequest, PermissionSettings, SecurityStats } from '../shared/types'
+import type {
+  SiteRules,
+  Settings, PermissionRequest, PermissionSettings, SecurityStats } from '../shared/types'
 
 const ads = new DomainMatcher(AD_DOMAINS)
 const trackers = new DomainMatcher(TRACKER_DOMAINS)
@@ -94,6 +96,17 @@ export function restoreBlockedDays(
 export function blockedLog(): BlockedEntry[] {
   return [...blockLog].reverse()
 }
+
+/**
+ * Whether a rule of this kind is one somebody asked for.
+ *
+ * Three switches, three kinds. The cookie-banner rules are their own switch
+ * because they are neither adverts nor tracking — they are the thing the law
+ * made every site put in front of everyone, and hiding them is a separate
+ * decision from blocking advertising.
+ */
+const wanted = (kind: FilterCategory, s: Settings) =>
+  kind === 'ad' ? s.blockAds : kind === 'cookie' ? s.cookieBanners : s.blockTrackers
 
 export const stats: SecurityStats = {
   ads: 0,
@@ -208,10 +221,10 @@ export function isBlockedPopup(rawUrl: string, pageHost: string): boolean {
     const s = settings.get()
     if (s.filterLists && (s.blockAds || s.blockTrackers)) {
       const hit = engine.match(rawUrl, pageHost, 'subFrame')
-      if (hit && (hit === 'ad' ? s.blockAds : s.blockTrackers)) {
+      if (hit && wanted(hit, s)) {
         if (hit === 'ad') stats.ads++
         else stats.trackers++
-        remember(hit, url.hostname, pageHost)
+        remember(hit === 'ad' ? 'ad' : 'tracker', url.hostname, pageHost)
         return true
       }
     }
@@ -356,7 +369,26 @@ export function hardenSession(
         ? url.hostname
         : (details.webContentsId !== undefined ? documentHosts.get(details.webContentsId) : undefined) ??
           hostOf(details.referrer || '')
-    if (pageOf && sites.get(pageOf).blocking === 'off') return callback({})
+    const pageRules = pageOf ? sites.get(pageOf) : null
+    if (pageRules?.blocking === 'off') return callback({})
+
+    /*
+     * Strict, for one site.
+     *
+     * Everything third-party refused: no scripts, no frames, no images, no
+     * fonts from anywhere but this site. It is deliberately blunt and will
+     * break things — which is why it is off everywhere until somebody turns it
+     * on for one place, usually a bank or a site they do not trust an inch.
+     */
+    if (
+      pageRules?.strict &&
+      details.resourceType !== 'mainFrame' &&
+      siteOf(url.hostname) !== siteOf(pageOf)
+    ) {
+      stats.trackers++
+      remember('tracker', url.hostname, pageOf)
+      return callback({ cancel: true })
+    }
 
     // A tracker is something that follows you from one site to another. A
     // request a page makes to its own site is that page working — and it was
@@ -378,7 +410,7 @@ export function hardenSession(
           ? url.hostname
           : (id !== undefined ? documentHosts.get(id) : undefined) ?? hostOf(details.referrer || '')
       const hit = engine.match(details.url, host, details.resourceType)
-      if (hit && (hit === 'ad' ? s.blockAds : s.blockTrackers)) kind = hit
+      if (hit && wanted(hit, s)) kind = hit === 'ad' ? 'ad' : 'tracker'
     }
 
     if (kind) {
@@ -494,7 +526,42 @@ export function hardenSession(
     if (NEVER.has(permission)) return { policy: 'block', key: 'usb' }
     const key = PERMISSION_MAP[permission]
     if (!key) return { policy: 'block', key: 'usb' }
-    const own = host ? sites.get(host).permissions?.[key] : undefined
+    if (!host) return { policy: settings.get().permissions[key], key }
+
+    const rules = sites.get(host)
+
+    /*
+     * A permission given until a moment rather than for ever.
+     *
+     * "Allow, but not for ever" is what people mean nine times in ten and what
+     * no browser offers: the choice is between one visit and permanently, so
+     * everybody picks permanently and forgets. One that has run out falls
+     * through to being asked again, which is the point of it.
+     */
+    const until = rules.until?.[key]
+    if (until !== undefined) {
+      if (until > Date.now()) return { policy: 'allow', key }
+      sites.set(host, { until: { ...rules.until, [key]: undefined } as SiteRules['until'] })
+    }
+
+    /*
+     * Asking about a place again after a while.
+     *
+     * A site allowed to know where you are in March has no business still
+     * knowing in December without being asked. The moment the permission was
+     * given is kept with it; past the setting's number of days it is asked
+     * for again rather than silently kept.
+     */
+    const own = rules.permissions?.[key]
+    if (own === 'allow' && key === 'geolocation') {
+      const days = settings.get().reaskLocationDays
+      const since = rules.grantedAt?.geolocation ?? 0
+      if (days > 0 && since > 0 && Date.now() - since > days * 86_400_000) {
+        sites.set(host, { permissions: { ...rules.permissions, geolocation: 'ask' } })
+        return { policy: 'ask', key }
+      }
+    }
+
     return { policy: own ?? settings.get().permissions[key], key }
   }
 
