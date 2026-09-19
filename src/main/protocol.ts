@@ -5,6 +5,7 @@ import { Readable } from 'stream'
 import { profiles } from './profiles'
 import { downloads } from './downloads'
 import { servePdf } from './pdf'
+import { serveDoc } from './docview'
 import { securityPage } from './selftest'
 
 const MIME: Record<string, string> = {
@@ -58,6 +59,8 @@ export function registerProtocols(ses: Session = session.defaultSession) {
     // The PDF viewer needs the session it is answering for: a document behind a
     // login is only fetchable with that session's cookies.
     if (url.host === 'pdf') return servePdf(request, ses)
+    // JSON, Markdown and CSV, rendered rather than dumped as one long line.
+    if (url.host === 'doc') return serveDoc(request, ses)
     if (url.host === 'security') {
       return new Response(securityPage(), {
         headers: {

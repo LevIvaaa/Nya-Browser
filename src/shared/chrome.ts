@@ -54,6 +54,7 @@ export const MENU_ROWS = [
   { id: 'tasks', name: 'Задачи' },
   { id: 'find', name: 'Найти на странице' },
   { id: 'print', name: 'Печать' },
+  { id: 'merge', name: 'Склеить PDF' },
   { id: 'zoom', name: 'Масштаб' },
   { id: 'settings', name: 'Настройки' }
 ] as const

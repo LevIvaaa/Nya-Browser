@@ -64,6 +64,7 @@ export const DEFAULT_MENU = [
   'tasks',
   'find',
   'print',
+  'merge',
   'zoom',
   'settings'
 ]

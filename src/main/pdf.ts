@@ -22,6 +22,7 @@ import { readFile } from 'fs/promises'
 import { join, normalize } from 'path'
 import { fileURLToPath } from 'url'
 import { t } from './i18n'
+import { mergePage } from './pdfmerge'
 
 /**
  * Where build/tools/copy-pdfjs.mjs puts the library. Derived from this file's
@@ -99,6 +100,19 @@ const FRAME_GUARD = "frame-ancestors 'none'"
  */
 export async function servePdf(request: Request, ses: Session): Promise<Response> {
   const url = new URL(request.url)
+
+  // The page that merges several documents into one. Served here so it is
+  // same-origin with the library it loads.
+  if (url.pathname === '/merge') {
+    return new Response(mergePage, {
+      headers: {
+        'content-type': 'text/html; charset=utf-8',
+        'content-security-policy':
+          "default-src 'none'; style-src 'unsafe-inline'; script-src 'self' nya:; " +
+          "img-src data:; connect-src nya:; frame-ancestors 'none'"
+      }
+    })
+  }
   const path = url.pathname.replace(/^\/+/, '')
 
   if (path === '' || path === 'index.html') {
@@ -224,7 +238,16 @@ function viewerPage(src: string): string {
     download: t('Загрузить'),
     print: t('Печать страницы'),
     previous: t('Предыдущая страница'),
-    next: t('Следующая страница')
+    next: t('Следующая страница'),
+    save: t('Сохранить с заполненным'),
+    saved: t('Сохранено'),
+    note: t('Заметка'),
+    addNote: t('Оставить заметку'),
+    noteHint: t('Нажмите на странице, где оставить заметку'),
+    pagesPanel: t('Страницы'),
+    rotatePage: t('Повернуть страницу'),
+    movePageUp: t('Раньше'),
+    movePageDown: t('Позже')
   }
 
   return `<!doctype html>
@@ -293,6 +316,54 @@ function viewerPage(src: string): string {
     transform-origin: 0 0;
   }
   .layer ::selection { background: rgba(124,108,255,.42) }
+
+  /* The form fields PDF.js draws for an AcroForm: a document with boxes to
+     fill in is a document somebody is meant to fill in. */
+  .forms { position: absolute; inset: 0; transform-origin: 0 0 }
+  .forms input, .forms textarea, .forms select {
+    position: absolute; font: inherit; background: rgba(124,108,255,.09);
+    border: 1px solid rgba(124,108,255,.55); border-radius: 2px; color: #111;
+    padding: 0 2px; box-sizing: border-box;
+  }
+  .forms input:focus, .forms textarea:focus { outline: 2px solid var(--accent); }
+
+  /* Notes left on a page. They are the browser's own, kept beside the
+     document rather than written into it — a PDF that gains new objects is a
+     PDF that some readers will refuse. */
+  .notes { position: absolute; inset: 0 }
+  .note-pin {
+    position: absolute; width: 22px; height: 22px; border-radius: 50%;
+    background: #ffd60a; color: #1b1b1f; border: 1px solid rgba(0,0,0,.35);
+    font: 600 11px/20px system-ui, sans-serif; text-align: center; cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,.4);
+  }
+  .note-open {
+    position: absolute; width: 210px; min-height: 76px; padding: 7px 8px;
+    background: #ffe58a; color: #1b1b1f; border-radius: 8px; z-index: 6;
+    box-shadow: 0 4px 16px rgba(0,0,0,.4); font: 12px/1.45 system-ui, sans-serif;
+  }
+  .note-open textarea {
+    width: 100%; min-height: 54px; resize: vertical; border: none; outline: none;
+    background: transparent; font: inherit; color: inherit;
+  }
+  .note-open .drop { position: absolute; top: 3px; right: 5px; cursor: pointer; opacity: .6 }
+
+  /* The page list down the side, for turning pages round and reordering. */
+  #pages {
+    width: 168px; flex: none; overflow: auto; border-right: 1px solid var(--line);
+    background: var(--bar); padding: 8px; display: none;
+  }
+  #pages.on { display: block }
+  .thumb {
+    display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-radius: 8px;
+    font: 12px system-ui, sans-serif; color: var(--dim); cursor: pointer;
+  }
+  .thumb:hover { background: var(--hover) }
+  .thumb .n { min-width: 22px; font-variant-numeric: tabular-nums }
+  .thumb .acts { margin-left: auto; display: flex; gap: 2px; opacity: 0 }
+  .thumb:hover .acts { opacity: 1 }
+  .thumb .acts button { padding: 2px 5px; font-size: 11px }
+  #body { display: flex; flex: 1; min-height: 0 }
 
   #status {
     position: absolute; inset: 42px 0 0 0; display: flex; align-items: center;
@@ -363,13 +434,24 @@ function viewerPage(src: string): string {
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
       stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6M6 18H4v-6h16v6h-2M8 14h8v7H8z"/></svg>
   </button>
+  <button id="note" title="${esc(words.addNote)}" aria-label="${esc(words.addNote)}">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+      stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H9l-5 4z"/></svg>
+  </button>
+  <button id="pages-toggle" title="${esc(words.pagesPanel)}" aria-label="${esc(words.pagesPanel)}">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+      stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h6v14H4zM14 5h6v14h-6z"/></svg>
+  </button>
   <button id="save" title="${esc(words.download)}" aria-label="${esc(words.download)}">
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
       stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16"/></svg>
   </button>
 </div>
 
-<div id="scroll"><div id="doc"></div></div>
+<div id="body">
+  <aside id="pages"></aside>
+  <div id="scroll"><div id="doc"></div></div>
+</div>
 
 <div id="status">
   <div class="box" id="status-box"><div class="spin"></div><p>${esc(words.loading)}</p></div>
@@ -382,7 +464,7 @@ function viewerPage(src: string): string {
 }
 
 const VIEWER_JS = String.raw`
-import { getDocument, GlobalWorkerOptions, TextLayer } from './pdf.min.mjs'
+import { getDocument, GlobalWorkerOptions, TextLayer, AnnotationLayer } from './pdf.min.mjs'
 
 GlobalWorkerOptions.workerSrc = 'nya://pdf/lib/pdf.worker.min.mjs'
 
@@ -406,6 +488,15 @@ let fitMode = 'width'
 let rotation = 0
 let pages = []
 let current = 1
+/** Waiting for a click that says where a note goes. */
+let placingNote = false
+/** Notes left on this document, by page: { page, x, y, text }. x and y are
+    fractions of the page, so a note stays put at any zoom or rotation. */
+let notes = []
+/** The order the pages are in, and how far each is turned. Both start as
+    the document has them and are only ever changed on purpose. */
+let order = []
+let turns = []
 
 const px = (value) => Math.floor(value) + 'px'
 
@@ -417,8 +508,11 @@ const quiet = () => status.classList.add('hidden')
 
 /* ------------------------------------------------------------------ layout */
 
-function baseViewport(page) {
-  return page.getViewport({ scale: 1, rotation: (page.rotate + rotation) % 360 })
+/** How far one page is turned, on top of however the document is turned. */
+const turnOf = (number) => (rotation + (turns[number - 1] || 0)) % 360
+
+function baseViewport(page, number) {
+  return page.getViewport({ scale: 1, rotation: (page.rotate + turnOf(number ?? 1)) % 360 })
 }
 
 function fitScale(page) {
@@ -444,9 +538,16 @@ async function build() {
     const canvas = document.createElement('canvas')
     const layer = document.createElement('div')
     layer.className = 'layer'
-    holder.append(canvas, layer)
+    // The form widgets, and the notes, each in a layer of their own: one is
+    // the document's, the other is the reader's, and they must not fight over
+    // the same element.
+    const forms = document.createElement('div')
+    forms.className = 'forms'
+    const noteLayer = document.createElement('div')
+    noteLayer.className = 'notes'
+    holder.append(canvas, layer, forms, noteLayer)
     doc.append(holder)
-    pages.push({ number, holder, canvas, layer, page: null, rendered: 0, task: null })
+    pages.push({ number, holder, canvas, layer, forms, noteLayer, page: null, rendered: 0, task: null })
   }
   // The first page decides the starting scale, so a fit is right before
   // anything is drawn rather than after a visible reflow.
@@ -461,7 +562,7 @@ async function build() {
 async function sizeAll() {
   for (const item of pages) {
     if (!item.page) item.page = await pdf.getPage(item.number)
-    const view = item.page.getViewport({ scale, rotation: (item.page.rotate + rotation) % 360 })
+    const view = item.page.getViewport({ scale, rotation: (item.page.rotate + turnOf(item.number)) % 360 })
     item.holder.style.width = px(view.width)
     item.holder.style.height = px(view.height)
     item.rendered = 0
@@ -479,7 +580,7 @@ async function render(item) {
     item.task.cancel()
     item.task = null
   }
-  const view = item.page.getViewport({ scale, rotation: (item.page.rotate + rotation) % 360 })
+  const view = item.page.getViewport({ scale, rotation: (item.page.rotate + turnOf(item.number)) % 360 })
   const dpr = ratio()
   item.canvas.width = Math.max(1, Math.floor(view.width * dpr))
   item.canvas.height = Math.max(1, Math.floor(view.height * dpr))
@@ -506,7 +607,215 @@ async function render(item) {
   })
   await text.render()
   item.layer.style.width = px(view.width)
+
+  /*
+   * The form, if the document has one.
+   *
+   * PDF.js draws the widgets itself and keeps what is typed in its own
+   * storage, which is exactly what saveDocument() writes back out. Without
+   * this a form is a picture of a form: every PDF that asks for a name and a
+   * date is one somebody has to print, fill in by hand and scan.
+   */
+  try {
+    const annotations = await item.page.getAnnotations({ intent: 'display' })
+    if (annotations.some((one) => one.subtype === 'Widget')) {
+      item.forms.textContent = ''
+      item.forms.style.width = px(view.width)
+      item.forms.style.height = px(view.height)
+      new AnnotationLayer({
+        div: item.forms,
+        page: item.page,
+        viewport: view.clone({ dontFlip: true }),
+        accessibilityManager: null,
+        annotationCanvasMap: null,
+        annotationEditorUIManager: null,
+        structTreeLayer: null
+      }).render({
+        annotations,
+        page: item.page,
+        viewport: view.clone({ dontFlip: true }),
+        linkService: { getDestinationHash: () => '', addLinkAttributes: () => {}, externalLinkTarget: 0 },
+        renderForms: true,
+        annotationStorage: pdf.annotationStorage
+      })
+      hasForm = true
+      saveButton.title = words.save
+    }
+  } catch (error) {
+    // A document whose annotations cannot be read is still a document; the
+    // pages themselves are already on the screen.
+  }
+
+  drawNotes(item)
   item.layer.style.height = px(view.height)
+}
+
+/* ------------------------------------------------------------------ notes */
+
+/**
+ * Notes left on a document.
+ *
+ * Kept beside the file rather than written into it: a PDF that gains new
+ * objects is a PDF some readers refuse to open, and the reader's own thoughts
+ * are not part of the document they were reading. They live under the
+ * document's address in this profile, and the Save button offers them as a
+ * separate text file beside the PDF.
+ *
+ * Positions are fractions of the page, so a note stays where it was put at
+ * any zoom and after any rotation.
+ */
+function drawNotes(item) {
+  item.noteLayer.textContent = ''
+  const box = item.holder.getBoundingClientRect()
+  for (const one of notes.filter((note) => note.page === item.number)) {
+    const pin = document.createElement('button')
+    pin.type = 'button'
+    pin.className = 'note-pin'
+    pin.textContent = '•'
+    pin.title = one.text.slice(0, 120) || words.note
+    pin.style.left = (one.x * 100) + '%'
+    pin.style.top = (one.y * 100) + '%'
+    pin.addEventListener('click', (event) => {
+      event.stopPropagation()
+      openNote(item, one, pin)
+    })
+    item.noteLayer.append(pin)
+  }
+}
+
+function openNote(item, note, pin) {
+  for (const open of document.querySelectorAll('.note-open')) open.remove()
+  const card = document.createElement('div')
+  card.className = 'note-open'
+  card.style.left = (note.x * 100) + '%'
+  card.style.top = 'calc(' + (note.y * 100) + '% + 26px)'
+
+  const field = document.createElement('textarea')
+  field.value = note.text
+  field.placeholder = words.note
+  field.addEventListener('input', () => {
+    note.text = field.value
+    saveNotes()
+  })
+
+  const drop = document.createElement('span')
+  drop.className = 'drop'
+  drop.textContent = '×'
+  drop.addEventListener('click', () => {
+    notes = notes.filter((one) => one !== note)
+    saveNotes()
+    card.remove()
+    pin.remove()
+  })
+
+  card.append(drop, field)
+  item.noteLayer.append(card)
+  field.focus()
+}
+
+function saveNotes() {
+  try {
+    localStorage.setItem('nya-notes:' + src, JSON.stringify(notes))
+  } catch {
+    /* a viewer opened with storage blocked keeps them for this visit only */
+  }
+}
+
+function loadNotes() {
+  try {
+    const kept = JSON.parse(localStorage.getItem('nya-notes:' + src) || '[]')
+    notes = Array.isArray(kept)
+      ? kept.filter((one) => one && typeof one.text === 'string' && Number.isFinite(one.page))
+      : []
+  } catch {
+    notes = []
+  }
+}
+
+/* -------------------------------------------------------------- page list */
+
+/**
+ * The pages, in the order they will be saved in.
+ *
+ * Turning a page round or moving it changes this list and the document on the
+ * screen; neither touches the file until Save is pressed, which is the only
+ * way somebody can try an order and change their mind.
+ */
+function drawPageList() {
+  const panel = document.getElementById('pages')
+  panel.textContent = ''
+  order.forEach((number, at) => {
+    const row = document.createElement('div')
+    row.className = 'thumb'
+
+    const label = document.createElement('span')
+    label.className = 'n'
+    label.textContent = String(number)
+
+    const turned = document.createElement('span')
+    turned.textContent = turns[number - 1] ? turns[number - 1] + '°' : ''
+
+    const acts = document.createElement('span')
+    acts.className = 'acts'
+
+    const rotateOne = document.createElement('button')
+    rotateOne.textContent = '⟳'
+    rotateOne.title = words.rotatePage
+    rotateOne.addEventListener('click', (event) => {
+      event.stopPropagation()
+      turns[number - 1] = ((turns[number - 1] || 0) + 90) % 360
+      drawPageList()
+      void redrawAll()
+    })
+
+    const up = document.createElement('button')
+    up.textContent = '↑'
+    up.title = words.movePageUp
+    up.disabled = at === 0
+    up.addEventListener('click', (event) => {
+      event.stopPropagation()
+      const next = [...order]
+      ;[next[at - 1], next[at]] = [next[at], next[at - 1]]
+      order = next
+      drawPageList()
+      void rebuildOrder()
+    })
+
+    const down = document.createElement('button')
+    down.textContent = '↓'
+    down.title = words.movePageDown
+    down.disabled = at === order.length - 1
+    down.addEventListener('click', (event) => {
+      event.stopPropagation()
+      const next = [...order]
+      ;[next[at], next[at + 1]] = [next[at + 1], next[at]]
+      order = next
+      drawPageList()
+      void rebuildOrder()
+    })
+
+    acts.append(rotateOne, up, down)
+    row.append(label, turned, acts)
+    row.addEventListener('click', () => goTo(at + 1))
+    panel.append(row)
+  })
+}
+
+/** Lays the pages out again in the order the list now holds. */
+async function rebuildOrder() {
+  const byNumber = new Map(pages.map((one) => [one.number, one]))
+  doc.textContent = ''
+  pages = order.map((number) => byNumber.get(number)).filter(Boolean)
+  for (const one of pages) doc.append(one.holder)
+  await redrawAll()
+}
+
+/** Everything on the screen, drawn again at the current scale and turn. */
+async function redrawAll() {
+  for (const one of pages) one.rendered = 0
+  for (const one of pages) {
+    if (one.page) await render(one)
+  }
 }
 
 function observe() {
@@ -593,11 +902,79 @@ document.getElementById('print').onclick = async () => {
   for (const item of pages) await render(item)
   window.print()
 }
-document.getElementById('save').onclick = () => {
+const saveButton = document.getElementById('save')
+let hasForm = false
+
+/**
+ * The document, saved.
+ *
+ * A plain document is handed over as it arrived. One with a form that has
+ * been filled in is rebuilt by PDF.js with the answers in it — which is the
+ * difference between a PDF you can fill in and a picture of a form. Notes go
+ * out beside it as a text file: they are the reader's, not the document's.
+ */
+saveButton.onclick = async () => {
+  let blob = null
+  if (hasForm && pdf) {
+    try {
+      const bytes = await pdf.saveDocument()
+      blob = new Blob([bytes], { type: 'application/pdf' })
+    } catch (error) {
+      blob = null
+    }
+  }
   const link = document.createElement('a')
-  link.href = './data?src=' + encodeURIComponent(src)
+  link.href = blob ? URL.createObjectURL(blob) : './data?src=' + encodeURIComponent(src)
   link.download = document.title
   link.click()
+  if (blob) setTimeout(() => URL.revokeObjectURL(link.href), 4000)
+
+  if (notes.length > 0) {
+    const text = notes
+      .map((one) => words.page + ' ' + one.page + ': ' + one.text)
+      .join(String.fromCharCode(10))
+    const beside = document.createElement('a')
+    beside.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }))
+    beside.download = document.title.replace(/.pdf$/i, '') + '.notes.txt'
+    beside.click()
+    setTimeout(() => URL.revokeObjectURL(beside.href), 4000)
+  }
+}
+
+/** A note goes where the next click on a page lands. */
+document.getElementById('note').onclick = () => {
+  placingNote = !placingNote
+  doc.style.cursor = placingNote ? 'crosshair' : ''
+  if (placingNote) say('<p>' + words.noteHint + '</p>')
+  else quiet()
+}
+
+doc.addEventListener('click', (event) => {
+  if (!placingNote) return
+  const holder = event.target.closest('.page')
+  if (!holder) return
+  const item = pages.find((one) => one.holder === holder)
+  if (!item) return
+  const box = holder.getBoundingClientRect()
+  notes.push({
+    page: item.number,
+    x: (event.clientX - box.left) / box.width,
+    y: (event.clientY - box.top) / box.height,
+    text: ''
+  })
+  saveNotes()
+  drawNotes(item)
+  placingNote = false
+  doc.style.cursor = ''
+  quiet()
+  const pin = item.noteLayer.lastElementChild
+  if (pin) pin.click()
+})
+
+document.getElementById('pages-toggle').onclick = () => {
+  const panel = document.getElementById('pages')
+  panel.classList.toggle('on')
+  if (panel.classList.contains('on')) drawPageList()
 }
 
 pageInput.addEventListener('change', () => {
@@ -679,6 +1056,11 @@ async function open(password) {
   }
   pdf = await task.promise
   countLabel.textContent = String(pdf.numPages)
+  // The order the pages start in, and no turn on any of them: both are only
+  // ever changed on purpose, and neither touches the file.
+  order = Array.from({ length: pdf.numPages }, (_one, at) => at + 1)
+  turns = new Array(pdf.numPages).fill(0)
+  loadNotes()
   await build()
   quiet()
   trackPage()

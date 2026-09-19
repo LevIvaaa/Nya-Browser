@@ -237,6 +237,16 @@ const api = {
     ipcRenderer.invoke('nav:print-to', name, options),
   printPreview: (options: PrintOptions): Promise<Uint8Array | null> =>
     ipcRenderer.invoke('nav:print-preview', options),
+  /** Only what is selected: to a printer when named, to a file otherwise. */
+  printSelection: (options: PrintOptions, deviceName = ''): Promise<boolean> =>
+    ipcRenderer.invoke('nav:print-selection', options, deviceName),
+  /** How this site was printed last time, if it was. */
+  printProfile: (host: string): Promise<Partial<PrintOptions> | null> =>
+    ipcRenderer.invoke('print:profile', host),
+  rememberPrintProfile: (host: string, options: PrintOptions): Promise<void> =>
+    ipcRenderer.invoke('print:remember', host, options),
+  /** Several PDFs into one; returns the path it wrote. */
+  mergePdfs: (): Promise<string | null> => ipcRenderer.invoke('pdf:merge'),
   printPdf: (options: PrintOptions): Promise<boolean> =>
     ipcRenderer.invoke('nav:print-pdf', options),
   zoomTo: (percent: number) => ipcRenderer.invoke('nav:zoom-percent', percent),

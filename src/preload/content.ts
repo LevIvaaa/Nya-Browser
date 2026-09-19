@@ -286,6 +286,30 @@ if (/^https?:$/.test(location.protocol)) {
   }
 }
 
+/**
+ * Watching the document for things that arrive late.
+ *
+ * At document-start there is no <html> yet, and MutationObserver.observe()
+ * throws when handed nothing — which does not fail quietly: it takes the whole
+ * preload down and with it every page-side feature in this file. So the watch
+ * waits for a root to exist, and runs once as soon as one does.
+ */
+const watchDom = (run: () => void) => {
+  const begin = () => {
+    const root = document.documentElement
+    if (!root) return false
+    run()
+    new MutationObserver(run).observe(root, { childList: true, subtree: true })
+    return true
+  }
+  if (begin()) return
+  // No root yet: the first thing the parser creates is the one to watch for.
+  const wait = new MutationObserver(() => {
+    if (begin()) wait.disconnect()
+  })
+  wait.observe(document, { childList: true, subtree: true })
+}
+
 const isTop = (() => {
   try {
     return window.top === window
@@ -2393,19 +2417,194 @@ if (isTop && httpOrigin) {
     ipcRenderer.send('shield:insecure-form', location.href)
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', mark, { once: true })
-  } else {
-    mark()
-  }
   // Forms arrive late on half the web, so this watches rather than looks once.
-  new MutationObserver(mark).observe(document.documentElement, { childList: true, subtree: true })
+  watchDom(mark)
 }
 
 /** What the outline on an unencrypted password box says, in the browser's language. */
 let INSECURE_FORM = 'Пароль на этой странице уйдёт незашифрованным'
 ipcRenderer.on('shield:words', (_event, words: { insecureForm?: string }) => {
   if (typeof words?.insecureForm === 'string') INSECURE_FORM = words.insecureForm
+})
+
+/* ==========================================================================
+ * A table, taken away.
+ *
+ * Every table on the web is a spreadsheet somebody typed into HTML, and
+ * getting it back out means selecting it by hand and hoping the paste lands
+ * in the right columns. A small button on the table's corner writes it as
+ * CSV instead — the format every spreadsheet on earth opens.
+ *
+ * Only tables worth the offer: at least two rows and two columns, and not a
+ * table being used for layout (one cell, or no header anywhere).
+ * ====================================================================== */
+{
+  /** A field, quoted the way a spreadsheet expects to read it back. */
+  const field = (text: string) => {
+    const clean = text.replace(/\s+/g, ' ').trim()
+    return /[",;\n]/.test(clean) ? `"${clean.replace(/"/g, '""')}"` : clean
+  }
+
+  /**
+   * One table as CSV.
+   *
+   * A cell that spans columns is repeated across them rather than left out:
+   * a spreadsheet has no idea what a colspan is, and a row with three cells
+   * where the others have five is worse than a repeated heading.
+   */
+  const toCsv = (table: HTMLTableElement): string => {
+    const lines: string[] = []
+    for (const row of table.rows) {
+      const cells: string[] = []
+      for (const cell of row.cells) {
+        const text = field(cell.innerText ?? cell.textContent ?? '')
+        for (let at = 0; at < Math.max(1, cell.colSpan); at++) cells.push(text)
+      }
+      if (cells.length > 0) lines.push(cells.join(','))
+    }
+    return lines.join(NEWLINE)
+  }
+
+  const worthIt = (table: HTMLTableElement) => {
+    if (table.rows.length < 2) return false
+    const widest = Math.max(...[...table.rows].map((row) => row.cells.length))
+    if (widest < 2) return false
+    // A table with no heading cell anywhere is almost always somebody laying
+    // a page out with a table, which was normal in 1999 and never stopped.
+    return table.querySelector('th') !== null || table.rows.length > 3
+  }
+
+  const mark = () => {
+    for (const table of document.querySelectorAll('table')) {
+      if (table.dataset.nyaCsv || !worthIt(table)) continue
+      table.dataset.nyaCsv = '1'
+
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.textContent = CSV_WORD
+      button.setAttribute(
+        'style',
+        'position:absolute;z-index:2147483000;font:500 11px/1 system-ui,sans-serif;' +
+          'padding:4px 8px;border-radius:7px;border:1px solid rgba(0,0,0,.18);' +
+          'background:#fff;color:#1b1b1f;cursor:pointer;opacity:0;' +
+          'transition:opacity .12s linear;box-shadow:0 1px 4px rgba(0,0,0,.2)'
+      )
+
+      const place = () => {
+        const box = table.getBoundingClientRect()
+        button.style.left = `${Math.round(box.right + window.scrollX - 64)}px`
+        button.style.top = `${Math.round(box.top + window.scrollY + 4)}px`
+      }
+
+      button.addEventListener('click', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        ipcRenderer.send('table:csv', { name: document.title || 'table', csv: toCsv(table) })
+      })
+
+      table.addEventListener('mouseenter', () => {
+        place()
+        button.style.opacity = '1'
+      })
+      table.addEventListener('mouseleave', () => {
+        button.style.opacity = '0'
+      })
+
+      document.body.append(button)
+      place()
+    }
+  }
+
+  watchDom(mark)
+}
+
+/* ==========================================================================
+ * A copy button on every block of code.
+ *
+ * Selecting a shell command with a mouse gets the prompt, the output and half
+ * the next paragraph. Every documentation site that cares has added this
+ * button itself; the ones that have not are exactly the ones where it is
+ * needed, so the browser adds it.
+ * ====================================================================== */
+{
+  const mark = () => {
+    for (const block of document.querySelectorAll('pre')) {
+      if (block.dataset.nyaCopy) continue
+      const text = block.innerText ?? ''
+      // A one-word <pre> is a layout choice, not a command.
+      if (text.trim().length < 12) continue
+      // A site that already offers one does not need a second.
+      if (block.querySelector('button, [role="button"]')) continue
+      block.dataset.nyaCopy = '1'
+
+      const holder = window.getComputedStyle(block).position === 'static' ? block : block
+      holder.style.position = holder.style.position || 'relative'
+
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.textContent = COPY_WORD
+      button.setAttribute(
+        'style',
+        'position:absolute;top:6px;right:6px;z-index:5;font:500 11px/1 system-ui,sans-serif;' +
+          'padding:4px 8px;border-radius:7px;border:1px solid rgba(127,127,127,.35);' +
+          'background:rgba(127,127,127,.14);color:inherit;cursor:pointer;opacity:0;' +
+          'transition:opacity .12s linear'
+      )
+      button.addEventListener('click', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        ipcRenderer.send('code:copy', block.innerText ?? '')
+        button.textContent = COPIED_WORD
+        window.setTimeout(() => (button.textContent = COPY_WORD), 1400)
+      })
+      block.addEventListener('mouseenter', () => (button.style.opacity = '1'))
+      block.addEventListener('mouseleave', () => (button.style.opacity = '0'))
+      block.append(button)
+    }
+  }
+
+  watchDom(mark)
+}
+
+/* ==========================================================================
+ * A picture, copied as it actually is.
+ *
+ * Chromium's own "copy image" flattens transparency onto white, so a logo
+ * pasted anywhere but a white page arrives with a white box around it. This
+ * reads the picture into a canvas and hands back PNG bytes, which keep the
+ * alpha channel — and the browser writes those to the clipboard.
+ * ====================================================================== */
+ipcRenderer.on('image:copy', (_event, src: string) => {
+  const picture = new Image()
+  picture.crossOrigin = 'anonymous'
+  picture.decoding = 'sync'
+  picture.onload = () => {
+    try {
+      const canvas = document.createElement('canvas')
+      canvas.width = picture.naturalWidth
+      canvas.height = picture.naturalHeight
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error('no context')
+      context.drawImage(picture, 0, 0)
+      ipcRenderer.send('image:copy-done', canvas.toDataURL('image/png'))
+    } catch {
+      // A picture from another site with no CORS header taints the canvas and
+      // cannot be read; the ordinary copy is still there.
+      ipcRenderer.send('image:copy-done', '')
+    }
+  }
+  picture.onerror = () => ipcRenderer.send('image:copy-done', '')
+  picture.src = src
+})
+
+/** Words for the two buttons the browser adds to a page. */
+let CSV_WORD = 'CSV'
+let COPY_WORD = 'Копировать'
+let COPIED_WORD = 'Скопировано'
+ipcRenderer.on('page:words', (_event, words: { csv?: string; copy?: string; copied?: string }) => {
+  if (typeof words?.csv === 'string') CSV_WORD = words.csv
+  if (typeof words?.copy === 'string') COPY_WORD = words.copy
+  if (typeof words?.copied === 'string') COPIED_WORD = words.copied
 })
 
 /** The word for minutes, handed over by the browser in the reader's language. */

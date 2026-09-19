@@ -12,7 +12,7 @@
 // ---------------------------------------------------------------------------
 
 import { JsonStore, track } from './store'
-import type { PermissionKey, PermissionPolicy, SiteRules } from '../shared/types'
+import type { PermissionKey, PermissionPolicy, PrintOptions, SiteRules } from '../shared/types'
 
 const VERSION = 1
 
@@ -39,6 +39,7 @@ function cleanRules(input: unknown): SiteRules {
   }
   if (raw.blocking === 'off') rules.blocking = 'off'
   if (raw.trusted === true) rules.trusted = true
+  if (raw.print && typeof raw.print === 'object') rules.print = cleanPrint(raw.print as Partial<PrintOptions>)
   if (raw.strict === true) rules.strict = true
   if (typeof raw.container === 'string') {
     const id = raw.container.replace(/[^a-z0-9-]/gi, '').slice(0, 32)
@@ -81,6 +82,29 @@ function cleanRules(input: unknown): SiteRules {
     if (Object.keys(kept).length > 0) rules.media = kept
   }
   return rules
+}
+
+/**
+ * How a site should be printed, as far as it can be trusted.
+ *
+ * Everything clamped to what the printer will accept: this goes straight into
+ * a print call, and a scale of nine thousand is a job that never comes out.
+ */
+function cleanPrint(raw: Partial<PrintOptions>): PrintOptions {
+  const one = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T =>
+    allowed.includes(value as T) ? (value as T) : fallback
+  return {
+    landscape: raw.landscape === true,
+    paper: one(raw.paper, ['A4', 'A3', 'A5', 'Letter', 'Legal', 'Tabloid'] as const, 'A4'),
+    margins: one(raw.margins, ['default', 'none', 'narrow'] as const, 'default'),
+    scale: Math.max(25, Math.min(200, Math.round(Number(raw.scale) || 100))),
+    background: raw.background === true,
+    headers: raw.headers === true,
+    pages: typeof raw.pages === 'string' ? raw.pages.slice(0, 80) : '',
+    copies: Math.max(1, Math.min(50, Math.round(Number(raw.copies) || 1))),
+    colour: raw.colour !== false,
+    duplex: raw.duplex === true
+  }
 }
 
 /** True when a rules object says nothing at all and can be forgotten. */
@@ -134,6 +158,7 @@ class Sites {
       translate: patch.translate === undefined ? current.translate : patch.translate,
       media: patch.media === undefined ? current.media : { ...current.media, ...patch.media },
       trusted: patch.trusted === undefined ? current.trusted : patch.trusted,
+      print: patch.print === undefined ? current.print : patch.print,
       strict: patch.strict === undefined ? current.strict : patch.strict,
       container: patch.container === undefined ? current.container : patch.container,
       until: patch.until === undefined ? current.until : { ...current.until, ...patch.until },

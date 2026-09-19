@@ -182,6 +182,8 @@ export interface SiteRules {
    * third-party scripts, no cookies but this site's own.
    */
   strict?: boolean
+  /** how this site should be printed, remembered from the last time */
+  print?: PrintOptions
   /** the container this site opens in, when it is not the ordinary one */
   container?: string
   /** the zoom this site opens at, in Chromium's zoom levels */

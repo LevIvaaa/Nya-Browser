@@ -36,6 +36,10 @@ export default function PrintSheet({ onClose }: { onClose: () => void }) {
   >(null)
   const [target, setTarget] = useState(PDF_TARGET)
   const [busy, setBusy] = useState(false)
+  /** Print the highlighted part rather than the whole page. */
+  const [onlySelection, setOnlySelection] = useState(false)
+  /** The site this page belongs to, so its own settings can come back. */
+  const [host, setHost] = useState('')
   const [options, setOptions] = useState<PrintOptions>({
     landscape: false,
     paper: 'A4',
@@ -56,6 +60,22 @@ export default function PrintSheet({ onClose }: { onClose: () => void }) {
   const [drawing, setDrawing] = useState(true)
   const canvas = useRef<HTMLCanvasElement>(null)
   const doc = useRef<{ numPages: number; getPage: (n: number) => Promise<PdfPage> } | null>(null)
+
+  useEffect(() => {
+    void window.browser.snapshot().then(async (state) => {
+      const here = state.tabs.find((one) => one.active)
+      let name = ''
+      try {
+        name = here?.url ? new URL(here.url).hostname.replace(/^www./, '') : ''
+      } catch {
+        name = ''
+      }
+      setHost(name)
+      if (!name) return
+      const kept = await window.browser.printProfile(name)
+      if (kept) setOptions((current) => ({ ...current, ...kept }))
+    })
+  }, [])
 
   useEffect(() => {
     void window.browser.printers().then((list) => {
@@ -314,6 +334,10 @@ export default function PrintSheet({ onClose }: { onClose: () => void }) {
               {check(t('Колонтитулы'), options.headers, (headers) => set({ headers }))}
               {!toPdf && check(t('Цветная'), options.colour, (colour) => set({ colour }))}
               {!toPdf && check(t('Двусторонняя'), options.duplex, (duplex) => set({ duplex }))}
+              {/* The highlighted part rather than the whole page. Built from
+                  the selection itself, so what comes out is what was
+                  highlighted and not the page with the rest hidden. */}
+              {check(t('Только выделенное'), onlySelection, setOnlySelection)}
             </div>
           </div>
 
@@ -326,7 +350,12 @@ export default function PrintSheet({ onClose }: { onClose: () => void }) {
               disabled={busy || (!toPdf && !target)}
               onClick={async () => {
                 setBusy(true)
-                if (toPdf) await window.browser.printPdf(options)
+                // How this site should be printed, kept: nobody chooses
+                // "backgrounds on, no margins" twice for the same site on
+                // purpose — they choose it again because it was forgotten.
+                if (host) void window.browser.rememberPrintProfile(host, options)
+                if (onlySelection) await window.browser.printSelection(options, toPdf ? '' : target)
+                else if (toPdf) await window.browser.printPdf(options)
                 else await window.browser.printTo(target, options)
                 setBusy(false)
                 onClose()

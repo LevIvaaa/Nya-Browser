@@ -112,6 +112,17 @@ const openLinkAsProfile = (browser: BrowserWindow, url: string, profileId: strin
       { label: t('Копировать адрес картинки'), click: () => clipboard.writeText(params.srcURL) },
       { label: t('Сохранить картинку'), click: () => wc.downloadURL(params.srcURL) },
       {
+        // Chromium's own copy flattens transparency onto white, so a logo
+        // pasted into anything but a white page arrives in a white box. The
+        // page reads the picture into a canvas and hands back PNG bytes.
+        label: t('Копировать с прозрачностью'),
+        click: () => wc.send('image:copy', params.srcURL)
+      },
+      {
+        label: t('Сохранить картинку в папку…'),
+        click: () => void browser.savePictureTo(params.srcURL)
+      },
+      {
         label: t('Прочитать QR-код'),
         click: () =>
           wc.send('qr:scan', { src: params.srcURL, open: t('Открыть'), copy: t('Копировать') })

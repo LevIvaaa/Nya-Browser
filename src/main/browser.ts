@@ -1,5 +1,8 @@
 import {
   BaseWindow,
+  // Electron's own window class, under a name of its own: this file exports a
+  // BrowserWindow of its own and the two would collide.
+  BrowserWindow as ElectronBrowserWindow,
   WebContentsView,
   app,
   clipboard,
@@ -29,6 +32,20 @@ import { profiles } from './profiles'
 import { downloads } from './downloads'
 import { attachLog, log } from './log'
 import { looksLikePdf, pdfSource, pdfViewerUrl } from './pdf'
+import { docSource, docViewerUrl, looksLikeDoc } from './docview'
+
+/**
+ * Where an address actually goes.
+ *
+ * A PDF and a JSON file both arrive as a navigation and both leave Chromium
+ * showing nothing useful — one blank, the other a single unbroken line. Each
+ * has a viewer of its own, and this is the one place that decides which.
+ */
+const whereTo = (url: string): string => {
+  if (looksLikePdf(url)) return pdfViewerUrl(url)
+  const kind = looksLikeDoc(url)
+  return kind ? docViewerUrl(url, kind) : url
+}
 import { translateBatch } from './translate'
 import { WALLPAPER_EXTENSIONS, registerProtocols } from './protocol'
 import { sites } from './sites'
@@ -324,7 +341,7 @@ class Tab {
    * a response is a PDF pass the viewer explicitly — the address alone cannot
    * always tell.
    */
-  load(url: string, target = looksLikePdf(url) ? pdfViewerUrl(url) : url) {
+  load(url: string, target = whereTo(url)) {
     this.hasContent = true
     this.url = url
     this.error = null
@@ -1493,6 +1510,45 @@ export class BrowserWindow {
     return inspect(tab.url, known)
   }
 
+/**
+   * One picture, put where it is wanted.
+   *
+   * "Save image as" drops everything in the downloads folder and leaves the
+   * sorting for later, which is how a downloads folder comes to hold four
+   * thousand files. This asks once and writes there.
+   */
+  async savePictureTo(src: string) {
+    if (!/^(https?|data|blob|file):/i.test(src)) return
+    const name = (() => {
+      try {
+        const path = new URL(src).pathname
+        const last = decodeURIComponent(path.slice(path.lastIndexOf('/') + 1))
+        return /.w{2,5}$/.test(last) ? last : 'image.png'
+      } catch {
+        return 'image.png'
+      }
+    })()
+
+    const where = await dialog.showSaveDialog(this.win, {
+      title: t('Сохранить картинку'),
+      defaultPath: join(app.getPath('pictures'), name.replace(/[^w .-]+/g, '_').slice(0, 80))
+    })
+    if (where.canceled || !where.filePath) return
+
+    try {
+      if (src.startsWith('data:')) {
+        const comma = src.indexOf(',')
+        writeFileSync(where.filePath, Buffer.from(src.slice(comma + 1), 'base64'))
+        return
+      }
+      const response = await this.ses.fetch(src)
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      writeFileSync(where.filePath, Buffer.from(await response.arrayBuffer()))
+    } catch (error) {
+      log('savePictureTo', String(error))
+    }
+  }
+
   /** Opens one address in a container, as a new tab beside this one. */
   openInContainer(url: string, container: string) {
     if (!/^https?:/i.test(url)) return
@@ -1622,6 +1678,11 @@ export class BrowserWindow {
       clipboard: s.clipboardGuard && !trusted
     })
     wc.send('shield:words', { insecureForm: t('Пароль на этой странице уйдёт незашифрованным') })
+    wc.send('page:words', {
+      csv: t('CSV'),
+      copy: t('Копировать'),
+      copied: t('Скопировано')
+    })
   }
 
   /* ---------------------------------------------------------- tab wiring */
@@ -1690,7 +1751,8 @@ export class BrowserWindow {
       tab.loading = false
       tab.progress = 1
       // The viewer's own address never reaches the address bar; see Tab.load.
-      tab.url = pdfSource(wc.getURL()) ?? wc.getURL() ?? tab.url
+      const shown = wc.getURL()
+      tab.url = pdfSource(shown) ?? docSource(shown) ?? shown ?? tab.url
       this.broadcast()
       setTimeout(() => {
         tab.progress = 0
@@ -4284,6 +4346,128 @@ export class BrowserWindow {
         this.send('toast', t('Не удалось напечатать'))
       }
     })
+  }
+
+  /**
+   * Printing only what is selected.
+   *
+   * Every browser offers this and every browser does it by handing the
+   * printer a page with the rest hidden by CSS, which is why the result so
+   * often comes out with the navigation on it anyway. This builds a document
+   * out of the selection itself — in an offscreen window with scripting off —
+   * so what is printed is exactly what was highlighted.
+   */
+  async printSelection(options: PrintOptions, deviceName = ''): Promise<boolean> {
+    const tab = this.getActive()
+    const wc = tab?.wc
+    if (!tab || !wc || wc.isDestroyed()) return false
+
+    const html = (await wc
+      .executeJavaScript(
+        `(() => {
+          const selection = window.getSelection()
+          if (!selection || selection.isCollapsed) return ''
+          const holder = document.createElement('div')
+          for (let at = 0; at < selection.rangeCount; at++) {
+            holder.append(selection.getRangeAt(at).cloneContents())
+          }
+          return holder.innerHTML
+        })()`,
+        true
+      )
+      .catch(() => '')) as string
+
+    if (!html.trim()) {
+      this.send('toast', t('Ничего не выделено'))
+      return false
+    }
+
+    const sheet = new ElectronBrowserWindow({
+      show: false,
+      webPreferences: {
+        // Nothing of the page's own runs here: this is its text, re-laid out
+        // for paper, and a script in a selection would be a script running
+        // with the printer's permissions.
+        javascript: false,
+        images: true,
+        sandbox: true,
+        contextIsolation: true,
+        webSecurity: true
+      }
+    })
+
+    try {
+      const page = `<!doctype html><html><head><meta charset="utf-8">
+<title>${(tab.title || '').replace(/[<>&]/g, '')}</title>
+<style>
+  body { font: 15px/1.6 Georgia, "Times New Roman", serif; margin: 0; color: #111; }
+  img, video, table { max-width: 100%; }
+  pre, code { font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+  blockquote { margin: 1em 0; padding-left: 14px; border-left: 3px solid #ccc; }
+  @page { margin: 18mm 16mm; }
+</style></head><body>${html}</body></html>`
+
+      await sheet.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(page))
+
+      // A file to keep, or paper. The same document either way — which is the
+      // point of building it once and then deciding.
+      if (deviceName) {
+        await new Promise<void>((resolve) => {
+          sheet.webContents.print(
+            {
+              silent: true,
+              deviceName,
+              copies: Math.max(1, Math.min(50, Math.round(options.copies))),
+              landscape: options.landscape,
+              color: options.colour,
+              printBackground: options.background,
+              scaleFactor: Math.max(25, Math.min(200, Math.round(options.scale))),
+              pageSize: options.paper,
+              margins: marginsForPrint(options.margins),
+              duplexMode: options.duplex ? 'longEdge' : 'simplex'
+            },
+            (ok, reason) => {
+              if (!ok && reason !== 'cancelled') log('printSelection', reason)
+              resolve()
+            }
+          )
+        })
+        this.send('toast', t('Отправлено на печать'))
+        return true
+      }
+
+      const data = await sheet.webContents.printToPDF(pdfOptions(options))
+      const where = await dialog.showSaveDialog(this.win, {
+        title: t('Сохранить выделенное в PDF'),
+        defaultPath: join(app.getPath('downloads'), 'selection.pdf'),
+        filters: [{ name: 'PDF', extensions: ['pdf'] }]
+      })
+      if (where.canceled || !where.filePath) return false
+      writeFileSync(where.filePath, data)
+      this.send('toast', t('Сохранено в PDF'))
+      return true
+    } catch (error) {
+      log('printSelection', String(error))
+      return false
+    } finally {
+      sheet.destroy()
+    }
+  }
+
+  /**
+   * How this site should be printed, remembered.
+   *
+   * A recipe site wants backgrounds and no margins; a documentation site
+   * wants neither. Nobody sets those twice for the same site on purpose —
+   * they set them again every time because the browser forgot.
+   */
+  printProfile(host: string): Partial<PrintOptions> | null {
+    return sites.get(host).print ?? null
+  }
+
+  rememberPrintProfile(host: string, options: PrintOptions) {
+    if (!host) return
+    sites.set(host, { print: options })
   }
 
   /**

@@ -2,10 +2,12 @@ import { t } from './i18n'
 import { app, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, session, shell, type MenuItemConstructorOptions } from 'electron'
 import { basename, join } from 'path'
 import { readFileSync, writeFileSync } from 'fs'
+import { pathToFileURL } from 'url'
 import { execFile, execFileSync } from 'child_process'
 import { BrowserWindow, setDetach } from './browser'
 import { DOH_TEMPLATES, settings } from './settings'
 import { desk } from './desk'
+import { mergePdfs } from './pdfmerge'
 import { habits } from './habits'
 import { rates } from './rates'
 import { history } from './history'
@@ -958,6 +960,83 @@ function registerIpc() {
    * patched for nothing. A trusted site gets no guards, which is what trusting
    * it means.
    */
+  /*
+   * A table, saved as a spreadsheet.
+   *
+   * The page hands over the CSV it built from its own table; the browser asks
+   * where to put it. Nothing about the page is trusted beyond the text: it is
+   * written as UTF-8 with a byte-order mark, because without one Excel opens
+   * a Russian table as mojibake and always has.
+   */
+  ipcMain.on('table:csv', async (event, payload: unknown) => {
+    const one = (payload ?? {}) as { name?: unknown; csv?: unknown }
+    const csv = String(one.csv ?? '').slice(0, 5_000_000)
+    if (!csv) return
+    const name = str(one.name, 80).replace(/[^w .-]+/g, '_').slice(0, 60) || 'table'
+    const where = await dialog.showSaveDialog({
+      title: t('Сохранить таблицу'),
+      defaultPath: join(app.getPath('downloads'), `${name}.csv`),
+      filters: [{ name: 'CSV', extensions: ['csv'] }]
+    })
+    if (where.canceled || !where.filePath) return
+    try {
+      writeFileSync(where.filePath, '﻿' + csv, 'utf8')
+    } catch (error) {
+      log('table:csv', String(error))
+    }
+  })
+
+  /** A block of code, copied whole rather than selected by hand. */
+  ipcMain.on('code:copy', (_event, text: unknown) => {
+    const body = String(text ?? '').slice(0, 1_000_000)
+    if (body) clipboard.writeText(body)
+  })
+
+  /**
+   * A picture on the clipboard with its transparency intact.
+   *
+   * The page reads it into a canvas and hands back PNG bytes; Chromium's own
+   * copy flattens the alpha onto white, which is why a logo pasted into a dark
+   * document arrives in a white box.
+   */
+  ipcMain.on('image:copy-done', (_event, dataUrl: unknown) => {
+    const url = String(dataUrl ?? '')
+    if (!url.startsWith('data:image/png;base64,')) return
+    const picture = nativeImage.createFromDataURL(url)
+    if (!picture.isEmpty()) clipboard.writeImage(picture)
+  })
+
+  /* ---- printing and documents ---- */
+
+  /** Only what is selected, as paper or as a file. */
+  ipcMain.handle('nav:print-selection', (event, options: unknown, deviceName: unknown) =>
+    current(event).printSelection((options ?? {}) as PrintOptions, str(deviceName, 120))
+  )
+  /** How this site was printed last time, if it was. */
+  ipcMain.handle('print:profile', (event, host: unknown) => current(event).printProfile(str(host, 200)))
+  ipcMain.handle('print:remember', (event, host: unknown, options: unknown) =>
+    current(event).rememberPrintProfile(str(host, 200), (options ?? {}) as PrintOptions)
+  )
+
+  /**
+   * Several documents into one.
+   *
+   * The files are chosen here rather than handed over by the page: a renderer
+   * that could name paths to read would be a renderer that could read the
+   * machine.
+   */
+  ipcMain.handle('pdf:merge', async (event) => {
+    const picked = await dialog.showOpenDialog({
+      title: t('Выберите документы для склейки'),
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'PDF', extensions: ['pdf'] }]
+    })
+    if (picked.canceled || picked.filePaths.length < 2) return null
+    const made = await mergePdfs(null, picked.filePaths)
+    if (made) current(event).newTab(pathToFileURL(made).href)
+    return made
+  })
+
   ipcMain.on('shield:ask', (event) => {
     const s = settings.get()
     let host = ''

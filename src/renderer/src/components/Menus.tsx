@@ -1,7 +1,7 @@
 import { t } from '../i18n'
 import { useState } from 'react'
 import type { Profile, ProfilesState } from '../../../shared/types'
-import { Clock, Download, Eraser, Gear, Incognito, Keyboard, Plus, Printer, Search, Shield, Star, Users, Wallet, Zap } from './Icons'
+import { Doc, Clock, Download, Eraser, Gear, Incognito, Keyboard, Plus, Printer, Search, Shield, Star, Users, Wallet, Zap } from './Icons'
 import { Avatar, Modal, Popover, TextField } from './ui'
 
 type View = 'settings' | 'history' | 'passwords' | 'downloads' | 'bookmarks' | 'security' | 'tasks'
@@ -57,6 +57,7 @@ export function AppMenu({
     print: item(<Printer width={15} height={15} />, t('Печать страницы'), '', () =>
       window.browser.setOverlay('print')
     ),
+    merge: item(<Doc width={15} height={15} />, t('Склеить PDF'), '', () => void window.browser.mergePdfs()),
     zoom: item(<Search width={15} height={15} />, t('Масштаб страницы'), 'Ctrl+0', () =>
       void window.browser.zoom('reset')
     ),
