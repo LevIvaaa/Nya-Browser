@@ -30,3 +30,6 @@ design/nya-installer-flow.html
 .idea/
 Thumbs.db
 desktop.inibuild/tools/__pycache__/
+
+# --- приёмка функций, не часть браузера ---
+review/

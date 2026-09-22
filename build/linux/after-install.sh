@@ -6,7 +6,7 @@ set -e
 # for a file electron-builder generates. Without it Chromium refuses to start
 # unless it is told to run with no sandbox at all, which is not a trade worth
 # making in a browser.
-CHROME_SANDBOX="/opt/Nya Browser/chrome-sandbox"
+CHROME_SANDBOX="/opt/nya-browser/chrome-sandbox"
 if [ -f "$CHROME_SANDBOX" ]; then
   chown root:root "$CHROME_SANDBOX" || true
   chmod 4755 "$CHROME_SANDBOX" || true

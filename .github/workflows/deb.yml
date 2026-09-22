@@ -1,0 +1,97 @@
+# Сборка пакета .deb и укладка его в тот же выпуск, что и установщик.
+#
+# Пакет собирается на Linux, потому что electron-builder кладёт в него
+# линуксовый бинарник Electron и зовёт dpkg-deb. Собирать его на машине
+# разработчика значит каждый раз поднимать виртуалку — поэтому это делает CI,
+# а виртуалка остаётся для проверки того, что собралось.
+#
+# Собираем на ubuntu-22.04 намеренно. Пакет, собранный на 24.04, тянет за собой
+# более новые имена библиотек, и на 22.04 и Debian 12 уже не встанет. Обратное
+# неверно: собранный на 22.04 ставится и там, и там — список зависимостей в
+# package.json написан через альтернативу «новое имя | старое».
+name: deb
+
+on:
+  # Выпуск: тег вида v1.1.0 — пакет уезжает в релиз рядом с установщиком.
+  push:
+    tags: ['v*']
+  # И вручную, когда надо просто посмотреть на пакет, никуда его не публикуя.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deb:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # fakeroot и dpkg-deb в образе уже есть; fpm и линуксовый Electron
+      # electron-builder скачивает сам.
+      - name: Зависимости
+        run: npm ci
+
+      # postinstall у пакета electron иногда не отрабатывает при npm ci, и
+      # тогда сборка падает на «The specified electronDist does not exist».
+      # Распаковываем дистрибутив руками, если его нет.
+      - name: Дистрибутив Electron
+        run: |
+          if [ ! -d node_modules/electron/dist ]; then
+            node node_modules/electron/install.js
+          fi
+          du -sh node_modules/electron/dist
+
+      # То же, что гоняет check.yml: сюда мы приходим по тегу, и падать на
+      # опечатке в словаре уже поздно, но знать об этом надо.
+      - name: Проверки
+        run: npm run typecheck && npm test && npm run check:locales
+
+      - name: Сборка пакета
+        run: npm run dist:deb
+
+      # Пакет должен не просто собраться, а встать на чистую машину. Здесь это
+      # и проверяется — на том же раннере, где ничего нашего нет.
+      - name: Установка на чистую систему
+        run: |
+          DEB=$(ls dist/*.deb)
+          echo "::group::Что внутри"
+          dpkg-deb --info "$DEB"
+          echo "::endgroup::"
+          sudo apt-get update
+          sudo apt-get install -y "./$DEB"
+          test -x "/opt/nya-browser/nya-browser" || { echo "бинарник не на месте"; exit 1; }
+          test -u "/opt/nya-browser/chrome-sandbox" || { echo "песочница без setuid"; exit 1; }
+          test -f /usr/share/applications/nya-browser.desktop || { echo "ярлыка нет"; exit 1; }
+          # На раннере нет рабочего стола, поэтому проверялку ставим сами:
+          # разбитый .desktop иначе всплывёт только у человека на машине.
+          sudo apt-get install -y desktop-file-utils
+          desktop-file-validate /usr/share/applications/nya-browser.desktop
+          echo "пакет встал"
+
+      - name: Удаление
+        run: |
+          sudo apt-get remove -y nya-browser
+          test ! -d /opt/nya-browser || { echo "после удаления остались файлы"; exit 1; }
+          echo "пакет снялся начисто"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: dist/*.deb
+
+      # В релиз — только по тегу. Запуск руками пакет никуда не публикует.
+      - name: В выпуск
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${GITHUB_REF_NAME}" dist/*.deb --clobber
