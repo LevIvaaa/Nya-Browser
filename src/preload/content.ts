@@ -1648,18 +1648,25 @@ if (httpOrigin) {
  * своей разметкой следят.
  */
 {
+  // Тот же глаз, что у браузера везде: Icons.tsx, та же геометрия и та же
+  // толщина линии. Кнопка стоит на чужой странице, но она наша, и выглядеть
+  // должна как наша, а не как ещё один значок, нарисованный на скорую руку.
   const EYE =
-    'M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z M12 14.6a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2Z'
+    '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/>' +
+    '<circle cx="12" cy="12" r="3"/>'
   const EYE_OFF =
-    'M4 4l16 16 M10.7 10.8a2.6 2.6 0 0 0 3.5 3.5 M6.5 6.7C3.9 8.4 2 12 2 12s3.6 6.5 10 6.5c1.7 0 3.2-.5 4.5-1.1'
+    '<path d="M4 4l16 16"/>' +
+    '<path d="M9.9 5.9A9.6 9.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-3.3 4.1' +
+    'M6.5 7.9A17 17 0 0 0 2.5 12S6 18.5 12 18.5c1 0 1.9-.2 2.7-.5"/>' +
+    '<path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>'
 
   const eyed = new WeakSet<HTMLInputElement>()
 
   const eyeSvg = (open: boolean) =>
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
-    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="' +
+    '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' +
     (open ? EYE_OFF : EYE) +
-    '"/></svg>'
+    '</svg>'
 
   const addEye = (field: HTMLInputElement) => {
     if (eyed.has(field)) return
@@ -1683,9 +1690,20 @@ if (httpOrigin) {
         'place-items: center',
         'border-radius: 7px',
         'cursor: pointer',
-        'color: rgba(120, 124, 140, 0.9)'
+        'color: rgba(104, 108, 126, 0.92)',
+        'transition: color 120ms linear, background 120ms linear'
       ].join(';')
     )
+
+    // Отклик на наведение: без него непонятно, что это вообще кнопка.
+    eye.addEventListener('pointerenter', () => {
+      eye.style.color = 'rgba(58, 61, 76, 0.96)'
+      eye.style.background = 'rgba(127, 131, 150, 0.14)'
+    })
+    eye.addEventListener('pointerleave', () => {
+      eye.style.color = 'rgba(104, 108, 126, 0.92)'
+      eye.style.background = 'transparent'
+    })
 
     const place = () => {
       const r = field.getBoundingClientRect()

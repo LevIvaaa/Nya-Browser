@@ -2931,7 +2931,8 @@ export class BrowserWindow {
     }
     this.toast(t('Ищем по картинке…'))
     const result = await searchByImage(image.toPNG(), settings.get().searchEngine)
-    this.newTab(result.url, true)
+    // Результат поиска — то, ради чего всё затевалось; в фоне ему не место.
+    this.newTab(result.url)
     if (!result.ok) {
       this.toast(t('Картинка в буфере — вставьте её на странице поиска'))
     } else if (result.substituted) {

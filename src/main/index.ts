@@ -676,7 +676,8 @@ function registerIpc() {
   ipcMain.on('qr:open', (event, text: unknown) => {
     const raw = String(text ?? '').slice(0, 2048)
     const url = /^https?:\/\//i.test(raw) ? raw : /^www\./i.test(raw) ? `https://${raw}` : ''
-    if (url) current(event).newTab(url, true)
+    // Вперёд, а не в фон: «Открыть» — это просьба оказаться на странице.
+    if (url) current(event).newTab(url)
   })
 
   ipcMain.on('qr:copy', (event, text: unknown) => {
