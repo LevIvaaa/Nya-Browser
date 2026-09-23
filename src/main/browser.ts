@@ -1300,10 +1300,13 @@ export class BrowserWindow {
     wc.on('dom-ready', () => {
       // Подписи кнопок под найденным QR-кодом: страница их не знает,
       // переводы живут здесь.
+      // Слова и цвет для того, что браузер рисует поверх страницы: у самой
+      // страницы нет ни словарей, ни настроек.
       wc.send('qr:words', {
         open: t('Открыть'),
         copy: t('Копировать'),
-        accent: settings.get().accent
+        accent: settings.get().accent,
+        sec: t('{n} с')
       })
       void this.applyCosmetic(wc)
       // Much of the ad furniture arrives after DOMContentLoaded.

@@ -3,12 +3,14 @@ import { Readability, isProbablyReaderable } from '@mozilla/readability'
 import jsQR from 'jsqr'
 
 /** Подписи кнопок под найденным кодом: перевод живёт в главном процессе. */
-const qrWords = { open: 'Открыть', copy: 'Копировать', accent: '#7C6CFF' }
+const qrWords = { open: 'Открыть', copy: 'Копировать', accent: '#7C6CFF', sec: '{n} с' }
 ipcRenderer.on(
   'qr:words',
-  (_event, words: { open?: string; copy?: string; accent?: string }) => {
+  (_event, words: { open?: string; copy?: string; accent?: string; sec?: string }) => {
     if (words?.open) qrWords.open = words.open
     if (words?.copy) qrWords.copy = words.copy
+    // Подсказка перемотки: «+5 с» по-русски, «+5 s» по-английски, «+5 秒»…
+    if (words?.sec && words.sec.indexOf('{n}') !== -1) qrWords.sec = words.sec
     // Цвет отметки — выбранный в настройках акцент: подсветка на чужой
     // странице всё равно наша, и выглядеть должна как остальной браузер.
     if (words?.accent && /^#[0-9a-f]{6}$/i.test(words.accent)) qrWords.accent = words.accent
@@ -1809,18 +1811,22 @@ if (httpOrigin) {
     return all[0] ?? null
   }
 
-  /** Короткая подсказка: без неё перемотку на пять секунд не заметить. */
+  /**
+   * Короткая подсказка: без неё перемотку на пять секунд не заметить.
+   *
+   * Стоит посреди того видео, которое перематывают, а не посреди экрана:
+   * ролик на странице редко стоит в центре, и подсказка сбоку от него
+   * читается как чужая.
+   */
   let seekHint: HTMLElement | null = null
   let hideHintAt = 0
-  const saySeek = (text: string) => {
+  const saySeek = (text: string, video: HTMLVideoElement) => {
     if (!seekHint) {
       seekHint = document.createElement('nya-seek')
       seekHint.setAttribute(
         'style',
         [
           'position: fixed',
-          'left: 50%',
-          'top: 50%',
           'transform: translate(-50%, -50%)',
           'z-index: 2147483646',
           'padding: 10px 16px',
@@ -1834,6 +1840,14 @@ if (httpOrigin) {
       )
       document.documentElement.appendChild(seekHint)
     }
+    const r = video.getBoundingClientRect()
+    const x = Math.max(60, Math.min(window.innerWidth - 60, r.left + r.width / 2))
+    const y = Math.max(30, Math.min(window.innerHeight - 30, r.top + r.height / 2))
+    seekHint.style.left = x + 'px'
+    seekHint.style.top = y + 'px'
+    // Во весь экран видно только одно дерево — подсказка переезжает в него.
+    const host = (document.fullscreenElement as Element | null) ?? document.documentElement
+    if (seekHint.parentNode !== host) host.appendChild(seekHint)
     seekHint.textContent = text
     seekHint.style.opacity = '1'
     hideHintAt = Date.now() + 700
@@ -1856,7 +1870,7 @@ if (httpOrigin) {
           0,
           Math.min(video.duration, video.currentTime + (back ? -step : step))
         )
-        saySeek((back ? '−' : '+') + step + ' с')
+        saySeek((back ? '−' : '+') + qrWords.sec.replace('{n}', String(step)), video)
         event.preventDefault()
         event.stopPropagation()
       },
