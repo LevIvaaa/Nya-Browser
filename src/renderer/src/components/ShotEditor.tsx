@@ -1,6 +1,6 @@
 import { t } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
-import { Cross, Eraser, Grid, Note, Pencil } from './Icons'
+import { ArrowMark, Cross, Eraser, FrameMark, TextMark } from './Icons'
 
 /**
  * Снимок, пока он ещё не файл.
@@ -28,10 +28,10 @@ type Mark =
   | { tool: 'text'; x: number; y: number; text: string }
 
 const TOOLS: { id: Tool; label: string; icon: JSX.Element }[] = [
-  { id: 'arrow', label: 'Стрелка', icon: <Pencil width={14} height={14} /> },
-  { id: 'box', label: 'Рамка', icon: <Grid width={14} height={14} /> },
+  { id: 'arrow', label: 'Стрелка', icon: <ArrowMark width={14} height={14} /> },
+  { id: 'box', label: 'Рамка', icon: <FrameMark width={14} height={14} /> },
   { id: 'redact', label: 'Замазать', icon: <Eraser width={14} height={14} /> },
-  { id: 'text', label: 'Текст', icon: <Note width={14} height={14} /> }
+  { id: 'text', label: 'Текст', icon: <TextMark width={14} height={14} /> }
 ]
 
 /** Цвет разметки — акцент браузера, чтобы снимок был узнаваемо наш. */
@@ -133,8 +133,12 @@ export default function ShotEditor({ image, onClose }: { image: string; onClose:
   const down = (event: React.PointerEvent) => {
     if (typing) return
     const { x, y } = at(event)
+    // Подпись заводится на клике, а не здесь. Поле, созданное по нажатию,
+    // получает фокус — и тут же его теряет, потому что следом приходит
+    // отпускание кнопки и уводит фокус на страницу. onBlur видит пустую
+    // подпись и закрывает поле: набрать в него не успевал никто.
     if (tool === 'text') {
-      setTyping({ x, y, text: '' })
+      event.preventDefault()
       return
     }
     ;(event.target as Element).setPointerCapture?.(event.pointerId)
@@ -180,6 +184,37 @@ export default function ShotEditor({ image, onClose }: { image: string; onClose:
       }
     }
     setDrawing(null)
+  }
+
+  /**
+   * Куда поставить поле ввода.
+   *
+   * Холст показан уменьшенным и стоит по центру блока, который шире его.
+   * Поэтому доля от ширины блока — это не то же самое, что доля от снимка, и
+   * поле уезжало в сторону от места, куда ткнули.
+   */
+  const spotOf = (x: number, y: number) => {
+    const box = canvas.current
+    const wrap = box?.parentElement
+    if (!box || !wrap) return { left: 0, top: 0 }
+    const r = box.getBoundingClientRect()
+    const w = wrap.getBoundingClientRect()
+    return {
+      left: r.left - w.left + (x / box.width) * r.width,
+      top: r.top - w.top + (y / box.height) * r.height
+    }
+  }
+
+  const startText = (event: React.MouseEvent) => {
+    if (tool !== 'text' || typing) return
+    const box = canvas.current
+    if (!box) return
+    const r = box.getBoundingClientRect()
+    setTyping({
+      x: ((event.clientX - r.left) / r.width) * box.width,
+      y: ((event.clientY - r.top) / r.height) * box.height,
+      text: ''
+    })
   }
 
   const commitText = () => {
@@ -236,6 +271,7 @@ export default function ShotEditor({ image, onClose }: { image: string; onClose:
           onPointerDown={down}
           onPointerMove={move}
           onPointerUp={up}
+          onClick={startText}
           className="animate-fade-up block h-full w-auto max-w-full rounded-[var(--radius)]"
           style={{
             objectFit: 'contain',
@@ -256,8 +292,8 @@ export default function ShotEditor({ image, onClose }: { image: string; onClose:
             placeholder={t('Подпись')}
             className="field focus-ring absolute"
             style={{
-              left: `${(typing.x / (canvas.current?.width || 1)) * 100}%`,
-              top: `${(typing.y / (canvas.current?.height || 1)) * 100}%`,
+              left: spotOf(typing.x, typing.y).left,
+              top: spotOf(typing.x, typing.y).top,
               width: 220
             }}
           />

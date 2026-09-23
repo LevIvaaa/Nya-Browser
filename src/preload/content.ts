@@ -3,11 +3,17 @@ import { Readability, isProbablyReaderable } from '@mozilla/readability'
 import jsQR from 'jsqr'
 
 /** Подписи кнопок под найденным кодом: перевод живёт в главном процессе. */
-const qrWords = { open: 'Открыть', copy: 'Копировать' }
-ipcRenderer.on('qr:words', (_event, words: { open?: string; copy?: string }) => {
-  if (words?.open) qrWords.open = words.open
-  if (words?.copy) qrWords.copy = words.copy
-})
+const qrWords = { open: 'Открыть', copy: 'Копировать', accent: '#7C6CFF' }
+ipcRenderer.on(
+  'qr:words',
+  (_event, words: { open?: string; copy?: string; accent?: string }) => {
+    if (words?.open) qrWords.open = words.open
+    if (words?.copy) qrWords.copy = words.copy
+    // Цвет отметки — выбранный в настройках акцент: подсветка на чужой
+    // странице всё равно наша, и выглядеть должна как остальной браузер.
+    if (words?.accent && /^#[0-9a-f]{6}$/i.test(words.accent)) qrWords.accent = words.accent
+  }
+)
 
 /**
  * Autofill content script.
@@ -1870,22 +1876,33 @@ if (httpOrigin) {
  * нет. Человек достаёт телефон ради ссылки, которая уже лежит перед ним на
  * экране.
  *
- * Картинки, которые могут быть кодом — достаточно квадратные и достаточно
- * большие, — осматриваются после того, как страница успокоилась. Найденный
- * код подсвечивается на своём месте и говорит, что в нём: ссылку можно
- * открыть или скопировать. Наружу при этом не уходит ничего — читает сама
- * страница, на этой машине.
+ * Найденный код отмечается кольцом и значком в углу, и отметка остаётся на
+ * месте, пока код на странице: она едет вместе с ним при прокрутке и
+ * возвращается, когда на страницу приходят снова. Карточку с содержимым можно
+ * закрыть и открыть обратно значком — то, что код прочитан, не должно
+ * пропадать после одного нажатия.
+ *
+ * Наружу при этом не уходит ничего: читает сама страница, на этой машине.
  */
 {
-  let ring: HTMLElement | null = null
-  let card: HTMLElement | null = null
+  /** Коды, найденные на этой странице, и то, что в них написано. */
+  const found = new Map<Element, string>()
+  /** Кольцо и значок для каждого найденного кода. */
+  const marks = new Map<Element, HTMLElement>()
   const looked = new WeakSet<Element>()
+  let card: HTMLElement | null = null
+  let cardFor: Element | null = null
+  let ticking = false
+  /** Коды, подсветку которых погасили щелчком. */
+  const hushed = new WeakSet<Element>()
 
-  const clearQr = () => {
-    ring?.remove()
+  /** Цвет отметки — тот, который человек выбрал в браузере. */
+  const ink = () => qrWords.accent
+
+  const closeCard = () => {
     card?.remove()
-    ring = null
     card = null
+    cardFor = null
   }
 
   /**
@@ -1934,36 +1951,37 @@ if (httpOrigin) {
     }
   }
 
-  /** Кольцо вокруг кода и карточка под ним с тем, что в нём написано. */
-  const showQr = (node: Element, text: string) => {
-    clearQr()
-    const r = node.getBoundingClientRect()
-    if (r.width < 24) return
-
-    const halo = document.createElement('nya-qr-ring')
-    halo.setAttribute(
+  const button = (label: string, primary: boolean) => {
+    const b = document.createElement('button')
+    b.textContent = label
+    b.setAttribute(
       'style',
       [
-        'position: fixed',
-        'left: ' + (r.left - 5) + 'px',
-        'top: ' + (r.top - 5) + 'px',
-        'width: ' + (r.width + 10) + 'px',
-        'height: ' + (r.height + 10) + 'px',
-        'border: 2px solid #7c6cff',
-        'border-radius: 12px',
-        'box-shadow: 0 0 0 4px rgba(124, 108, 255, 0.16)',
-        'z-index: 2147483644',
-        'pointer-events: none'
+        'height: 28px',
+        'padding: 0 11px',
+        'border: 0',
+        'border-radius: 8px',
+        'cursor: pointer',
+        'font: 600 12px/1 system-ui, sans-serif',
+        primary
+          ? 'background: ' + ink() + '; color: #fff'
+          : 'background: rgba(255,255,255,0.08); color: #f2f3f7'
       ].join(';')
     )
+    return b
+  }
+
+  /** Карточка с тем, что написано в коде. */
+  const openCard = (node: Element) => {
+    closeCard()
+    const text = found.get(node)
+    if (!text || hushed.has(node)) return
 
     const box = document.createElement('nya-qr')
     box.setAttribute(
       'style',
       [
         'position: fixed',
-        'left: ' + Math.max(8, Math.min(r.left, window.innerWidth - 340)) + 'px',
-        'top: ' + Math.min(r.bottom + 12, window.innerHeight - 110) + 'px',
         'max-width: 320px',
         'z-index: 2147483645',
         'padding: 11px 13px',
@@ -1983,31 +2001,13 @@ if (httpOrigin) {
     const row = document.createElement('div')
     row.setAttribute('style', 'display:flex;gap:7px;margin-top:9px')
 
-    const button = (label: string, primary: boolean) => {
-      const b = document.createElement('button')
-      b.textContent = label
-      b.setAttribute(
-        'style',
-        [
-          'height: 28px',
-          'padding: 0 11px',
-          'border: 0',
-          'border-radius: 8px',
-          'cursor: pointer',
-          'font: 600 12px/1 system-ui, sans-serif',
-          primary ? 'background: #7c6cff; color: #fff' : 'background: rgba(255,255,255,0.08); color: #f2f3f7'
-        ].join(';')
-      )
-      return b
-    }
-
     // Открывать можно только то, что похоже на адрес: код с текстом или с
     // номером телефона открывать некуда.
     if (/^(https?:\/\/|www\.)/i.test(text)) {
       const go = button(qrWords.open, true)
       go.addEventListener('click', () => {
         ipcRenderer.send('qr:open', text)
-        clearQr()
+        closeCard()
       })
       row.appendChild(go)
     }
@@ -2015,15 +2015,84 @@ if (httpOrigin) {
     const copy = button(qrWords.copy, false)
     copy.addEventListener('click', () => {
       ipcRenderer.send('qr:copy', text)
-      clearQr()
+      closeCard()
     })
     row.appendChild(copy)
     box.appendChild(row)
 
-    document.documentElement.appendChild(halo)
     document.documentElement.appendChild(box)
-    ring = halo
     card = box
+    cardFor = node
+    place()
+  }
+
+  /** Кольцо вокруг кода и значок, которым карточку зовут обратно. */
+  const markCode = (node: Element) => {
+    if (marks.has(node)) return
+    const halo = document.createElement('nya-qr-ring')
+    halo.setAttribute(
+      'style',
+      [
+        'position: fixed',
+        'border: 2px solid ' + ink(),
+        'border-radius: 12px',
+        'box-shadow: 0 0 0 4px color-mix(in srgb, ' + ink() + ' 18%, transparent)',
+        'z-index: 2147483644',
+        // Кольцо лежит поверх кода, и если оно ловит нажатия, то по коду,
+        // который сам может быть ссылкой, уже не нажать.
+        'pointer-events: none'
+      ].join(';')
+    )
+
+
+    document.documentElement.appendChild(halo)
+    marks.set(node, halo)
+  }
+
+  /**
+   * Отметки живут на месте кода: страница прокрутилась — они едут с ней, код
+   * убрали — отметка уходит следом.
+   */
+  const place = () => {
+    for (const [node, halo] of marks) {
+      if (!node.isConnected) {
+        halo.remove()
+        marks.delete(node)
+        found.delete(node)
+        if (cardFor === node) closeCard()
+        continue
+      }
+      const r = node.getBoundingClientRect()
+      const seen =
+        !hushed.has(node) && r.width > 20 && r.bottom > 0 && r.top < window.innerHeight
+      halo.style.display = seen ? 'block' : 'none'
+      halo.style.left = r.left - 5 + 'px'
+      halo.style.top = r.top - 5 + 'px'
+      halo.style.width = r.width + 10 + 'px'
+      halo.style.height = r.height + 10 + 'px'
+    }
+    if (card && cardFor && cardFor.isConnected) {
+      const r = cardFor.getBoundingClientRect()
+      card.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 340)) + 'px'
+      card.style.top = Math.min(r.bottom + 12, window.innerHeight - 110) + 'px'
+      card.style.display = r.bottom > 0 && r.top < window.innerHeight ? 'block' : 'none'
+    }
+  }
+
+  const replace = () => {
+    if (ticking) return
+    ticking = true
+    requestAnimationFrame(() => {
+      ticking = false
+      place()
+    })
+    // Скрытой странице кадров не дают вовсе, и без этого флаг остался бы
+    // поднятым навсегда — а с ним и кольцо на старом месте.
+    setTimeout(() => {
+      if (!ticking) return
+      ticking = false
+      place()
+    }, 120)
   }
 
   /** Достаточно квадратная и достаточно большая, чтобы быть кодом. */
@@ -2035,15 +2104,20 @@ if (httpOrigin) {
   }
 
   const readOne = async (node: HTMLImageElement | HTMLCanvasElement) => {
+    if (found.has(node)) return true
     if (looked.has(node) || !couldBeCode(node)) return false
     looked.add(node)
     const pixels = await pixelsOf(node)
     if (!pixels) return false
-    const found = jsQR(pixels.data, pixels.width, pixels.height, {
+    const code = jsQR(pixels.data, pixels.width, pixels.height, {
       inversionAttempts: 'dontInvert'
     })
-    if (!found || !found.data) return false
-    showQr(node, found.data)
+    if (!code || !code.data) return false
+    found.set(node, code.data)
+    markCode(node)
+    // Карточка открывается сама: иначе о том, что код прочитан, узнает только
+    // тот, кто догадается нажать на значок.
+    openCard(node)
     return true
   }
 
@@ -2058,14 +2132,91 @@ if (httpOrigin) {
   }
 
   if (isTop) {
+    let soon = 0
+    const sweepSoon = (after: number) => {
+      clearTimeout(soon)
+      soon = window.setTimeout(() => void sweepQr(), after)
+    }
+
     // Через секунду после загрузки: картинки к этому моменту на месте, а
     // осматривать весь интернет на каждой перерисовке незачем.
-    window.addEventListener('load', () => {
-      setTimeout(() => void sweepQr(), 1200)
+    window.addEventListener('load', () => sweepSoon(1200))
+    // Возвращение назад достаёт страницу из кэша, и load уже не случится —
+    // а код на ней тот же самый, и отметка на нём нужна такая же.
+    window.addEventListener('pageshow', () => {
+      if (found.size > 0) {
+        for (const node of found.keys()) markCode(node)
+        place()
+      } else {
+        sweepSoon(400)
+      }
     })
-    // Прокрутка и уход со страницы убирают подсказку: она привязана к месту.
-    window.addEventListener('scroll', clearQr, { passive: true })
-    window.addEventListener('beforeunload', clearQr)
+    // Картинки на странице появляются и позже: ленивая подгрузка, галерея,
+    // переход внутри одностраничного сайта.
+    //
+    // Только когда документ уже есть. Этот скрипт запускается раньше самой
+    // страницы, и documentElement в этот момент бывает пуст: observe(null)
+    // бросает, и всё, что записано ниже, — щелчок по коду, прокрутка,
+    // изменение окна — молча не подключалось. Отсюда и кольцо, которое не
+    // ехало за кодом, и щелчок, который ничего не делал.
+    const watchImages = () =>
+      new MutationObserver((changes) => {
+        for (const change of changes) {
+          for (const node of change.addedNodes) {
+            if (node instanceof HTMLImageElement || node instanceof HTMLCanvasElement) {
+              return sweepSoon(900)
+            }
+          }
+        }
+      }).observe(document.documentElement, { childList: true, subtree: true })
+    if (document.documentElement) watchImages()
+    else document.addEventListener('DOMContentLoaded', watchImages, { once: true })
+
+    /**
+     * Нажатие на сам код гасит подсветку и возвращает её.
+     *
+     * Отдельной кнопки для этого нет: код — сам себе кнопка, и это то место,
+     * куда рука тянется первым делом. Собственное действие страницы при этом
+     * не отменяется: если код обёрнут в ссылку, ссылка сработает, потому что
+     * ломать чужую страницу ради своей подсветки нельзя.
+     */
+    document.addEventListener(
+      'click',
+      (event) => {
+        const target = event.target as Element | null
+        if (!target || target.tagName === 'NYA-QR' || target.closest?.('nya-qr')) return
+        for (const node of found.keys()) {
+          if (node !== target && !node.contains(target)) continue
+          if (hushed.has(node)) {
+            hushed.delete(node)
+            openCard(node)
+          } else {
+            hushed.add(node)
+            if (cardFor === node) closeCard()
+          }
+          place()
+          return
+        }
+      },
+      true
+    )
+
+    window.addEventListener('scroll', replace, { passive: true })
+    // Изменение окна — сразу, без ожидания кадра: кадр у окна, которое
+    // тянут за край, приходит не всегда, а кольцо должно стоять на коде.
+    window.addEventListener('resize', place, { passive: true })
+    // Страница двигает код и сама: сверху догрузилась картинка, раскрылся
+    // блок. Ни прокрутки, ни изменения окна при этом нет.
+    const layout = new ResizeObserver(replace)
+    const watchLayout = () => layout.observe(document.body ?? document.documentElement)
+    if (document.body) watchLayout()
+    else document.addEventListener('DOMContentLoaded', watchLayout, { once: true })
+    // Уходя со страницы — уходим совсем: отметки привязаны к этому документу.
+    window.addEventListener('pagehide', () => {
+      closeCard()
+      for (const halo of marks.values()) halo.remove()
+      marks.clear()
+    })
   }
 }
 

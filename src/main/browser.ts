@@ -1300,7 +1300,11 @@ export class BrowserWindow {
     wc.on('dom-ready', () => {
       // Подписи кнопок под найденным QR-кодом: страница их не знает,
       // переводы живут здесь.
-      wc.send('qr:words', { open: t('Открыть'), copy: t('Копировать') })
+      wc.send('qr:words', {
+        open: t('Открыть'),
+        copy: t('Копировать'),
+        accent: settings.get().accent
+      })
       void this.applyCosmetic(wc)
       // Much of the ad furniture arrives after DOMContentLoaded.
       setTimeout(() => void this.applyCosmetic(wc), 1500)
