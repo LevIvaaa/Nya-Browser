@@ -26,6 +26,7 @@ import {
   revealExtension
 } from './extensions'
 import { favicons } from './favicons'
+import { codesOnScreen } from './qrscan'
 import { currentWeather, guessPlace, searchPlaces } from './weather'
 import { applyMainLanguage } from './i18n'
 import { isKnownLanguage } from '../shared/i18n'
@@ -678,6 +679,22 @@ function registerIpc() {
     const url = /^https?:\/\//i.test(raw) ? raw : /^www\./i.test(raw) ? `https://${raw}` : ''
     // Вперёд, а не в фон: «Открыть» — это просьба оказаться на странице.
     if (url) current(event).newTab(url)
+  })
+
+  // Коды, которые видно на странице, но которых нет в ней картинкой: кадр
+  // видео, векторный рисунок, фон, чужой фрейм. См. qrscan.ts.
+  ipcMain.handle('qr:look', (event, view: unknown) => {
+    const ask = (view ?? {}) as { width?: unknown; height?: unknown; areas?: unknown }
+    // Где смотреть: пусто — весь экран; иначе только эти прямоугольники
+    // (кадры идущих видео — там код меняется, а остальное стоит на месте).
+    const areas = (Array.isArray(ask.areas) ? ask.areas : [])
+      .slice(0, 6)
+      .map((a) => {
+        const r = (a ?? {}) as Record<string, unknown>
+        return { x: num(r.x), y: num(r.y), w: num(r.w), h: num(r.h) }
+      })
+      .filter((a) => a.w > 20 && a.h > 20)
+    return codesOnScreen(event.sender, { width: num(ask.width), height: num(ask.height) }, areas)
   })
 
   ipcMain.on('qr:copy', (event, text: unknown) => {

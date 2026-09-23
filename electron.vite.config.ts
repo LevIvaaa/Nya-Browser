@@ -17,10 +17,18 @@ const pdfjs = () => ({
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin(), pdfjs()],
+    // jsqr is bundled into the decoder thread rather than required at run
+    // time: a worker loads from the asar archive with fewer guarantees than
+    // the main process does, and a thread that cannot find its one library
+    // fails without anyone seeing it.
+    plugins: [externalizeDepsPlugin({ exclude: ['jsqr'] }), pdfjs()],
     build: {
       rollupOptions: {
-        input: { index: resolve(__dirname, 'src/main/index.ts') }
+        input: {
+          index: resolve(__dirname, 'src/main/index.ts'),
+          // QR decoding off the main thread; see src/main/qrscan.ts
+          qrworker: resolve(__dirname, 'src/main/qrworker.ts')
+        }
       }
     }
   },

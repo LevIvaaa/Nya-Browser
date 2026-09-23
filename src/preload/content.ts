@@ -1870,39 +1870,75 @@ if (httpOrigin) {
    ========================================================================== */
 
 /**
- * Браузер читает квадрат сам.
+ * Браузер читает квадрат сам — где бы он ни был.
  *
  * QR-код на странице — тупик: он сделан для камеры телефона, а камеры здесь
  * нет. Человек достаёт телефон ради ссылки, которая уже лежит перед ним на
  * экране.
  *
- * Найденный код отмечается кольцом и значком в углу, и отметка остаётся на
- * месте, пока код на странице: она едет вместе с ним при прокрутке и
- * возвращается, когда на страницу приходят снова. Карточку с содержимым можно
- * закрыть и открыть обратно значком — то, что код прочитан, не должно
- * пропадать после одного нажатия.
+ * Код ищется двумя путями. Картинки и холсты страница читает сама, в полном
+ * разрешении, — так находятся и мелкие коды. Всё остальное, что видно глазом,
+ * — кадр видео, векторный рисунок, фон блока, чужой фрейм — браузер находит
+ * на снимке отрисованной страницы (qrscan.ts в главном процессе).
  *
- * Наружу при этом не уходит ничего: читает сама страница, на этой машине.
+ * Найденный код обводится кольцом, и под ним появляется карточка с тем, что
+ * в нём написано. Кольцо держится за код при прокрутке и изменении окна.
+ * Нажатие на сам код гасит подсветку, следующее — возвращает. Код в видео
+ * живёт, пока он в кадре, и нажатия по нему остаются плееру: остановить видео
+ * щелчком — его право.
+ *
+ * Наружу не уходит ничего: всё читается на этой машине.
  */
 {
-  /** Коды, найденные на этой странице, и то, что в них написано. */
-  const found = new Map<Element, string>()
-  /** Кольцо и значок для каждого найденного кода. */
-  const marks = new Map<Element, HTMLElement>()
-  const looked = new WeakSet<Element>()
+  type Part = { x: number; y: number; w: number; h: number }
+  type Code = {
+    text: string
+    /** Что держит код: картинка, холст, видео или блок, в котором он нарисован. */
+    anchor: Element
+    /** Где код внутри хозяина, в долях его размера; null — код и есть хозяин. */
+    part: Part | null
+    /** Код в кадре видео: сменится кадр — уйдёт и он. */
+    live: boolean
+    /** Сколько просмотров подряд код не нашёлся на своём месте. */
+    missed: number
+    /** Подсветку погасили нажатием. */
+    hushed: boolean
+    ring: HTMLElement
+  }
+
+  const codes: Code[] = []
+  // Не const: при переходе внутри одностраничного сайта картинки часто
+  // остаются теми же элементами с новым содержимым, и смотреть их надо заново.
+  let looked = new WeakSet<Element>()
   let card: HTMLElement | null = null
-  let cardFor: Element | null = null
+  let cardFor: Code | null = null
   let ticking = false
-  /** Коды, подсветку которых погасили щелчком. */
-  const hushed = new WeakSet<Element>()
 
   /** Цвет отметки — тот, который человек выбрал в браузере. */
   const ink = () => qrWords.accent
+
+  /**
+   * Куда вешать отметки. Во весь экран показывается только одно дерево, и
+   * кольцо, оставленное снаружи, пропало бы вместе с остальной страницей.
+   */
+  const host = () => (document.fullscreenElement as Element | null) ?? document.documentElement
 
   const closeCard = () => {
     card?.remove()
     card = null
     cardFor = null
+  }
+
+  /** Прямоугольник кода на экране — по хозяину и месту внутри него. */
+  const rectOf = (code: Code) => {
+    const r = code.anchor.getBoundingClientRect()
+    if (!code.part) return { left: r.left, top: r.top, width: r.width, height: r.height }
+    return {
+      left: r.left + code.part.x * r.width,
+      top: r.top + code.part.y * r.height,
+      width: code.part.w * r.width,
+      height: code.part.h * r.height
+    }
   }
 
   /**
@@ -1972,10 +2008,9 @@ if (httpOrigin) {
   }
 
   /** Карточка с тем, что написано в коде. */
-  const openCard = (node: Element) => {
+  const openCard = (code: Code) => {
     closeCard()
-    const text = found.get(node)
-    if (!text || hushed.has(node)) return
+    if (code.hushed) return
 
     const box = document.createElement('nya-qr')
     box.setAttribute(
@@ -1995,7 +2030,7 @@ if (httpOrigin) {
     )
 
     const line = document.createElement('div')
-    line.textContent = text.length > 160 ? text.slice(0, 160) + '…' : text
+    line.textContent = code.text.length > 160 ? code.text.slice(0, 160) + '…' : code.text
     box.appendChild(line)
 
     const row = document.createElement('div')
@@ -2003,10 +2038,10 @@ if (httpOrigin) {
 
     // Открывать можно только то, что похоже на адрес: код с текстом или с
     // номером телефона открывать некуда.
-    if (/^(https?:\/\/|www\.)/i.test(text)) {
+    if (/^(https?:\/\/|www\.)/i.test(code.text)) {
       const go = button(qrWords.open, true)
       go.addEventListener('click', () => {
-        ipcRenderer.send('qr:open', text)
+        ipcRenderer.send('qr:open', code.text)
         closeCard()
       })
       row.appendChild(go)
@@ -2014,39 +2049,22 @@ if (httpOrigin) {
 
     const copy = button(qrWords.copy, false)
     copy.addEventListener('click', () => {
-      ipcRenderer.send('qr:copy', text)
+      ipcRenderer.send('qr:copy', code.text)
       closeCard()
     })
     row.appendChild(copy)
     box.appendChild(row)
 
-    document.documentElement.appendChild(box)
+    host().appendChild(box)
     card = box
-    cardFor = node
+    cardFor = code
     place()
   }
 
-  /** Кольцо вокруг кода и значок, которым карточку зовут обратно. */
-  const markCode = (node: Element) => {
-    if (marks.has(node)) return
-    const halo = document.createElement('nya-qr-ring')
-    halo.setAttribute(
-      'style',
-      [
-        'position: fixed',
-        'border: 2px solid ' + ink(),
-        'border-radius: 12px',
-        'box-shadow: 0 0 0 4px color-mix(in srgb, ' + ink() + ' 18%, transparent)',
-        'z-index: 2147483644',
-        // Кольцо лежит поверх кода, и если оно ловит нажатия, то по коду,
-        // который сам может быть ссылкой, уже не нажать.
-        'pointer-events: none'
-      ].join(';')
-    )
-
-
-    document.documentElement.appendChild(halo)
-    marks.set(node, halo)
+  const drop = (code: Code) => {
+    code.ring.remove()
+    codes.splice(codes.indexOf(code), 1)
+    if (cardFor === code) closeCard()
   }
 
   /**
@@ -2054,28 +2072,29 @@ if (httpOrigin) {
    * убрали — отметка уходит следом.
    */
   const place = () => {
-    for (const [node, halo] of marks) {
-      if (!node.isConnected) {
-        halo.remove()
-        marks.delete(node)
-        found.delete(node)
-        if (cardFor === node) closeCard()
+    for (const code of [...codes]) {
+      if (!code.anchor.isConnected) {
+        drop(code)
         continue
       }
-      const r = node.getBoundingClientRect()
+      const r = rectOf(code)
       const seen =
-        !hushed.has(node) && r.width > 20 && r.bottom > 0 && r.top < window.innerHeight
-      halo.style.display = seen ? 'block' : 'none'
-      halo.style.left = r.left - 5 + 'px'
-      halo.style.top = r.top - 5 + 'px'
-      halo.style.width = r.width + 10 + 'px'
-      halo.style.height = r.height + 10 + 'px'
+        !code.hushed &&
+        code.missed === 0 &&
+        r.width > 16 &&
+        r.top + r.height > 0 &&
+        r.top < window.innerHeight
+      code.ring.style.display = seen ? 'block' : 'none'
+      code.ring.style.left = r.left - 5 + 'px'
+      code.ring.style.top = r.top - 5 + 'px'
+      code.ring.style.width = r.width + 10 + 'px'
+      code.ring.style.height = r.height + 10 + 'px'
     }
-    if (card && cardFor && cardFor.isConnected) {
-      const r = cardFor.getBoundingClientRect()
+    if (card && cardFor) {
+      const r = rectOf(cardFor)
       card.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 340)) + 'px'
-      card.style.top = Math.min(r.bottom + 12, window.innerHeight - 110) + 'px'
-      card.style.display = r.bottom > 0 && r.top < window.innerHeight ? 'block' : 'none'
+      card.style.top = Math.min(r.top + r.height + 12, window.innerHeight - 110) + 'px'
+      card.style.display = r.top + r.height > 0 && r.top < window.innerHeight ? 'block' : 'none'
     }
   }
 
@@ -2095,6 +2114,52 @@ if (httpOrigin) {
     }, 120)
   }
 
+  /** Новый код — или тот же самый, найденный ещё раз. */
+  const adopt = (text: string, anchor: Element, part: Part | null, live: boolean) => {
+    const same = codes.find(
+      (code) =>
+        code.text === text &&
+        code.anchor === anchor &&
+        (!part || !code.part || Math.abs(code.part.x - part.x) < 0.25)
+    )
+    if (same) {
+      const back = same.missed > 0
+      same.missed = 0
+      if (part) same.part = part
+      // Код вернулся в кадр — карточка возвращается с ним, если на экране нет
+      // другой.
+      if (back && !card) openCard(same)
+      place()
+      return
+    }
+
+    const ring = document.createElement('nya-qr-ring')
+    ring.setAttribute(
+      'style',
+      [
+        'position: fixed',
+        'border: 2px solid ' + ink(),
+        'border-radius: 12px',
+        'box-shadow: 0 0 0 4px color-mix(in srgb, ' + ink() + ' 18%, transparent)',
+        'z-index: 2147483644',
+        // Кольцо лежит поверх кода, и если оно ловит нажатия, то по коду,
+        // который сам может быть ссылкой, уже не нажать.
+        'pointer-events: none'
+      ].join(';')
+    )
+    host().appendChild(ring)
+
+    const code: Code = { text, anchor, part, live, missed: 0, hushed: false, ring }
+    codes.push(code)
+    place()
+    // Карточка открывается сама: иначе о том, что код прочитан, узнает только
+    // тот, кто догадается нажать. Но не отнимает место у уже открытой: на
+    // странице с тремя кодами карточки иначе перескакивали бы с кода на код.
+    if (!card) openCard(code)
+  }
+
+  /* ------------------------------------------- картинки и холсты страницы */
+
   /** Достаточно квадратная и достаточно большая, чтобы быть кодом. */
   const couldBeCode = (node: HTMLImageElement | HTMLCanvasElement) => {
     const r = node.getBoundingClientRect()
@@ -2104,31 +2169,155 @@ if (httpOrigin) {
   }
 
   const readOne = async (node: HTMLImageElement | HTMLCanvasElement) => {
-    if (found.has(node)) return true
+    if (codes.some((code) => code.anchor === node && !code.part)) return true
     if (looked.has(node) || !couldBeCode(node)) return false
     looked.add(node)
     const pixels = await pixelsOf(node)
     if (!pixels) return false
-    const code = jsQR(pixels.data, pixels.width, pixels.height, {
+    const found = jsQR(pixels.data, pixels.width, pixels.height, {
       inversionAttempts: 'dontInvert'
     })
-    if (!code || !code.data) return false
-    found.set(node, code.data)
-    markCode(node)
-    // Карточка открывается сама: иначе о том, что код прочитан, узнает только
-    // тот, кто догадается нажать на значок.
-    openCard(node)
+    if (!found || !found.data) return false
+    adopt(found.data, node, null, false)
     return true
   }
 
-  /** Один проход по странице: до первого найденного кода. */
   const sweepQr = async () => {
     const nodes = document.querySelectorAll('img, canvas')
     for (let i = 0; i < nodes.length && i < 120; i++) {
       const node = nodes[i] as HTMLImageElement | HTMLCanvasElement
       if (node instanceof HTMLImageElement && !node.complete) continue
-      if (await readOne(node)) return
+      await readOne(node)
     }
+  }
+
+  /* ------------------------------------------ всё остальное, что видно */
+
+  /** Видео под точкой — на нём код живёт, пока он в кадре. */
+  const videoAt = (x: number, y: number): HTMLVideoElement | null => {
+    for (const video of document.querySelectorAll('video')) {
+      const r = video.getBoundingClientRect()
+      if (r.width > 120 && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return video
+    }
+    return null
+  }
+
+  /** Самый глубокий элемент страницы под точкой, не считая наших отметок. */
+  const ownerAt = (x: number, y: number): Element | null => {
+    for (const node of document.elementsFromPoint(x, y)) {
+      if (node.tagName.indexOf('NYA-') === 0) continue
+      if (node === document.documentElement || node === document.body) return node
+      const r = node.getBoundingClientRect()
+      if (r.width >= 24 && r.height >= 24) return node
+    }
+    return null
+  }
+
+  let looking = false
+  let lastLook = 0
+
+  /** Кадры видео, которые сейчас видно, — в пикселях страницы. */
+  const videoAreas = () => {
+    const out: Part[] = []
+    for (const video of document.querySelectorAll('video')) {
+      const r = video.getBoundingClientRect()
+      if (r.width < 120 || r.bottom <= 0 || r.top >= window.innerHeight) continue
+      const x = Math.max(0, r.left)
+      const y = Math.max(0, r.top)
+      out.push({
+        x,
+        y,
+        w: Math.min(window.innerWidth, r.right) - x,
+        h: Math.min(window.innerHeight, r.bottom) - y
+      })
+    }
+    return out
+  }
+
+  /**
+   * Один просмотр отрисованной страницы.
+   *
+   * `onlyVideos` — пока идёт ролик, смотреть незачем на всё: стоящее на
+   * месте уже осмотрено, а меняется только кадр. Так просмотр раз в две
+   * секунды стоит в несколько раз дешевле.
+   */
+  const lookAtScreen = async (onlyVideos = false) => {
+    if (looking || document.visibilityState !== 'visible') return
+    const areas = onlyVideos ? videoAreas() : []
+    if (onlyVideos && areas.length === 0) return
+    looking = true
+    lastLook = Date.now()
+    try {
+      const found: { text: string; x: number; y: number; w: number; h: number }[] =
+        await ipcRenderer.invoke('qr:look', {
+          width: window.innerWidth,
+          height: window.innerHeight,
+          areas
+        })
+
+      const seenLive = new Set<Code>()
+      for (const hit of found ?? []) {
+        if (!hit || !hit.text || hit.w < 12 || hit.h < 12) continue
+        const cx = hit.x + hit.w / 2
+        const cy = hit.y + hit.h / 2
+
+        // Тот же код, уже найденный в картинке, отмечать второй раз незачем.
+        const twin = codes.find((code) => {
+          if (code.text !== hit.text || code.live) return false
+          const r = rectOf(code)
+          return cx >= r.left && cx <= r.left + r.width && cy >= r.top && cy <= r.top + r.height
+        })
+        if (twin) continue
+
+        const video = videoAt(cx, cy)
+        const anchor = video ?? ownerAt(cx, cy)
+        if (!anchor) continue
+        const r = anchor.getBoundingClientRect()
+        if (r.width < 1 || r.height < 1) continue
+        const part = {
+          x: (hit.x - r.left) / r.width,
+          y: (hit.y - r.top) / r.height,
+          w: hit.w / r.width,
+          h: hit.h / r.height
+        }
+        adopt(hit.text, anchor, part, Boolean(video))
+        const code = codes.find((one) => one.text === hit.text && one.anchor === anchor)
+        if (code && code.live) seenLive.add(code)
+      }
+
+      // Кадр сменился — код, которого в нём больше нет, гаснет сразу: пустое
+      // кольцо над видео выглядит как поломка. Совсем уходит он после трёх
+      // промахов подряд — кадр мог быть смазан переходом, и тогда код
+      // вернётся на своё место без новой карточки.
+      for (const code of [...codes]) {
+        if (!code.live || seenLive.has(code)) continue
+        code.missed++
+        if (cardFor === code) closeCard()
+        if (code.missed >= 3) drop(code)
+      }
+      place()
+    } catch {
+      /* снимка не вышло — посмотрим в следующий раз */
+    } finally {
+      looking = false
+    }
+  }
+
+  let soonLook = 0
+  const lookSoon = (after: number) => {
+    clearTimeout(soonLook)
+    const wait = Math.max(after, 800 - (Date.now() - lastLook))
+    soonLook = window.setTimeout(() => void lookAtScreen(), wait)
+  }
+
+  /** Идёт ли на странице видео, которое сейчас видно. */
+  const videoPlaying = () => {
+    for (const video of document.querySelectorAll('video')) {
+      if (video.paused || video.ended || video.readyState < 2) continue
+      const r = video.getBoundingClientRect()
+      if (r.width > 120 && r.bottom > 0 && r.top < window.innerHeight) return true
+    }
+    return false
   }
 
   if (isTop) {
@@ -2140,31 +2329,34 @@ if (httpOrigin) {
 
     // Через секунду после загрузки: картинки к этому моменту на месте, а
     // осматривать весь интернет на каждой перерисовке незачем.
-    window.addEventListener('load', () => sweepSoon(1200))
-    // Возвращение назад достаёт страницу из кэша, и load уже не случится —
-    // а код на ней тот же самый, и отметка на нём нужна такая же.
-    window.addEventListener('pageshow', () => {
-      if (found.size > 0) {
-        for (const node of found.keys()) markCode(node)
-        place()
-      } else {
-        sweepSoon(400)
-      }
+    window.addEventListener('load', () => {
+      sweepSoon(1200)
+      lookSoon(1600)
     })
-    // Картинки на странице появляются и позже: ленивая подгрузка, галерея,
-    // переход внутри одностраничного сайта.
+    // Возвращение назад достаёт страницу из кэша, и load уже не случится.
+    window.addEventListener('pageshow', (event) => {
+      if (event.persisted) {
+        for (const code of codes) host().appendChild(code.ring)
+        place()
+      }
+      sweepSoon(400)
+      lookSoon(700)
+    })
+
+    // Картинки появляются и позже: ленивая подгрузка, галерея, переход внутри
+    // одностраничного сайта.
     //
     // Только когда документ уже есть. Этот скрипт запускается раньше самой
     // страницы, и documentElement в этот момент бывает пуст: observe(null)
-    // бросает, и всё, что записано ниже, — щелчок по коду, прокрутка,
-    // изменение окна — молча не подключалось. Отсюда и кольцо, которое не
-    // ехало за кодом, и щелчок, который ничего не делал.
+    // бросает, и всё, что записано ниже, молча не подключалось бы.
     const watchImages = () =>
       new MutationObserver((changes) => {
         for (const change of changes) {
           for (const node of change.addedNodes) {
             if (node instanceof HTMLImageElement || node instanceof HTMLCanvasElement) {
-              return sweepSoon(900)
+              sweepSoon(900)
+              lookSoon(1200)
+              return
             }
           }
         }
@@ -2172,50 +2364,115 @@ if (httpOrigin) {
     if (document.documentElement) watchImages()
     else document.addEventListener('DOMContentLoaded', watchImages, { once: true })
 
+    // Видео смотрят постоянно, пока оно идёт: код в ролике показывают на
+    // несколько секунд. На паузе и после перемотки — сразу: именно так и
+    // поступают, заметив код в кадре.
+    // Одностраничные сайты — YouTube первым — переходят со страницы на
+    // страницу без перезагрузки: pagehide не случается, и отметки с прошлой
+    // страницы остались бы висеть над новой. Смена адреса — это смена
+    // страницы, как бы сайт её ни делал.
+    let lastHref = location.href
+    window.setInterval(() => {
+      if (location.href !== lastHref) {
+        lastHref = location.href
+        closeCard()
+        for (const code of [...codes]) drop(code)
+        looked = new WeakSet<Element>()
+        sweepSoon(900)
+        lookSoon(1200)
+        return
+      }
+      if (videoPlaying()) void lookAtScreen(true)
+    }, 1000)
+    for (const name of ['pause', 'seeked', 'play']) {
+      document.addEventListener(name, () => lookSoon(250), true)
+    }
+
     /**
      * Нажатие на сам код гасит подсветку и возвращает её.
      *
-     * Отдельной кнопки для этого нет: код — сам себе кнопка, и это то место,
-     * куда рука тянется первым делом. Собственное действие страницы при этом
-     * не отменяется: если код обёрнут в ссылку, ссылка сработает, потому что
-     * ломать чужую страницу ради своей подсветки нельзя.
+     * Отдельной кнопки для этого нет: код — сам себе кнопка. Собственное
+     * действие страницы не отменяется: если код — ссылка, ссылка сработает.
+     * Код в видео так не переключается: нажатие по видео — это пауза, и
+     * отнимать её у плеера нельзя.
      */
     document.addEventListener(
       'click',
       (event) => {
         const target = event.target as Element | null
-        if (!target || target.tagName === 'NYA-QR' || target.closest?.('nya-qr')) return
-        for (const node of found.keys()) {
-          if (node !== target && !node.contains(target)) continue
-          if (hushed.has(node)) {
-            hushed.delete(node)
-            openCard(node)
-          } else {
-            hushed.add(node)
-            if (cardFor === node) closeCard()
-          }
-          place()
-          return
+        if (!target || target.closest?.('nya-qr')) return
+        const code = codes.find(
+          (one) =>
+            !one.live &&
+            (one.anchor === target || one.anchor.contains(target)) &&
+            (() => {
+              if (!one.part) return true
+              const r = rectOf(one)
+              return (
+                event.clientX >= r.left &&
+                event.clientX <= r.left + r.width &&
+                event.clientY >= r.top &&
+                event.clientY <= r.top + r.height
+              )
+            })()
+        )
+        if (!code) return
+        code.hushed = !code.hushed
+        if (code.hushed) {
+          if (cardFor === code) closeCard()
+        } else {
+          openCard(code)
         }
+        place()
       },
       true
     )
 
-    window.addEventListener('scroll', replace, { passive: true })
-    // Изменение окна — сразу, без ожидания кадра: кадр у окна, которое
-    // тянут за край, приходит не всегда, а кольцо должно стоять на коде.
-    window.addEventListener('resize', place, { passive: true })
+    let settle = 0
+    window.addEventListener(
+      'scroll',
+      () => {
+        replace()
+        // Прокрутили — на экране новое; смотрим, когда прокрутка остановится.
+        clearTimeout(settle)
+        settle = window.setTimeout(() => lookSoon(0), 500)
+      },
+      { passive: true }
+    )
+    // Изменение окна — сразу, без ожидания кадра: кадр у окна, которое тянут
+    // за край, приходит не всегда, а кольцо должно стоять на коде.
+    window.addEventListener(
+      'resize',
+      () => {
+        place()
+        clearTimeout(settle)
+        settle = window.setTimeout(() => lookSoon(0), 500)
+      },
+      { passive: true }
+    )
     // Страница двигает код и сама: сверху догрузилась картинка, раскрылся
     // блок. Ни прокрутки, ни изменения окна при этом нет.
     const layout = new ResizeObserver(replace)
     const watchLayout = () => layout.observe(document.body ?? document.documentElement)
     if (document.body) watchLayout()
     else document.addEventListener('DOMContentLoaded', watchLayout, { once: true })
+
+    // Во весь экран и обратно — отметки переезжают туда, где их видно.
+    document.addEventListener('fullscreenchange', () => {
+      for (const code of codes) host().appendChild(code.ring)
+      if (card) host().appendChild(card)
+      place()
+      lookSoon(300)
+    })
+    // Вернулись на вкладку — на ней могло смениться что угодно.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') lookSoon(300)
+    })
+
     // Уходя со страницы — уходим совсем: отметки привязаны к этому документу.
     window.addEventListener('pagehide', () => {
       closeCard()
-      for (const halo of marks.values()) halo.remove()
-      marks.clear()
+      for (const code of codes) code.ring.remove()
     })
   }
 }
