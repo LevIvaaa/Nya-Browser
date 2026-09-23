@@ -2588,13 +2588,34 @@ export class BrowserWindow {
    */
   handleScroll(webContentsId: number, y: number) {
     const tab = this.tabs.find((t) => t.wc?.id === webContentsId)
-    if (tab) tab.scrollY = y
+    if (!tab) return
+    tab.scrollY = y
+    this.persistSoon()
   }
 
   /** То же самое, но про наши собственные страницы: их прокручивает интерфейс. */
   noteTabScroll(id: number, y: number) {
     const tab = this.tabs.find((t) => t.id === id)
-    if (tab) tab.scrollY = Math.max(0, y)
+    if (!tab) return
+    tab.scrollY = Math.max(0, y)
+    this.persistSoon()
+  }
+
+  /**
+   * Записать сессию, когда прокрутка успокоится.
+   *
+   * При закрытии браузера сессия пишется и так. Но браузер закрывают не
+   * только кнопкой: его выключают вместе с компьютером, у него кончается
+   * память, он падает. Тогда место, до которого дочитали, пропало бы с
+   * последнего перехода по ссылке — а ради этого места всё и затевалось.
+   */
+  private persistTimer: NodeJS.Timeout | null = null
+  private persistSoon() {
+    if (this.persistTimer) clearTimeout(this.persistTimer)
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = null
+      this.persistSession()
+    }, 2500)
   }
 
   handleLanguage(webContentsId: number, code: string) {
@@ -4334,6 +4355,7 @@ export class BrowserWindow {
   }
 
   dispose() {
+    if (this.persistTimer) clearTimeout(this.persistTimer)
     if (this.sleepTimer) clearInterval(this.sleepTimer)
     if (this.edgeTimer) clearInterval(this.edgeTimer)
     this.persistSession()

@@ -2114,18 +2114,45 @@ if (httpOrigin) {
     }, 120)
   }
 
+  /** Насколько два прямоугольника на экране — одно и то же место. */
+  const overlap = (
+    a: { left: number; top: number; width: number; height: number },
+    b: { left: number; top: number; width: number; height: number }
+  ) => {
+    const w = Math.min(a.left + a.width, b.left + b.width) - Math.max(a.left, b.left)
+    const h = Math.min(a.top + a.height, b.top + b.height) - Math.max(a.top, b.top)
+    if (w <= 0 || h <= 0) return 0
+    return (w * h) / Math.min(a.width * a.height, b.width * b.height)
+  }
+
   /** Новый код — или тот же самый, найденный ещё раз. */
   const adopt = (text: string, anchor: Element, part: Part | null, live: boolean) => {
+    const probe: Code = {
+      text,
+      anchor,
+      part,
+      live,
+      missed: 0,
+      hushed: false,
+      ring: document.documentElement
+    }
+    const here = rectOf(probe)
+    // Тот же текст на том же месте — тот же код, даже если в этот раз его
+    // нашли через другой элемент.
     const same = codes.find(
       (code) =>
         code.text === text &&
-        code.anchor === anchor &&
-        (!part || !code.part || Math.abs(code.part.x - part.x) < 0.25)
+        ((code.anchor === anchor &&
+          (!part || !code.part || Math.abs(code.part.x - part.x) < 0.25)) ||
+          overlap(rectOf(code), here) > 0.5)
     )
     if (same) {
       const back = same.missed > 0
       same.missed = 0
-      if (part) same.part = part
+      // Код, прочитанный из самой картинки, обводится по картинке — ровным
+      // квадратом, а не по углам, которые нашёл снимок экрана.
+      if (!part && same.anchor === anchor) same.part = null
+      else if (part && (same.part || same.anchor !== anchor)) same.part = part
       // Код вернулся в кадр — карточка возвращается с ним, если на экране нет
       // другой.
       if (back && !card) openCard(same)
@@ -2235,15 +2262,68 @@ if (httpOrigin) {
   }
 
   /**
+   * Всё на экране, что может оказаться кодом, — в пикселях страницы.
+   *
+   * Слепо резать весь экран на плитки мало: когда коды стоят тесно, в любую
+   * плитку попадает несколько, и не читается ни один. А страница сама знает,
+   * где у неё рисунки: векторные, фоновые, холсты, видео, чужие фреймы. Их и
+   * смотрят первыми, каждый по отдельности.
+   */
+  const candidates = (): { node: Element; area: Part }[] => {
+    const out: { node: Element; area: Part }[] = []
+    const seen = new Set<Element>()
+    const add = (node: Element) => {
+      if (seen.has(node) || out.length >= 24) return
+      seen.add(node)
+      const r = node.getBoundingClientRect()
+      if (r.width < 56 || r.height < 56) return
+      if (r.bottom <= 0 || r.top >= window.innerHeight || r.right <= 0 || r.left >= window.innerWidth) {
+        return
+      }
+      // Видео и фреймы бывают любой формы; остальное должно быть похоже на
+      // квадрат, иначе это баннер, а не код.
+      const free = node instanceof HTMLVideoElement || node instanceof HTMLIFrameElement
+      const ratio = r.width / r.height
+      if (!free && (ratio < 0.6 || ratio > 1.7)) return
+      const x = Math.max(0, r.left)
+      const y = Math.max(0, r.top)
+      out.push({
+        node,
+        area: {
+          x,
+          y,
+          w: Math.min(window.innerWidth, r.right) - x,
+          h: Math.min(window.innerHeight, r.bottom) - y
+        }
+      })
+    }
+    for (const node of document.querySelectorAll('svg, video, iframe, canvas, object, embed')) {
+      add(node)
+    }
+    // Фоновые картинки видно только по вычисленному стилю. Смотрим не
+    // больше нескольких тысяч элементов: на огромных страницах дальше
+    // экрана всё равно ничего не видно.
+    const all = document.body ? document.body.getElementsByTagName('*') : null
+    for (let i = 0; all && i < all.length && i < 4000; i++) {
+      const node = all[i]
+      if (node.tagName.indexOf('NYA-') === 0) continue
+      const bg = getComputedStyle(node).backgroundImage
+      if (bg && bg !== 'none' && bg.indexOf('url(') !== -1) add(node)
+    }
+    return out
+  }
+
+  /**
    * Один просмотр отрисованной страницы.
    *
    * `onlyVideos` — пока идёт ролик, смотреть незачем на всё: стоящее на
-   * месте уже осмотрено, а меняется только кадр. Так просмотр раз в две
-   * секунды стоит в несколько раз дешевле.
+   * месте уже осмотрено, а меняется только кадр. Так просмотр раз в секунду
+   * стоит в десятки раз дешевле полного.
    */
   const lookAtScreen = async (onlyVideos = false) => {
     if (looking || document.visibilityState !== 'visible') return
-    const areas = onlyVideos ? videoAreas() : []
+    const near = onlyVideos ? [] : candidates()
+    const areas = onlyVideos ? videoAreas() : near.map((one) => one.area)
     if (onlyVideos && areas.length === 0) return
     looking = true
     lastLook = Date.now()
@@ -2252,7 +2332,8 @@ if (httpOrigin) {
         await ipcRenderer.invoke('qr:look', {
           width: window.innerWidth,
           height: window.innerHeight,
-          areas
+          areas,
+          frames: onlyVideos
         })
 
       const seenLive = new Set<Code>()
@@ -2270,7 +2351,21 @@ if (httpOrigin) {
         if (twin) continue
 
         const video = videoAt(cx, cy)
-        const anchor = video ?? ownerAt(cx, cy)
+        // Хозяин кода — тот из присланных элементов, в котором он лежит, и
+        // самый маленький из них. Не «самый глубокий под точкой»: внутри
+        // векторного рисунка это то path, то rect, и один и тот же код
+        // заводился бы заново при каждом просмотре.
+        let owner: Element | null = null
+        let smallest = Infinity
+        for (const one of near) {
+          const a = one.area
+          const inside = cx >= a.x && cx <= a.x + a.w && cy >= a.y && cy <= a.y + a.h
+          if (inside && a.w * a.h < smallest) {
+            smallest = a.w * a.h
+            owner = one.node
+          }
+        }
+        const anchor = video ?? owner ?? ownerAt(cx, cy)
         if (!anchor) continue
         const r = anchor.getBoundingClientRect()
         if (r.width < 1 || r.height < 1) continue

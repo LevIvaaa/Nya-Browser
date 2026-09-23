@@ -16,7 +16,19 @@ import { parentPort } from 'node:worker_threads'
 import jsQR from 'jsqr'
 
 type Area = { x: number; y: number; w: number; h: number }
-type Ask = { id: number; data: ArrayBuffer; width: number; height: number; areas?: Area[] }
+type Ask = {
+  id: number
+  data: ArrayBuffer
+  width: number
+  height: number
+  /** Где искать в первую очередь. */
+  areas?: Area[]
+  /**
+   * `frames` — кадры идущих видео: одним уменьшенным проходом.
+   * `areas` — элементы, похожие на код: каждый отдельно, потом весь экран.
+   */
+  mode?: 'frames' | 'areas'
+}
 type Found = { text: string; x: number; y: number; w: number; h: number }
 
 /**
@@ -26,7 +38,7 @@ type Found = { text: string; x: number; y: number; w: number; h: number }
  */
 const tilesFor = (long: number) => [Math.min(640, Math.max(380, Math.round(long / 2.2))), 1280]
 
-parentPort?.on('message', ({ id, data, width, height, areas }: Ask) => {
+parentPort?.on('message', ({ id, data, width, height, areas, mode }: Ask) => {
   const found: Found[] = []
   try {
     const pixels = new Uint8ClampedArray(data)
@@ -173,9 +185,25 @@ parentPort?.on('message', ({ id, data, width, height, areas }: Ask) => {
       found.push({ text: code.data, x: left, y: top, w: right - left, h: bottom - top })
     }
 
-    if (areas && areas.length > 0) {
-      for (const area of areas.slice(0, 6)) frame(area.x, area.y, area.w, area.h)
+    if (mode === 'frames') {
+      for (const area of (areas ?? []).slice(0, 6)) frame(area.x, area.y, area.w, area.h)
     } else {
+      // Сначала — то, что страница сама считает похожим на код: векторный
+      // рисунок, фон блока, фрейм, холст. Каждый отдельно, с полем вокруг,
+      // чтобы тихая зона кода не срезалась. Плотную сетку из четырёх кодов
+      // слепая нарезка не читает — в любую плитку попадают сразу несколько.
+      for (const area of (areas ?? []).slice(0, 24)) {
+        const pad = Math.max(10, Math.min(area.w, area.h) * 0.08)
+        const x = area.x - pad
+        const y = area.y - pad
+        const w = area.w + pad * 2
+        const h = area.h + pad * 2
+        if (Math.max(w, h) > 1400) region(x, y, w, h)
+        else scan(x, y, w, h)
+      }
+      // Потом весь экран — для кодов, которых в разметке не видно вовсе:
+      // собранных из ячеек, нарисованных внутри чужого холста. Найденное выше
+      // уже закрашено и второй раз не мешает.
       region(0, 0, width, height)
     }
   } catch {

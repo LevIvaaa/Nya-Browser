@@ -66,7 +66,8 @@ function decoder(): Worker {
 export async function codesOnScreen(
   wc: WebContents,
   view: { width: number; height: number },
-  areas: { x: number; y: number; w: number; h: number }[] = []
+  areas: { x: number; y: number; w: number; h: number }[] = [],
+  mode: 'frames' | 'areas' = 'areas'
 ): Promise<ScreenCode[]> {
   if (wc.isDestroyed() || view.width < 50 || view.height < 50) return []
   const shot = await wc.capturePage()
@@ -92,7 +93,7 @@ export async function codesOnScreen(
     const sy = size.height / view.height
     const inImage = areas.map((a) => ({ x: a.x * sx, y: a.y * sy, w: a.w * sx, h: a.h * sy }))
     decoder().postMessage(
-      { id, data, width: size.width, height: size.height, areas: inImage },
+      { id, data, width: size.width, height: size.height, areas: inImage, mode },
       [data]
     )
     // Поток, который не ответил, не должен держать страницу в ожидании.

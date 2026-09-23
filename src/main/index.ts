@@ -684,17 +684,22 @@ function registerIpc() {
   // Коды, которые видно на странице, но которых нет в ней картинкой: кадр
   // видео, векторный рисунок, фон, чужой фрейм. См. qrscan.ts.
   ipcMain.handle('qr:look', (event, view: unknown) => {
-    const ask = (view ?? {}) as { width?: unknown; height?: unknown; areas?: unknown }
-    // Где смотреть: пусто — весь экран; иначе только эти прямоугольники
-    // (кадры идущих видео — там код меняется, а остальное стоит на месте).
+    const ask = (view ?? {}) as { width?: unknown; height?: unknown; areas?: unknown; frames?: unknown }
+    // Где смотреть: кадры идущих видео — только их; иначе сначала элементы,
+    // похожие на код, потом весь экран.
     const areas = (Array.isArray(ask.areas) ? ask.areas : [])
-      .slice(0, 6)
+      .slice(0, 24)
       .map((a) => {
         const r = (a ?? {}) as Record<string, unknown>
         return { x: num(r.x), y: num(r.y), w: num(r.w), h: num(r.h) }
       })
       .filter((a) => a.w > 20 && a.h > 20)
-    return codesOnScreen(event.sender, { width: num(ask.width), height: num(ask.height) }, areas)
+    return codesOnScreen(
+      event.sender,
+      { width: num(ask.width), height: num(ask.height) },
+      areas,
+      ask.frames === true ? 'frames' : 'areas'
+    )
   })
 
   ipcMain.on('qr:copy', (event, text: unknown) => {
