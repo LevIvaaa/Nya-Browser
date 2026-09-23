@@ -19,8 +19,12 @@ type Area = { x: number; y: number; w: number; h: number }
 type Ask = { id: number; data: ArrayBuffer; width: number; height: number; areas?: Area[] }
 type Found = { text: string; x: number; y: number; w: number; h: number }
 
-/** Плитки двух размеров: под обычный код на странице и под крупный. */
-const TILES = [640, 1280]
+/**
+ * Размеры плиток: под обычный код на странице и под крупный. Мелкая плитка
+ * подстраивается под окно — в узком окне коды стоят теснее, и плитка в
+ * 640 точек захватывала бы сразу два.
+ */
+const tilesFor = (long: number) => [Math.min(640, Math.max(380, Math.round(long / 2.2))), 1280]
 
 parentPort?.on('message', ({ id, data, width, height, areas }: Ask) => {
   const found: Found[] = []
@@ -68,12 +72,31 @@ parentPort?.on('message', ({ id, data, width, height, areas }: Ask) => {
           Math.abs(one.y + one.h / 2 - cy) < (bottom - top) / 2
       )
       if (!twin) found.push({ text: code.data, x: left, y: top, w: right - left, h: bottom - top })
+
+      // Найденный код закрашивается на самом снимке. Иначе соседняя плитка,
+      // куда попал его край с угловой меткой, собирала бы метки от двух
+      // кодов сразу и не читала ни одного.
+      const pad = Math.max(6, (right - left) * 0.1)
+      const mx0 = Math.max(0, Math.floor(left - pad))
+      const my0 = Math.max(0, Math.floor(top - pad))
+      const mx1 = Math.min(width, Math.ceil(right + pad))
+      const my1 = Math.min(height, Math.ceil(bottom + pad))
+      for (let y = my0; y < my1; y++) pixels.fill(255, (y * width + mx0) * 4, (y * width + mx1) * 4)
     }
 
-    /** Прямоугольник целиком, если он невелик, и плитками — если велик. */
+    /**
+     * Прямоугольник целиком, потом плитками.
+     *
+     * Целиком — потому что один код на экране встречается чаще всего и
+     * читается одним проходом. Плитками — потому что двух кодов в одном
+     * проходе jsQR не прочтёт. Найденное целиком уже закрашено, и плитки его
+     * второй раз не найдут.
+     */
     const region = (x: number, y: number, w: number, h: number) => {
-      if (Math.max(w, h) <= 900) return scan(x, y, w, h)
-      for (const size of TILES) {
+      const long = Math.max(w, h)
+      if (long <= 1400) scan(x, y, w, h)
+      if (long <= tilesFor(long)[0]) return
+      for (const size of tilesFor(long)) {
         if (size > Math.max(w, h) * 1.2) continue
         const step = size / 2
         for (let ty = y; ty < y + h; ty += step) {
