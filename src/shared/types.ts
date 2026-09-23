@@ -527,6 +527,8 @@ export interface TabState {
   canGoForward: boolean
   active: boolean
   hasContent: boolean
+  /** докуда страница прокручена; наши собственные страницы прокручивает интерфейс */
+  scrollY: number
   /** the page is showing a translation of itself right now */
   translated: boolean
   /**
@@ -717,6 +719,8 @@ export interface UpdateState {
     | 'available'
     | 'downloading'
     | 'ready'
+    /** пакет ставится системой; на Windows этой ступени нет */
+    | 'installing'
     | 'error'
     | 'unsupported'
   /** the version running now */
@@ -729,6 +733,11 @@ export interface UpdateState {
    * button that would download into a directory dpkg owns.
    */
   manual?: boolean
+  /**
+   * Обновление ставит система: пакет проходит через её менеджер, и он же
+   * спрашивает пароль. Так устроен Linux; на Windows этого поля нет.
+   */
+  managed?: boolean
   /** download progress, 0-100 */
   percent: number
   /** size of the update in bytes, known as soon as it is found */

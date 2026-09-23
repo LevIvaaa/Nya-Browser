@@ -28,9 +28,11 @@ export default function UpdateCard({
   const heading =
     state.stage === 'downloading'
       ? t('Загружаем обновление')
-      : state.stage === 'ready'
-        ? t('Обновление готово')
-        : t('Доступно обновление')
+      : state.stage === 'installing'
+        ? t('Устанавливаем обновление')
+        : state.stage === 'ready'
+          ? t('Обновление готово')
+          : t('Доступно обновление')
 
   return (
     // Further in than a menu: this one arrives on its own, and a card flush
@@ -84,13 +86,23 @@ export default function UpdateCard({
         <div className="text-sm text-dim">
           {state.stage === 'downloading'
             ? t('Качаем в фоне — можно работать дальше. Скажем, когда будет готово.')
-            : state.stage === 'ready'
-              ? t('Браузер закроется, обновится и откроется снова. Вкладки восстановятся.')
-              : t('Загрузить сейчас? Скачаем в фоне, работать не помешает.')}
+            : state.stage === 'installing'
+              ? t('Система спросит пароль — это она ставит пакет. Дальше браузер откроется сам.')
+              : state.stage === 'ready'
+                ? // Пакет ставит система, и пароль спрашивает она. Обещать,
+                  // что всё пройдёт само, здесь было бы неправдой.
+                  state.managed
+                  ? t('Система спросит пароль и поставит пакет, потом браузер откроется снова. Вкладки восстановятся.')
+                  : t('Браузер закроется, обновится и откроется снова. Вкладки восстановятся.')
+                : t('Загрузить сейчас? Скачаем в фоне, работать не помешает.')}
         </div>
 
         <div className="flex gap-2">
-          {state.stage === 'ready' ? (
+          {state.stage === 'installing' ? (
+            <button className="btn flex-1" disabled>
+              {t('Устанавливаем…')}
+            </button>
+          ) : state.stage === 'ready' ? (
             <button
               className="btn btn-primary flex-1"
               onClick={() => void window.browser.installUpdate()}
@@ -109,7 +121,7 @@ export default function UpdateCard({
               {t('Загрузить')}
             </button>
           )}
-          {state.stage !== 'downloading' && (
+          {state.stage !== 'downloading' && state.stage !== 'installing' && (
             <button className="btn" onClick={onClose}>
               {t('Позже')}
             </button>

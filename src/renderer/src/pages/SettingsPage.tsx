@@ -149,7 +149,17 @@ function updateHint(state: UpdateState | null): string {
     case 'downloading':
       return t('Скачиваем {v} — {p}%', { v: state.available ?? '', p: state.percent })
     case 'ready':
-      return t('Версия {v} загружена и установится при перезапуске', { v: state.available ?? '' })
+      // Пакет ставит система, и пароль спрашивает она же — обещать тихую
+      // установку при перезапуске здесь было бы неправдой.
+      return state.managed
+        ? t('Версия {v} загружена — система спросит пароль и поставит её', {
+            v: state.available ?? ''
+          })
+        : t('Версия {v} загружена и установится при перезапуске', { v: state.available ?? '' })
+    case 'installing':
+      return t('Ставим версию {v} — подтвердите установку в окне системы', {
+        v: state.available ?? ''
+      })
     case 'current':
       return t('Установлена последняя версия')
     case 'error':
@@ -1121,9 +1131,15 @@ export default function SettingsPage({
                   title={t('Установлена версия {v}', { v: info?.version ?? '—' })}
                   hint={updateHint(update)}
                 >
-                  {update?.stage === 'ready' ? (
+                  {update?.stage === 'installing' ? (
+                    /* Ставит система, и спрашивает пароль тоже она: своего
+                       окна поверх системного здесь быть не должно. */
+                    <button className="btn" disabled>
+                      {t('Устанавливаем…')}
+                    </button>
+                  ) : update?.stage === 'ready' ? (
                     <button className="btn btn-primary" onClick={() => window.browser.installUpdate()}>
-                      {t('Перезапустить и обновить')}
+                      {update.managed ? t('Установить') : t('Перезапустить и обновить')}
                     </button>
                   ) : update?.stage === 'available' && update.manual ? (
                     <button

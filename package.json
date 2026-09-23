@@ -1,6 +1,6 @@
 {
   "name": "nya-browser",
-  "version": "1.0.9",
+  "version": "1.1.0",
   "description": "Nya Browser — быстрый и приватный браузер на Electron с вертикальными вкладками, автоскрытием интерфейса и встроенной блокировкой рекламы",
   "main": "./out/main/index.js",
   "author": "Nya",
@@ -173,6 +173,7 @@
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
+    "jsqr": "^1.4.0",
     "electron-updater": "^6.8.9",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

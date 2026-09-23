@@ -15,11 +15,97 @@ const DownloadsPage = lazy(() => import('./pages/DownloadsPage'))
 const BookmarksPage = lazy(() => import('./pages/BookmarksPage'))
 const PasswordsPage = lazy(() => import('./pages/PasswordsPage'))
 import ErrorPage from './pages/ErrorPage'
-import type { UpdateState } from '../../shared/types'
+import type { TabState, UpdateState } from '../../shared/types'
 import SplitDivider from './components/SplitDivider'
 
 type View = 'page' | 'settings' | 'history' | 'downloads' | 'bookmarks' | 'passwords'
 type Overlay = 'menu' | 'profiles' | 'update' | null
+
+/**
+ * Внутренняя страница как вкладка — вместе с тем, докуда её прокрутили.
+ *
+ * Сайт помнит своё место сам: там есть страница, которой можно об этом
+ * сказать. Настройки, история и закладки живут в интерфейсе, и место их
+ * прокрутки не знает никто, кроме этого окна, — поэтому оно записывается
+ * здесь и здесь же возвращается.
+ *
+ * Прокручивается не сама панель, а то, что внутри неё: у каждой страницы своя
+ * область прокрутки. События прокрутки не всплывают, но перехватываются на
+ * пути вниз, — так панель слышит любую из них, не зная про её устройство.
+ */
+function InternalPane({
+  tab,
+  active,
+  children
+}: {
+  tab: TabState
+  active: boolean
+  children: React.ReactNode
+}) {
+  const box = useRef<HTMLDivElement | null>(null)
+  // Место, с которым открылась вкладка. Дальше вкладка живёт своей жизнью, и
+  // новые сведения из главного процесса её не дёргают.
+  const wanted = useRef(tab.scrollY)
+  const restored = useRef(false)
+
+  useEffect(() => {
+    const pane = box.current
+    if (!pane) return
+    let waiting = false
+    const tell = (event: Event) => {
+      const target = event.target as HTMLElement | null
+      if (!target || typeof target.scrollTop !== 'number' || waiting) return
+      waiting = true
+      // Прокрутка приходит потоком; браузеру нужно положение, а не путь.
+      setTimeout(() => {
+        waiting = false
+        void window.browser.notePageScroll(tab.id, Math.round(target.scrollTop))
+      }, 400)
+    }
+    pane.addEventListener('scroll', tell, true)
+    return () => pane.removeEventListener('scroll', tell, true)
+  }, [tab.id])
+
+  // Скрытую панель прокрутить нельзя: у display:none нет высоты. Поэтому
+  // возвращение на место ждёт, пока вкладку покажут, и происходит один раз.
+  useEffect(() => {
+    if (!active || restored.current || wanted.current <= 0) return
+    let tries = 0
+    const reach = () => {
+      const pane = box.current
+      if (!pane) return
+      const scrollable = [...pane.querySelectorAll<HTMLElement>('*')].find(
+        (node) => node.scrollHeight > node.clientHeight + 8
+      )
+      if (scrollable) {
+        scrollable.scrollTop = wanted.current
+        if (Math.abs(scrollable.scrollTop - wanted.current) < 4) {
+          restored.current = true
+          return
+        }
+      }
+      // Страницы приезжают отдельными кусками и дорисовываются; пары секунд
+      // хватает, а дальше человек уже листает сам, и мешать ему нельзя.
+      if (++tries < 8) setTimeout(reach, 250)
+      else restored.current = true
+    }
+    reach()
+  }, [active])
+
+  return (
+    <div
+      ref={box}
+      // Hidden is display:none, and an animation on something that was
+      // display:none starts over when it is shown — so this is an entrance
+      // every time the tab is come back to, without remounting the page and
+      // losing where it was scrolled to.
+      className="animate-fade-up absolute inset-0"
+      hidden={!active}
+    >
+      {children}
+    </div>
+  )
+}
 
 export default function App() {
   const state = useBrowser()
@@ -355,15 +441,7 @@ export default function App() {
             {tabs
               .filter((tab) => tab.internal)
               .map((tab) => (
-                <div
-                  key={tab.id}
-                  // Hidden is display:none, and an animation on something that
-                  // was display:none starts over when it is shown — so this is
-                  // an entrance every time the tab is come back to, without
-                  // remounting the page and losing where it was scrolled to.
-                  className="animate-fade-up absolute inset-0"
-                  hidden={tab.id !== active?.id}
-                >
+                <InternalPane key={tab.id} tab={tab} active={tab.id === active?.id}>
                   {/* Each of these arrives as its own chunk the first time it
                       is opened; the fallback is a beat of empty page, which is
                       what the tab looks like anyway before it paints. */}
@@ -388,7 +466,7 @@ export default function App() {
                   )}
                   {tab.internal === 'passwords' && <PasswordsPage />}
                   </Suspense>
-                </div>
+                </InternalPane>
               ))}
           </div>
 

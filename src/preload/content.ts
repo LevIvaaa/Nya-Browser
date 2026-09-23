@@ -1,5 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { Readability, isProbablyReaderable } from '@mozilla/readability'
+import jsQR from 'jsqr'
+
+/** Подписи кнопок под найденным кодом: перевод живёт в главном процессе. */
+const qrWords = { open: 'Открыть', copy: 'Копировать' }
+ipcRenderer.on('qr:words', (_event, words: { open?: string; copy?: string }) => {
+  if (words?.open) qrWords.open = words.open
+  if (words?.copy) qrWords.copy = words.copy
+})
 
 /**
  * Autofill content script.
@@ -1555,5 +1563,544 @@ if (httpOrigin) {
     } catch {
       fromOutside()
     }
+  }
+}
+
+/* ==========================================================================
+   Перевод выделенного — пузырьком под словами
+   ========================================================================== */
+
+/**
+ * Перевести пару строк, не трогая страницу.
+ *
+ * Перевод всей страницы возвращает её другой: вёрстка едет, место прокрутки
+ * теряется, а половина сайтов после этого просто ломается. Ради одного
+ * предложения это слишком. Здесь страница остаётся как была, а перевод
+ * появляется прямо под выделением — там, где на него и смотрят.
+ */
+{
+  let bubble: HTMLElement | null = null
+
+  const hideBubble = () => {
+    bubble?.remove()
+    bubble = null
+  }
+
+  /** Пузырёк под последней строкой выделения, а не под курсором. */
+  const showBubble = (text: string, waiting: boolean) => {
+    hideBubble()
+    const selection = window.getSelection()
+    const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
+    const rects = range ? [...range.getClientRects()] : []
+    const last = rects[rects.length - 1]
+    if (!last) return
+
+    const box = document.createElement('nya-translation')
+    box.textContent = text
+    box.setAttribute(
+      'style',
+      [
+        'position: fixed',
+        'left: ' + Math.max(8, Math.min(last.left, window.innerWidth - 340)) + 'px',
+        'top: ' + Math.min(last.bottom + 8, window.innerHeight - 80) + 'px',
+        'max-width: 320px',
+        'z-index: 2147483646',
+        'padding: 9px 12px',
+        'border-radius: 11px',
+        'background: rgba(22, 23, 30, 0.97)',
+        'color: #f2f3f7',
+        'font: 14px/1.45 system-ui, sans-serif',
+        'box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.6)',
+        'white-space: pre-wrap',
+        'opacity: ' + (waiting ? '0.6' : '1'),
+        'pointer-events: none'
+      ].join(';')
+    )
+    document.documentElement.appendChild(box)
+    bubble = box
+  }
+
+  ipcRenderer.on('selection:translating', () => showBubble('…', true))
+  ipcRenderer.on('selection:translation', (_event, text: string) =>
+    showBubble(String(text ?? ''), false)
+  )
+
+  // Уходит от любого движения: пузырёк поверх текста мешает читать тот самый
+  // текст, ради которого он появился.
+  for (const name of ['scroll', 'pointerdown', 'keydown']) {
+    window.addEventListener(name, hideBubble, { passive: true, capture: true })
+  }
+}
+
+/* ==========================================================================
+   Глазок в поле пароля
+   ========================================================================== */
+
+/**
+ * Показать пароль, который вводишь.
+ *
+ * Сайты рисуют такую кнопку через раз, а без неё длинный пароль набирают
+ * вслепую и ошибаются — особенно тот, что сгенерирован и состоит из
+ * случайных знаков.
+ *
+ * Кнопка живёт рядом с полем, а не внутри него: класть что-то внутрь чужого
+ * поля значит менять его разметку, а на этом ломаются сайты, которые за
+ * своей разметкой следят.
+ */
+{
+  const EYE =
+    'M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z M12 14.6a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2Z'
+  const EYE_OFF =
+    'M4 4l16 16 M10.7 10.8a2.6 2.6 0 0 0 3.5 3.5 M6.5 6.7C3.9 8.4 2 12 2 12s3.6 6.5 10 6.5c1.7 0 3.2-.5 4.5-1.1'
+
+  const eyed = new WeakSet<HTMLInputElement>()
+
+  const eyeSvg = (open: boolean) =>
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="' +
+    (open ? EYE_OFF : EYE) +
+    '"/></svg>'
+
+  const addEye = (field: HTMLInputElement) => {
+    if (eyed.has(field)) return
+    // Спрятанные поля и одноразовые коды из шести клеточек кнопкой не
+    // снабжаем: в первых нечего показывать, вторые слишком узкие.
+    if (field.type !== 'password' || field.offsetParent === null) return
+    if (field.getBoundingClientRect().width < 90) return
+    eyed.add(field)
+
+    const eye = document.createElement('nya-eye')
+    eye.innerHTML = eyeSvg(false)
+    eye.setAttribute('role', 'button')
+    eye.setAttribute(
+      'style',
+      [
+        'position: absolute',
+        'z-index: 2147483000',
+        'width: 26px',
+        'height: 26px',
+        'display: grid',
+        'place-items: center',
+        'border-radius: 7px',
+        'cursor: pointer',
+        'color: rgba(120, 124, 140, 0.9)'
+      ].join(';')
+    )
+
+    const place = () => {
+      const r = field.getBoundingClientRect()
+      if (r.width === 0) return
+      eye.style.left = window.scrollX + r.right - 32 + 'px'
+      eye.style.top = window.scrollY + r.top + (r.height - 26) / 2 + 'px'
+    }
+
+    eye.addEventListener('pointerdown', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      const open = field.type === 'text'
+      field.type = open ? 'password' : 'text'
+      eye.innerHTML = eyeSvg(!open)
+      field.focus()
+    })
+
+    document.body.appendChild(eye)
+    place()
+
+    // Поле переезжает: страница раскрылась, окно изменили, выше что-то
+    // дорисовалось.
+    const watch = new ResizeObserver(place)
+    watch.observe(field)
+    window.addEventListener('scroll', place, { passive: true })
+    window.addEventListener('resize', place, { passive: true })
+
+    // Поле убрали со страницы — убираем и кнопку, иначе она повиснет.
+    const gone = new MutationObserver(() => {
+      if (!field.isConnected) {
+        eye.remove()
+        watch.disconnect()
+        gone.disconnect()
+      }
+    })
+    gone.observe(document.body, { childList: true, subtree: true })
+  }
+
+  const sweepEyes = () => {
+    const fields = document.querySelectorAll('input[type="password"]')
+    for (let i = 0; i < fields.length; i++) addEye(fields[i] as HTMLInputElement)
+  }
+
+  if (isTop) {
+    const startEyes = () => {
+      sweepEyes()
+      // Форма входа почти всегда дорисовывается позже самой страницы.
+      new MutationObserver(() => sweepEyes()).observe(document.documentElement, {
+        childList: true,
+        subtree: true
+      })
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', startEyes, { once: true })
+    } else {
+      startEyes()
+    }
+  }
+}
+
+/* ==========================================================================
+   Перемотка видео стрелками
+   ========================================================================== */
+
+/**
+ * Стрелки перематывают видео, какой бы плеер его ни показывал.
+ *
+ * Свой плеер есть у каждого второго сайта, и половина из них про клавиатуру
+ * не слышала: перемотка только мышью, целясь в полоску в четыре пикселя.
+ * Браузер знает про video больше, чем страница рассказывает, и может
+ * перематывать его сам.
+ *
+ * Не трогаем, когда человек печатает: в поле ввода стрелка — это стрелка.
+ */
+{
+  const STEP = 5
+  const BIG_STEP = 30
+
+  const isTyping = () => {
+    const at = document.activeElement as HTMLElement | null
+    if (!at) return false
+    if (at.isContentEditable) return true
+    const tag = at.tagName
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+  }
+
+  /** Видео, которое сейчас смотрят: играющее, иначе самое большое. */
+  const watched = (): HTMLVideoElement | null => {
+    const all = Array.prototype.slice.call(
+      document.querySelectorAll('video')
+    ) as HTMLVideoElement[]
+    if (all.length === 0) return null
+    for (const one of all) {
+      if (!one.paused && !one.ended && one.readyState > 2) return one
+    }
+    all.sort((a, b) => b.clientWidth * b.clientHeight - a.clientWidth * a.clientHeight)
+    return all[0] ?? null
+  }
+
+  /** Короткая подсказка: без неё перемотку на пять секунд не заметить. */
+  let seekHint: HTMLElement | null = null
+  let hideHintAt = 0
+  const saySeek = (text: string) => {
+    if (!seekHint) {
+      seekHint = document.createElement('nya-seek')
+      seekHint.setAttribute(
+        'style',
+        [
+          'position: fixed',
+          'left: 50%',
+          'top: 50%',
+          'transform: translate(-50%, -50%)',
+          'z-index: 2147483646',
+          'padding: 10px 16px',
+          'border-radius: 999px',
+          'background: rgba(12, 13, 18, 0.82)',
+          'color: #fff',
+          'font: 600 15px/1 system-ui, sans-serif',
+          'pointer-events: none',
+          'transition: opacity 180ms linear'
+        ].join(';')
+      )
+      document.documentElement.appendChild(seekHint)
+    }
+    seekHint.textContent = text
+    seekHint.style.opacity = '1'
+    hideHintAt = Date.now() + 700
+    setTimeout(() => {
+      if (seekHint && Date.now() >= hideHintAt) seekHint.style.opacity = '0'
+    }, 750)
+  }
+
+  if (isTop) {
+    window.addEventListener(
+      'keydown',
+      (event) => {
+        if (isTyping() || event.ctrlKey || event.metaKey || event.altKey) return
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+        const video = watched()
+        if (!video || !isFinite(video.duration)) return
+        const step = event.shiftKey ? BIG_STEP : STEP
+        const back = event.key === 'ArrowLeft'
+        video.currentTime = Math.max(
+          0,
+          Math.min(video.duration, video.currentTime + (back ? -step : step))
+        )
+        saySeek((back ? '−' : '+') + step + ' с')
+        event.preventDefault()
+        event.stopPropagation()
+      },
+      true
+    )
+  }
+}
+
+/* ==========================================================================
+   QR-код на странице
+   ========================================================================== */
+
+/**
+ * Браузер читает квадрат сам.
+ *
+ * QR-код на странице — тупик: он сделан для камеры телефона, а камеры здесь
+ * нет. Человек достаёт телефон ради ссылки, которая уже лежит перед ним на
+ * экране.
+ *
+ * Картинки, которые могут быть кодом — достаточно квадратные и достаточно
+ * большие, — осматриваются после того, как страница успокоилась. Найденный
+ * код подсвечивается на своём месте и говорит, что в нём: ссылку можно
+ * открыть или скопировать. Наружу при этом не уходит ничего — читает сама
+ * страница, на этой машине.
+ */
+{
+  let ring: HTMLElement | null = null
+  let card: HTMLElement | null = null
+  const looked = new WeakSet<Element>()
+
+  const clearQr = () => {
+    ring?.remove()
+    card?.remove()
+    ring = null
+    card = null
+  }
+
+  /**
+   * Пиксели картинки — даже когда сайт не даёт прочитать свой холст.
+   *
+   * Картинка с другого сайта «пачкает» холст, и getImageData бросает. Сам
+   * браузер этим ограничением не связан: он забирает байты и отдаёт их сюда.
+   */
+  const pixelsOf = async (
+    node: HTMLImageElement | HTMLCanvasElement
+  ): Promise<ImageData | null> => {
+    const w = node instanceof HTMLImageElement ? node.naturalWidth : node.width
+    const h = node instanceof HTMLImageElement ? node.naturalHeight : node.height
+    if (w < 48 || h < 48 || w > 4000 || h > 4000) return null
+
+    const board = document.createElement('canvas')
+    board.width = w
+    board.height = h
+    const ctx = board.getContext('2d', { willReadFrequently: true })
+    if (!ctx) return null
+
+    try {
+      ctx.drawImage(node, 0, 0, w, h)
+      return ctx.getImageData(0, 0, w, h)
+    } catch {
+      if (!(node instanceof HTMLImageElement) || !node.currentSrc) return null
+      try {
+        const bytes: ArrayBuffer | null = await ipcRenderer.invoke('qr:bytes', node.currentSrc)
+        if (!bytes) return null
+        const url = URL.createObjectURL(new Blob([bytes]))
+        const copy = new Image()
+        await new Promise((done, fail) => {
+          copy.onload = done
+          copy.onerror = fail
+          copy.src = url
+        })
+        board.width = copy.naturalWidth
+        board.height = copy.naturalHeight
+        ctx.drawImage(copy, 0, 0)
+        const out = ctx.getImageData(0, 0, board.width, board.height)
+        URL.revokeObjectURL(url)
+        return out
+      } catch {
+        return null
+      }
+    }
+  }
+
+  /** Кольцо вокруг кода и карточка под ним с тем, что в нём написано. */
+  const showQr = (node: Element, text: string) => {
+    clearQr()
+    const r = node.getBoundingClientRect()
+    if (r.width < 24) return
+
+    const halo = document.createElement('nya-qr-ring')
+    halo.setAttribute(
+      'style',
+      [
+        'position: fixed',
+        'left: ' + (r.left - 5) + 'px',
+        'top: ' + (r.top - 5) + 'px',
+        'width: ' + (r.width + 10) + 'px',
+        'height: ' + (r.height + 10) + 'px',
+        'border: 2px solid #7c6cff',
+        'border-radius: 12px',
+        'box-shadow: 0 0 0 4px rgba(124, 108, 255, 0.16)',
+        'z-index: 2147483644',
+        'pointer-events: none'
+      ].join(';')
+    )
+
+    const box = document.createElement('nya-qr')
+    box.setAttribute(
+      'style',
+      [
+        'position: fixed',
+        'left: ' + Math.max(8, Math.min(r.left, window.innerWidth - 340)) + 'px',
+        'top: ' + Math.min(r.bottom + 12, window.innerHeight - 110) + 'px',
+        'max-width: 320px',
+        'z-index: 2147483645',
+        'padding: 11px 13px',
+        'border-radius: 12px',
+        'background: rgba(22, 23, 30, 0.97)',
+        'color: #f2f3f7',
+        'font: 13px/1.4 system-ui, sans-serif',
+        'box-shadow: 0 14px 34px -10px rgba(0, 0, 0, 0.6)',
+        'word-break: break-all'
+      ].join(';')
+    )
+
+    const line = document.createElement('div')
+    line.textContent = text.length > 160 ? text.slice(0, 160) + '…' : text
+    box.appendChild(line)
+
+    const row = document.createElement('div')
+    row.setAttribute('style', 'display:flex;gap:7px;margin-top:9px')
+
+    const button = (label: string, primary: boolean) => {
+      const b = document.createElement('button')
+      b.textContent = label
+      b.setAttribute(
+        'style',
+        [
+          'height: 28px',
+          'padding: 0 11px',
+          'border: 0',
+          'border-radius: 8px',
+          'cursor: pointer',
+          'font: 600 12px/1 system-ui, sans-serif',
+          primary ? 'background: #7c6cff; color: #fff' : 'background: rgba(255,255,255,0.08); color: #f2f3f7'
+        ].join(';')
+      )
+      return b
+    }
+
+    // Открывать можно только то, что похоже на адрес: код с текстом или с
+    // номером телефона открывать некуда.
+    if (/^(https?:\/\/|www\.)/i.test(text)) {
+      const go = button(qrWords.open, true)
+      go.addEventListener('click', () => {
+        ipcRenderer.send('qr:open', text)
+        clearQr()
+      })
+      row.appendChild(go)
+    }
+
+    const copy = button(qrWords.copy, false)
+    copy.addEventListener('click', () => {
+      ipcRenderer.send('qr:copy', text)
+      clearQr()
+    })
+    row.appendChild(copy)
+    box.appendChild(row)
+
+    document.documentElement.appendChild(halo)
+    document.documentElement.appendChild(box)
+    ring = halo
+    card = box
+  }
+
+  /** Достаточно квадратная и достаточно большая, чтобы быть кодом. */
+  const couldBeCode = (node: HTMLImageElement | HTMLCanvasElement) => {
+    const r = node.getBoundingClientRect()
+    if (r.width < 56 || r.height < 56) return false
+    const ratio = r.width / r.height
+    return ratio > 0.7 && ratio < 1.4
+  }
+
+  const readOne = async (node: HTMLImageElement | HTMLCanvasElement) => {
+    if (looked.has(node) || !couldBeCode(node)) return false
+    looked.add(node)
+    const pixels = await pixelsOf(node)
+    if (!pixels) return false
+    const found = jsQR(pixels.data, pixels.width, pixels.height, {
+      inversionAttempts: 'dontInvert'
+    })
+    if (!found || !found.data) return false
+    showQr(node, found.data)
+    return true
+  }
+
+  /** Один проход по странице: до первого найденного кода. */
+  const sweepQr = async () => {
+    const nodes = document.querySelectorAll('img, canvas')
+    for (let i = 0; i < nodes.length && i < 120; i++) {
+      const node = nodes[i] as HTMLImageElement | HTMLCanvasElement
+      if (node instanceof HTMLImageElement && !node.complete) continue
+      if (await readOne(node)) return
+    }
+  }
+
+  if (isTop) {
+    // Через секунду после загрузки: картинки к этому моменту на месте, а
+    // осматривать весь интернет на каждой перерисовке незачем.
+    window.addEventListener('load', () => {
+      setTimeout(() => void sweepQr(), 1200)
+    })
+    // Прокрутка и уход со страницы убирают подсказку: она привязана к месту.
+    window.addEventListener('scroll', clearQr, { passive: true })
+    window.addEventListener('beforeunload', clearQr)
+  }
+}
+
+/* ==========================================================================
+   Место прокрутки
+   ========================================================================== */
+
+/**
+ * Страница помнит, докуда её прочитали.
+ *
+ * Сессия возвращает вкладки, но возвращает их в начало — и человек, закрывший
+ * браузер на середине длинной статьи или на сотом письме в списке, приходит
+ * обратно на первый экран и ищет своё место заново.
+ *
+ * Здесь страница рассказывает браузеру, докуда её прокрутили, и сама
+ * возвращается на это место, когда её открывают снова. Возвращается не с
+ * первой попытки: в момент загрузки страница почти всегда короче, чем будет
+ * через секунду, и прокрутка на десять тысяч пикселей по короткой странице
+ * не проходит.
+ */
+{
+  if (isTop) {
+    let last = -1
+    let waiting = false
+
+    // Прокрутка приходит десятками событий в секунду; браузеру достаточно
+    // знать положение, а не каждое движение по пути к нему.
+    const tellScroll = () => {
+      if (waiting) return
+      waiting = true
+      setTimeout(() => {
+        waiting = false
+        const y = Math.round(window.scrollY)
+        if (y === last) return
+        last = y
+        ipcRenderer.send('page:scroll', y)
+      }, 400)
+    }
+    window.addEventListener('scroll', tellScroll, { passive: true })
+
+    ipcRenderer.on('page:scroll-to', (_event, y: number) => {
+      const want = Number(y) || 0
+      if (want <= 0) return
+      // Восемь попыток за две секунды: столько живёт дорисовка у тяжёлых
+      // страниц. Как только доехали — перестаём, и дальше страница ничья.
+      let tries = 0
+      const reach = () => {
+        window.scrollTo(0, want)
+        tries++
+        if (Math.abs(window.scrollY - want) < 4 || tries >= 8) return
+        setTimeout(reach, 250)
+      }
+      reach()
+    })
   }
 }

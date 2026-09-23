@@ -114,6 +114,9 @@ const api = {
   /* ---- tabs ---- */
   newTab: (url?: string, background?: boolean): Promise<number> => ipcRenderer.invoke('tab:new', url, background),
   closeTab: (id: number) => ipcRenderer.invoke('tab:close', id),
+  // Наши собственные страницы прокручивает интерфейс, а не страница, и
+  // рассказать об этом браузеру некому, кроме него самого.
+  notePageScroll: (id: number, y: number) => ipcRenderer.send('tab:scroll', id, y),
   closeOthers: (id: number) => ipcRenderer.invoke('tab:close-others', id),
   closeToRight: (id: number) => ipcRenderer.invoke('tab:close-right', id),
   switchTab: (id: number) => ipcRenderer.invoke('tab:switch', id),
@@ -196,6 +199,10 @@ const api = {
   ): Promise<boolean> => ipcRenderer.invoke('media:command', tabId, what, to),
   capture: (kind: 'view' | 'full' | 'area'): Promise<boolean> =>
     ipcRenderer.invoke('nav:capture', kind),
+  /** Снимок по пути в редактор и обратно. */
+  onShot: (cb: (data: string) => void) => on<string>('shot:open', cb),
+  keepShot: (data: string): Promise<boolean> => ipcRenderer.invoke('shot:keep', data),
+  copyShot: (data: string): Promise<boolean> => ipcRenderer.invoke('shot:copy', data),
   addToHome: (): Promise<boolean> => ipcRenderer.invoke('nav:add-to-home'),
 
   /* ---- find ---- */

@@ -1,5 +1,5 @@
 import { t } from './i18n'
-import { app, clipboard, dialog, ipcMain, Menu, nativeTheme, session, shell, type MenuItemConstructorOptions } from 'electron'
+import { app, clipboard, dialog, ipcMain, Menu, nativeTheme, net, session, shell, type MenuItemConstructorOptions } from 'electron'
 import { join } from 'path'
 import { execFile, execFileSync } from 'child_process'
 import { BrowserWindow } from './browser'
@@ -442,6 +442,9 @@ function registerIpc() {
     current(event).newTab(str(url), flag(background))
   )
   ipcMain.handle('tab:close', (event, id: unknown) => current(event).closeTab(num(id)))
+  ipcMain.on('tab:scroll', (event, id: unknown, y: unknown) => {
+    current(event).noteTabScroll(num(id), num(y))
+  })
   ipcMain.handle('tab:close-others', (event, id: unknown) => current(event).closeOthers(num(id)))
   ipcMain.handle('tab:close-right', (event, id: unknown) => current(event).closeToRight(num(id)))
   ipcMain.handle('tab:switch', (event, id: unknown) => current(event).switchTab(num(id)))
@@ -573,6 +576,9 @@ function registerIpc() {
   ipcMain.handle('nav:save-page', (event) => current(event).savePage())
   ipcMain.handle('ui:action', (event, action: unknown) => current(event).requestUiAction(str(action, 32)))
   ipcMain.handle('nav:reader', (event) => current(event).toggleReader())
+  ipcMain.on('page:scroll', (event, y: unknown) => {
+    current(event).handleScroll(event.sender.id, num(y))
+  })
   ipcMain.on('page:language', (event, code: unknown) => {
     current(event).handleLanguage(event.sender.id, str(code, 12).toLowerCase())
   })
@@ -645,6 +651,47 @@ function registerIpc() {
   ipcMain.handle('nav:capture', (event, kind: unknown) =>
     current(event).capture(kind === 'full' ? 'full' : kind === 'area' ? 'area' : 'view')
   )
+  /**
+   * Байты картинки — чтобы прочитать из неё QR-код.
+   *
+   * Страница не может прочитать картинку с чужого сайта: её холст «испачкан».
+   * Браузер этим не связан, поэтому забирает байты сам и отдаёт их странице.
+   */
+  ipcMain.handle('qr:bytes', async (_event, src: unknown) => {
+    const url = String(src ?? '')
+    if (!/^https?:/i.test(url)) return null
+    try {
+      const response = await net.fetch(url)
+      if (!response.ok) return null
+      const type = response.headers.get('content-type') ?? ''
+      if (!/^image\//i.test(type)) return null
+      const buffer = await response.arrayBuffer()
+      // Всё, что больше восьми мегабайт, — не QR-код.
+      return buffer.byteLength <= 8_000_000 ? buffer : null
+    } catch {
+      return null
+    }
+  })
+
+  ipcMain.on('qr:open', (event, text: unknown) => {
+    const raw = String(text ?? '').slice(0, 2048)
+    const url = /^https?:\/\//i.test(raw) ? raw : /^www\./i.test(raw) ? `https://${raw}` : ''
+    if (url) current(event).newTab(url, true)
+  })
+
+  ipcMain.on('qr:copy', (event, text: unknown) => {
+    clipboard.writeText(String(text ?? '').slice(0, 4096))
+    current(event).toast(t('Скопировано'))
+  })
+
+  // Редактор снимка живёт в слое поверх окна и отвечает этими двумя.
+  ipcMain.handle('shot:keep', (event, data: unknown) =>
+    current(event).keepDataUrl(String(data ?? '').slice(0, 40_000_000))
+  )
+  ipcMain.handle('shot:copy', (event, data: unknown) =>
+    current(event).copyDataUrl(String(data ?? '').slice(0, 40_000_000))
+  )
+
   ipcMain.on('capture:area-done', (event, payload: unknown) => {
     const r = (payload ?? {}) as { x?: unknown; y?: unknown; width?: unknown; height?: unknown }
     void current(event).captureArea(event.sender.id, {

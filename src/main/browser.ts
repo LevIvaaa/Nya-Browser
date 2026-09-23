@@ -27,6 +27,7 @@ import { downloads } from './downloads'
 import { attachLog, log } from './log'
 import { looksLikePdf, pdfSource, pdfViewerUrl } from './pdf'
 import { translateBatch } from './translate'
+import { searchByImage } from './imagesearch'
 import { WALLPAPER_EXTENSIONS, registerProtocols } from './protocol'
 import { sites } from './sites'
 import { apps, inScope, readManifest } from './apps'
@@ -140,6 +141,10 @@ interface PersistedTab {
   groupId?: number | null
   /** which big group it was in; absent in sessions written before they existed */
   space?: number
+  /** одна из наших собственных страниц — настройки, история, закладки */
+  internal?: InternalPage | null
+  /** докуда страница была прокручена */
+  scrollY?: number
 }
 
 /**
@@ -188,6 +193,22 @@ class Tab {
   htmlFullscreen = false
   error: TabState['error'] = null
   lastActive = Date.now()
+  /**
+   * Докуда страница прокручена.
+   *
+   * Вкладку закрывают не на первом экране. Длинная статья, список заказов,
+   * переписка — возвращаться в них с самого верха значит искать заново то
+   * место, на котором остановились.
+   */
+  scrollY = 0
+  /**
+   * Место, куда страницу надо вернуть, когда она догрузится.
+   *
+   * Отдельное поле, а не то же самое: прокрутка восстанавливается один раз,
+   * при возвращении вкладки, и не повторяется на каждой следующей странице,
+   * открытой в этой же вкладке.
+   */
+  pendingScroll = 0
   private pendingUrl: string | null = null
 
   constructor(id: number, private readonly ses: Session) {
@@ -342,6 +363,7 @@ class Tab {
       canGoForward: wc ? wc.navigationHistory.canGoForward() : false,
       active: this.id === activeId,
       hasContent: this.hasContent,
+      scrollY: Math.round(this.scrollY),
       secure,
       upgraded: this.upgraded,
       blocked: wc ? perTabBlocked.get(wc.id) ?? 0 : 0,
@@ -434,11 +456,21 @@ function sameAddress(url: string): string {
   }
 }
 
+/**
+ * Адрес в том виде, в каком его читают.
+ *
+ * Протокол одинаков у всех, «www.» не значит ничего, а хвост из параметров
+ * бывает длиннее самого адреса и выталкивает из строки то, ради чего в неё
+ * смотрят, — имя сайта. Поэтому здесь остаётся сайт и путь.
+ *
+ * Спрятанное не потеряно: строка разворачивается по щелчку и показывает
+ * адрес целиком.
+ */
 function prettyUrl(raw: string): string {
   try {
     const url = new URL(raw)
     const path = url.pathname === '/' ? '' : url.pathname
-    return decodeURI(url.hostname.replace(/^www\./, '') + path + url.search)
+    return decodeURI(url.hostname.replace(/^www\./, '') + path)
   } catch {
     return raw
   }
@@ -1255,8 +1287,18 @@ export class BrowserWindow {
     })
     wc.on('did-finish-load', () => {
       if (tab.id === this.activeId) void this.lookForApp(tab)
+      // Вернувшаяся вкладка возвращается на то место, где её оставили.
+      // Страница на этот момент ещё дорисовывается и часто короче, чем
+      // будет, поэтому докручивает её сама страница — она видит свою высоту.
+      if (tab.pendingScroll > 0) {
+        wc.send('page:scroll-to', tab.pendingScroll)
+        tab.pendingScroll = 0
+      }
     })
     wc.on('dom-ready', () => {
+      // Подписи кнопок под найденным QR-кодом: страница их не знает,
+      // переводы живут здесь.
+      wc.send('qr:words', { open: t('Открыть'), copy: t('Копировать') })
       void this.applyCosmetic(wc)
       // Much of the ad furniture arrives after DOMContentLoaded.
       setTimeout(() => void this.applyCosmetic(wc), 1500)
@@ -2336,7 +2378,7 @@ export class BrowserWindow {
     }
     try {
       const image = kind === 'full' ? await this.wholePage(wc) : await wc.capturePage()
-      return this.keepPicture(image)
+      return this.editPicture(image)
     } catch {
       this.send('toast', t('Не удалось сохранить снимок'))
       return false
@@ -2532,6 +2574,23 @@ export class BrowserWindow {
   private frameMedia = new Map<string, { tabId: number; media: MediaReport; since: number }>()
 
   /** A page said what language it is written in. */
+  /**
+   * Страница сказала, докуда её прокрутили.
+   *
+   * Приходит часто, поэтому здесь только записывается: ни перерисовки
+   * интерфейса, ни записи на диск прокрутка не стоит.
+   */
+  handleScroll(webContentsId: number, y: number) {
+    const tab = this.tabs.find((t) => t.wc?.id === webContentsId)
+    if (tab) tab.scrollY = y
+  }
+
+  /** То же самое, но про наши собственные страницы: их прокручивает интерфейс. */
+  noteTabScroll(id: number, y: number) {
+    const tab = this.tabs.find((t) => t.id === id)
+    if (tab) tab.scrollY = Math.max(0, y)
+  }
+
   handleLanguage(webContentsId: number, code: string) {
     const tab = this.tabs.find((t) => t.wc?.id === webContentsId)
     if (!tab || tab.language === code) return
@@ -2752,15 +2811,20 @@ export class BrowserWindow {
     if (!wc || wc.isDestroyed() || tab.id !== this.activeId) return false
     // Nothing drawn: the visible part, which is what a click without a drag
     // asks for.
+    const wanted = this.areaWanted
+    this.areaWanted = 'file'
     try {
-      if (rect.width < 4 || rect.height < 4) return this.keepPicture(await wc.capturePage())
-      const image = await wc.capturePage({
-        x: Math.round(rect.x),
-        y: Math.round(rect.y),
-        width: Math.round(rect.width),
-        height: Math.round(rect.height)
-      })
-      return this.keepPicture(image)
+      const image =
+        rect.width < 4 || rect.height < 4
+          ? await wc.capturePage()
+          : await wc.capturePage({
+              x: Math.round(rect.x),
+              y: Math.round(rect.y),
+              width: Math.round(rect.width),
+              height: Math.round(rect.height)
+            })
+      if (wanted === 'image-search') return this.searchByArea(image)
+      return this.editPicture(image)
     } catch {
       this.send('toast', t('Не удалось сохранить снимок'))
       return false
@@ -2812,6 +2876,68 @@ export class BrowserWindow {
   }
 
   /** Writes the picture where downloads go, and puts it on the clipboard. */
+  /**
+   * Снимок — человеку, до того как он станет файлом.
+   *
+   * Снимок делают, чтобы на что-то указать и что-то скрыть, а ни того, ни
+   * другого нельзя сделать с уже сохранённым файлом. Поэтому он сначала
+   * останавливается в редакторе: сохранить — кнопка там.
+   */
+  private editPicture(image: Electron.NativeImage) {
+    if (image.isEmpty()) {
+      this.toast(t('Не удалось снять'))
+      return false
+    }
+    this.setOverlayMode('shot', { focus: true })
+    this.overlay.webContents.send('shot:open', image.toDataURL())
+    return true
+  }
+
+  /** Что делает «Сохранить» в редакторе: файл и буфер, как и раньше. */
+  keepDataUrl(data: string): boolean {
+    try {
+      const image = nativeImage.createFromDataURL(data)
+      return this.keepPicture(image)
+    } catch {
+      this.toast(t('Не удалось сохранить снимок'))
+      return false
+    }
+  }
+
+  /** Что делает «Копировать»: только буфер, без файла. */
+  copyDataUrl(data: string): boolean {
+    try {
+      clipboard.writeImage(nativeImage.createFromDataURL(data))
+      this.toast(t('Снимок скопирован'))
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Обведённый кусок — в поиск по картинке.
+   *
+   * Если отправить не вышло, картинка уже в буфере, а открывается страница
+   * поиска по изображению: человеку остаётся нажать вставку. Молча не
+   * получиться здесь нельзя — он ждёт результата.
+   */
+  private async searchByArea(image: Electron.NativeImage) {
+    if (image.isEmpty()) {
+      this.toast(t('Не удалось снять'))
+      return false
+    }
+    this.toast(t('Ищем по картинке…'))
+    const result = await searchByImage(image.toPNG(), settings.get().searchEngine)
+    this.newTab(result.url, true)
+    if (!result.ok) {
+      this.toast(t('Картинка в буфере — вставьте её на странице поиска'))
+    } else if (result.substituted) {
+      this.toast(t('Ваш поисковик не ищет по картинке — открыт {name}', { name: result.name }))
+    }
+    return true
+  }
+
   private keepPicture(image: Electron.NativeImage) {
     if (image.isEmpty()) return false
     const png = image.toPNG()
@@ -3018,6 +3144,49 @@ export class BrowserWindow {
     this.send('toast', t('Переводим — текст страницы уходит в Google Переводчик'))
     wc.send('translate:start', { to: translateTarget() })
     return true
+  }
+
+  /**
+   * Выделенное предложение — на языке, на котором говорит браузер.
+   *
+   * Переводить всю страницу ради одной строки тяжело, и страница возвращается
+   * другой: вёрстка едет, место прокрутки теряется. Здесь страница остаётся
+   * нетронутой — слова приходят пузырьком под самими собой.
+   */
+  async translateSelection(wc: WebContents, text: string) {
+    const cut = text.slice(0, 1200).trim()
+    if (!cut) return
+    wc.send('selection:translating')
+    try {
+      const [out] = await translateBatch([cut], translateTarget())
+      // Если перевод совпал с исходником, показываем его же: молчание в ответ
+      // на нажатие выглядит как поломка.
+      wc.send('selection:translation', out && out !== cut ? out : cut)
+    } catch {
+      this.toast(t('Не удалось перевести'))
+      wc.send('selection:translation', cut)
+    }
+  }
+
+  /**
+   * Поиск по картинке: человек обводит кусок страницы, и он уходит в поиск.
+   *
+   * Обычный «найти по картинке» умеет только то, что уже лежит на странице
+   * отдельным изображением. А искать чаще надо не картинку целиком, а вещь на
+   * ней — товар в углу витрины, здание за спиной, шрифт на вывеске. Поэтому
+   * выбирается область, а не элемент.
+   */
+  pickAreaForImageSearch() {
+    this.areaWanted = 'image-search'
+    void this.capture('area')
+  }
+
+  /** Зачем спросили область: сохранить в файл или отправить в поиск. */
+  private areaWanted: 'file' | 'image-search' = 'file'
+
+  /** A word to the person, from anywhere in the main process. */
+  toast(text: string) {
+    this.send('toast', text)
   }
 
   /** A page finished translating itself. */
@@ -3981,7 +4150,12 @@ export class BrowserWindow {
     if (this.incognito || this.offsetFromFirst) return
     if (!settings.get().restoreSession) return
     try {
-      const kept = this.tabs.filter((t) => t.hasContent && /^https?:/i.test(t.url))
+      // Наши собственные страницы — такие же вкладки, и закрывают браузер с
+      // открытыми настройками ровно так же, как с открытым сайтом. Раньше они
+      // пропадали, и это выглядело как потерянная вкладка.
+      const kept = this.tabs.filter(
+        (t) => t.internal !== null || (t.hasContent && /^https?:/i.test(t.url))
+      )
       const payload = {
         tabs: kept.map((t) => ({
           url: t.url,
@@ -3989,7 +4163,9 @@ export class BrowserWindow {
           favicon: t.favicon,
           pinned: t.pinned,
           groupId: t.groupId,
-          space: t.space
+          space: t.space,
+          internal: t.internal,
+          scrollY: Math.round(t.internal ? t.scrollY : t.pendingScroll || t.scrollY)
         })),
         spaces: this.spaces,
         spaceId: this.spaceId,
@@ -4068,6 +4244,20 @@ export class BrowserWindow {
       tab.favicon = saved.favicon
       tab.url = saved.url
       tab.hasContent = true
+      // Собственная страница браузера: она рисуется интерфейсом, окна ей не
+      // положено, и открывается она мгновенно — откладывать нечего.
+      const own = saved.internal
+      if (own && own in INTERNAL_PAGES) {
+        tab.internal = own
+        tab.title = t(INTERNAL_PAGES[own])
+        tab.url = `nya://${own}`
+        tab.hasContent = false
+      }
+      // Прокрутка ждёт своей страницы: у отложенной вкладки — до того дня,
+      // когда на неё наконец нажмут.
+      const where = Math.max(0, Math.min(2_000_000, Number(saved.scrollY) || 0))
+      if (tab.internal) tab.scrollY = where
+      else tab.pendingScroll = where
       tab.pinned = saved.pinned === true
       tab.space = knownSpace.has(saved.space as number) ? (saved.space as number) : this.spaces[0].id
       tab.groupId =
@@ -4077,7 +4267,9 @@ export class BrowserWindow {
       this.tabs.push(tab)
 
       // Only the tab you were last looking at spends a process on startup.
-      if (isActive || !lazy) {
+      if (tab.internal) {
+        /* рисует интерфейс — загружать нечего */
+      } else if (isActive || !lazy) {
         tab.ensureView(this.wire)
         if (tab.view) this.win.contentView.addChildView(tab.view)
         this.raiseOverlay()

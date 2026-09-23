@@ -6,6 +6,7 @@ import { AppMenu, ProfileMenu } from './components/Menus'
 import GroupColour from './components/GroupColour'
 import AutofillCard from './components/AutofillOffer'
 import InstallApp from './components/InstallApp'
+import ShotEditor from './components/ShotEditor'
 import MediaPanel from './components/MediaPanel'
 import PageMenu from './components/PageMenu'
 import PrintSheet from './components/PrintSheet'
@@ -27,6 +28,9 @@ export default function OverlayApp() {
   const { settings, profiles, active, engine, groups, spaces, tabs, appCandidate, autofill, savePassword } =
     useBrowser()
   const [mode, setMode] = useState<string | null>(null)
+  // Снимок приходит отдельно от режима: режим говорит «показать
+  // редактор», а картинку присылают следом.
+  const [shot, setShot] = useState('')
   const [update, setUpdate] = useState<UpdateState | null>(null)
   const [, setLangVersion] = useState(0)
   useEffect(() => onLanguageChange(() => setLangVersion((v) => v + 1)), [])
@@ -65,6 +69,8 @@ export default function OverlayApp() {
     return () => media.removeEventListener('change', apply)
   }, [settings])
 
+  useEffect(() => window.browser.onShot(setShot), [])
+
   const close = () => void window.browser.setOverlay(null)
 
   if (!mode || !settings) return null
@@ -93,6 +99,15 @@ export default function OverlayApp() {
           x={Number(mode.slice('page-menu:'.length)) || 0}
           onClose={close}
           onFind={() => void window.browser.uiAction('find')}
+        />
+      )}
+      {mode === 'shot' && shot && (
+        <ShotEditor
+          image={shot}
+          onClose={() => {
+            setShot('')
+            close()
+          }}
         />
       )}
       {mode === 'install-app' && <InstallApp candidate={appCandidate} onClose={close} />}

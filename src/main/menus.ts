@@ -1,6 +1,7 @@
 import { t } from './i18n'
 import { Menu, clipboard, shell, type MenuItemConstructorOptions, type WebContents } from 'electron'
 import { GROUP_COLOURS, type BrowserWindow } from './browser'
+import { looksSwapped, swapLayout } from '../shared/layout'
 
 /** Colour names for the group menu; the palette itself lives in browser.ts. */
 const GROUP_COLOUR_NAMES: Record<string, string> = {
@@ -113,15 +114,45 @@ export function pageContextMenu(
       { role: 'cut', label: t('Вырезать'), enabled: params.editFlags.canCut },
       { role: 'copy', label: t('Копировать'), enabled: params.editFlags.canCopy },
       { role: 'paste', label: t('Вставить'), enabled: params.editFlags.canPaste },
+      // Вставка без чужого шрифта, цвета и размера. Ctrl+Shift+V понимают не
+      // все поля, а форматирование из буфера ломает вид формы, в которую
+      // попало.
+      {
+        role: 'pasteAndMatchStyle',
+        label: t('Вставить как текст'),
+        enabled: params.editFlags.canPaste
+      },
       { role: 'selectAll', label: t('Выделить всё') },
       { type: 'separator' }
     )
+
+    // 139. Выделил «Ghbdtn» — получил «Привет». Только в поле ввода: менять
+    // текст на чужой странице нам нечего.
+    if (has(params.selectionText) && looksSwapped(params.selectionText)) {
+      items.push(
+        {
+          label: t('Исправить раскладку'),
+          click: () => wc.insertText(swapLayout(params.selectionText))
+        },
+        { type: 'separator' }
+      )
+    }
   } else if (has(params.selectionText)) {
     items.push(
       { role: 'copy', label: t('Копировать') },
       {
         label: t('Искать «{q}»', { q: params.selectionText.slice(0, 24) }),
         click: () => browser.newTab(params.selectionText, false)
+      },
+      // Перевод приходит пузырьком под самими словами: страница не
+      // перерисовывается и не уезжает под руками.
+      {
+        label: t('Перевести'),
+        click: () => void browser.translateSelection(wc, params.selectionText)
+      },
+      {
+        label: t('Поиск по картинке'),
+        click: () => browser.pickAreaForImageSearch()
       },
       { type: 'separator' }
     )

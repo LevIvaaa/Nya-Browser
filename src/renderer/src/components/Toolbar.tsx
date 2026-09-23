@@ -22,6 +22,8 @@ import {
   Search,
   Star,
   StarFilled,
+  Check,
+  Copy,
   Translate,
   Unlock,
   Install,
@@ -174,6 +176,38 @@ export default function Toolbar({
 }: Props) {
   const loading = tab?.loading ?? false
   const secure = tab?.secure ?? true
+
+  /**
+   * Адрес целиком — по щелчку прямо в строке.
+   *
+   * Строка показывает сайт и путь: так её читают. Но иногда адрес нужен весь
+   * — скопировать, или посмотреть, куда на самом деле ведёт ссылка, за
+   * которой пришли. Раньше за этим шли в поле ввода, где адрес уже можно
+   * задеть и испортить; здесь он просто разворачивается на месте.
+   */
+  const [full, setFull] = useState(false)
+  const [copied, setCopied] = useState(false)
+  // Другая страница — другой адрес: развёрнутым остаётся только тот, который
+  // развернули.
+  useEffect(() => {
+    setFull(false)
+    setCopied(false)
+  }, [tab?.url])
+  useEffect(() => {
+    if (!copied) return
+    const timer = setTimeout(() => setCopied(false), 1400)
+    return () => clearTimeout(timer)
+  }, [copied])
+
+  // Проценты и знаки из адреса читать невозможно, а кириллица в пути — самое
+  // частое, что в них прячется. Копируется при этом исходный адрес: он
+  // вставляется куда угодно без сюрпризов.
+  let fullUrl = tab?.url ?? ''
+  try {
+    fullUrl = decodeURI(fullUrl)
+  } catch {
+    /* адрес с битой последовательностью — показываем как есть */
+  }
   const hasContent = tab?.hasContent ?? false
   const canBookmark = Boolean(tab?.url && /^https?:/i.test(tab.url))
   const zoomed = (tab?.zoom ?? 0) !== settings.defaultZoom
@@ -185,12 +219,17 @@ export default function Toolbar({
 
   const downloadingUpdate = update?.stage === 'downloading'
   const updateBadge =
-    update?.stage === 'available' || downloadingUpdate || update?.stage === 'ready'
+    update?.stage === 'available' ||
+    downloadingUpdate ||
+    update?.stage === 'installing' ||
+    update?.stage === 'ready'
   const updateLabel = downloadingUpdate
     ? t('Загружаем обновление — {p}%', { p: update?.percent ?? 0 })
-    : update?.stage === 'ready'
-      ? t('Обновление готово к установке')
-      : t('Доступно обновление')
+    : update?.stage === 'installing'
+      ? t('Устанавливаем обновление')
+      : update?.stage === 'ready'
+        ? t('Обновление готово к установке')
+        : t('Доступно обновление')
 
   return (
     <div className="drag flex items-center gap-1 pl-2 pr-0" style={{ height }}>
@@ -278,14 +317,66 @@ export default function Toolbar({
                 <span className="text-faint"> · {tab?.origin}</span>
               </>
             ) : tab?.displayUrl ? (
-              <>
-                <span className="text-ink">{tab.origin}</span>
-                <span className="text-faint">{tab.displayUrl.slice(tab.origin.length)}</span>
-              </>
+              /* Щелчок по самому адресу разворачивает его; щелчок мимо —
+                 по-прежнему открывает поле ввода, как и вся строка. */
+              <span
+                role="button"
+                tabIndex={0}
+                key={full ? 'full' : 'short'}
+                title={full ? tab.url : t('Показать адрес целиком')}
+                className="animate-pop no-drag rounded-[5px]"
+                onClick={(event) => {
+                  if (full) return
+                  event.stopPropagation()
+                  setFull(true)
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' && event.key !== ' ') return
+                  event.stopPropagation()
+                  event.preventDefault()
+                  setFull(true)
+                }}
+              >
+                {full ? (
+                  <span className="text-ink">{fullUrl}</span>
+                ) : (
+                  <>
+                    <span className="text-ink">{tab.origin}</span>
+                    <span className="text-faint">{tab.displayUrl.slice(tab.origin.length)}</span>
+                  </>
+                )}
+              </span>
             ) : (
               <span className="text-faint">{t('Поиск или адрес сайта')}</span>
             )}
           </span>
+
+          {/* Развёрнутый адрес чаще всего разворачивают, чтобы скопировать.
+              Выделять его мышью в строке, которая сама кнопка, — мучение. */}
+          {full && tab?.url && (
+            <span
+              role="button"
+              tabIndex={0}
+              title={t('Копировать адрес')}
+              aria-label={t('Копировать адрес')}
+              className="animate-pop no-drag flex shrink-0 items-center rounded-[7px] p-1 hover:bg-[var(--line)]"
+              style={{ color: copied ? 'var(--good)' : undefined }}
+              onClick={(event) => {
+                event.stopPropagation()
+                void navigator.clipboard.writeText(tab.url)
+                setCopied(true)
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return
+                event.stopPropagation()
+                event.preventDefault()
+                void navigator.clipboard.writeText(tab.url)
+                setCopied(true)
+              }}
+            >
+              {copied ? <Check width={13} height={13} /> : <Copy width={13} height={13} />}
+            </span>
+          )}
 
           {zoomed && (
             <span className="shrink-0 rounded-pill px-1.5 py-[1px] text-2xs font-semibold text-dim" style={{ background: 'var(--field)' }}>
