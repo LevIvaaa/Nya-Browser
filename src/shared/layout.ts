@@ -21,10 +21,6 @@ for (let i = 0; i < RU.length; i++) {
   EN_TO_RU.set(EN[i], RU[i])
 }
 
-/** Есть ли в строке кириллица. */
-function hasCyrillic(text: string): boolean {
-  return /[Ѐ-ӿ]/.test(text)
-}
 
 /**
  * Переводит текст в другую раскладку.
@@ -51,10 +47,57 @@ export function swapLayout(text: string): string {
   return out
 }
 
-/** Похоже ли, что текст набран не в той раскладке. */
+const RU_VOWELS = 'аеёиоуыэюяАЕЁИОУЫЭЮЯ'
+const EN_VOWELS = 'aeiouyAEIOUY'
+
+/**
+ * Похоже ли, что текст набран не в той раскладке.
+ *
+ * Предлагать исправление на любом выделении нельзя: пункт, который есть
+ * всегда, перестают замечать, а меню он занимает у всех. Поэтому здесь ищутся
+ * следы, которых в настоящем тексте не бывает.
+ *
+ * Слово без единой гласной — самый надёжный из них: «Ghbdtn» невозможно ни
+ * по-английски, ни по-русски, а «strength» гласную имеет и остаётся в покое.
+ * Скобка или апостроф, приклеенные к буквам, — это русские «х», «ъ» и «э»,
+ * попавшие на английскую раскладку. Слово, начинающееся с «ы», «ъ» или «ь»,
+ * по-русски не начинается никогда.
+ *
+ * Обратное направление — английский, набранный по-русски, — ловится хуже:
+ * «hello» превращается в «рудды», где гласные на месте, и отличить это от
+ * настоящего слова по одному виду нельзя. Лучше промолчать, чем показывать
+ * пункт наугад.
+ */
 export function looksSwapped(text: string): boolean {
   const cut = text.trim()
   if (cut.length < 2 || cut.length > 400) return false
-  // Строка из одних знаков препинания ничего не говорит.
-  return hasCyrillic(cut) || /[A-Za-z]/.test(cut)
+
+  for (const word of cut.split(/\s+/)) {
+    const cyrillic = /[Ѐ-ӿ]/.test(word)
+    const latin = /[A-Za-z]/.test(word)
+    if (!cyrillic && !latin) continue
+
+    // Буквы, склеенные со скобкой, точкой с запятой или кавычкой: так
+    // выглядят «хъжэбю», напечатанные на английской раскладке.
+    if (latin && !cyrillic && /[A-Za-z][[\]{};:'"<>]|[[\]{};:'"<>][A-Za-z]/.test(word)) {
+      return true
+    }
+
+    // Русское слово не начинается с «ы», «ъ» и «ь».
+    if (cyrillic && /^[ыъьЫЪЬ]/.test(word)) return true
+
+    const letters = word.replace(/[^A-Za-zЀ-ӿ]/g, '')
+    if (letters.length < 3) continue
+    const vowels = cyrillic ? RU_VOWELS : EN_VOWELS
+    let found = false
+    for (const ch of letters) {
+      if (vowels.includes(ch)) {
+        found = true
+        break
+      }
+    }
+    if (!found) return true
+  }
+
+  return false
 }

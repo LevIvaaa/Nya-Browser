@@ -340,7 +340,9 @@ class Tab {
     let secure = true
     try {
       const parsed = new URL(this.url)
-      origin = parsed.hostname.replace(/^www\./, '')
+      // С портом: localhost:3000 и localhost:5173 — разные сайты, и вкладки
+      // с одинаковым именем неразличимы.
+      origin = parsed.host.replace(/^www\./, '')
       secure = parsed.protocol === 'https:' || parsed.protocol === 'nya:' || parsed.protocol === 'file:'
     } catch {
       origin = ''
@@ -470,7 +472,7 @@ function prettyUrl(raw: string): string {
   try {
     const url = new URL(raw)
     const path = url.pathname === '/' ? '' : url.pathname
-    return decodeURI(url.hostname.replace(/^www\./, '') + path)
+    return decodeURI(url.host.replace(/^www\./, '') + path)
   } catch {
     return raw
   }
@@ -4237,6 +4239,9 @@ export class BrowserWindow {
     const knownSpace = new Set(this.spaces.map((space) => space.id))
 
     const lazy = settings.get().lazyRestore
+    // Наши страницы существуют в одном экземпляре: открыть вторые настройки
+    // нельзя, и вернуться их тоже должно не больше одних.
+    const restoredOwn = new Set<InternalPage>()
     payload.tabs.slice(0, 40).forEach((saved, index) => {
       const isActive = index === Math.max(0, payload.activeIndex)
       const tab = new Tab(++this.seq, this.ses)
@@ -4248,6 +4253,8 @@ export class BrowserWindow {
       // положено, и открывается она мгновенно — откладывать нечего.
       const own = saved.internal
       if (own && own in INTERNAL_PAGES) {
+        if (restoredOwn.has(own)) return
+        restoredOwn.add(own)
         tab.internal = own
         tab.title = t(INTERNAL_PAGES[own])
         tab.url = `nya://${own}`
